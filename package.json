@@ -1,0 +1,31 @@
+{
+  "name": "@wonderlandengine/api",
+  "version": "0.8.5",
+  "description": "Wonderland Engine's JavaScript API.",
+  "main": "wonderland.js",
+  "files": [
+    "*.js"
+  ],
+  "dependencies": {},
+  "devDependencies": {
+    "esbuild": "^0.11.14"
+  },
+  "scripts": {
+    "build": "esbuild wonderland.js --minify --bundle --sourcemap --outfile=../wonderland.min.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/WonderlandEngine/api.git"
+  },
+  "keywords": [
+    "webxr",
+    "wonderland",
+    "components"
+  ],
+  "author": "Wonderland GmbH",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/WonderlandEngine/api/issues"
+  },
+  "homepage": "https://github.com/WonderlandEngine/api#readme"
+}
