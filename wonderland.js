@@ -4,24 +4,24 @@ const MISALIGNED_MSG = "Misaligned pointer: please report a bug";
  * Wonderland Engine Library
  * @namespace WL
  */
-var WL = {
+
 /**
- * @typedef WL.CustomParameter
+ * @typedef CustomParameter
  * @type {object}
- * @property {WL.Type} type Parameter type
+ * @property {Type} type Parameter type
  * @property {*} [default] Default value, depending on type.
- * @property {string[]} values Values for {@link WL.Type.Enum}
+ * @property {string[]} values Values for {@link Type.Enum}
  */
 /**
  * Register a custom JavaScript component type
  *
  * @param {string} name Name of the component
- * @param {object} params Dict of param names to {@link WL.CustomParameter}
- * @param {WL.Component} object Object containing functions for the component type
+ * @param {object} params Dict of param names to {@link CustomParameter}
+ * @param {Component} object Object containing functions for the component type
  *
  * @example
- * WL.registerComponent('my-new-type', {
- *  myParam: {type: WL.Type.Float, default: 42.0},
+ * registerComponent('my-new-type', {
+ *  myParam: {type: Type.Float, default: 42.0},
  * }, {
  *  init: function() {},
  *  start: function() {},
@@ -30,13 +30,15 @@ var WL = {
  *  onDeactivate: function() {},
  * });
  */
-registerComponent: function(name, params, object) { _WL.registerComponent(name, params, object); },
+export function registerComponent(name, params, object) {
+    _WL.registerComponent(name, params, object);
+};
 
 /**
  * Component parameter type enum
  * @enum {number}
  */
-Type: {
+export const Type = {
     /**
      * **Bool**:
      *
@@ -73,7 +75,7 @@ Type: {
      * specified for the parameter aswell.
      *
      * @example
-     *     camera: {type: WL.Type.Enum, values: ['auto', 'back', 'front'], default: 'auto'},
+     *     camera: {type: Type.Enum, values: ['auto', 'back', 'front'], default: 'auto'},
      */
     Enum: 1<<5,
 
@@ -119,19 +121,19 @@ Type: {
      * Appears in the editor as skin resource selection dropdown.
      */
     Skin: 1<<11,
-},
+};
 
 /**
- * Collider type enum for {@link WL.CollisionComponent}
+ * Collider type enum for {@link CollisionComponent}
  * @enum {number}
  */
-Collider: {
+export const Collider = {
     /**
      * **Sphere Collider**:
      *
      * Simplest and most performant collision shape. If this type is set on a
-     * {@link WL.CollisionComponent}, only the first component of
-     * {@link WL.CollisionComponent#extents} will be used to determine the radius.
+     * {@link CollisionComponent}, only the first component of
+     * {@link CollisionComponent#extents} will be used to determine the radius.
      */
     Sphere: 0,
 
@@ -139,7 +141,7 @@ Collider: {
      * **Axis Aligned Bounding Box Collider**:
      *
      * Box that is always aligned to XYZ axis. It cannot be rotated but is more
-     * efficient than {@link WL.Collider.Box}.
+     * efficient than {@link Collider.Box}.
      */
     AxisAlignedBox: 1,
 
@@ -148,17 +150,17 @@ Collider: {
      *
      * Box that matches the object's rotation and translation correctly. This
      * is the least efficient collider and should only chosen over
-     * {@link WL.Collider.Sphere} and {@link WL.Collider.AxisAlignedBox} if really
+     * {@link Collider.Sphere} and {@link Collider.AxisAlignedBox} if really
      * neccessary.
      */
     Box: 2
-},
+};
 
 /**
- * Alignment type enum for {@link WL.TextComponent}
+ * Alignment type enum for {@link TextComponent}
  * @enum {number}
  */
-Alignment: {
+export const Alignment = {
     /** Text start is at object origin */
     Left: 1,
 
@@ -167,13 +169,13 @@ Alignment: {
 
     /** Text end is at object origin */
     Right: 3
-},
+};
 
 /**
- * Justification type enum for {@link WL.TextComponent}
+ * Justification type enum for {@link TextComponent}
  * @enum {number}
  */
-Justification: {
+export const Justification = {
     /** Text line is at object origin */
     Line: 1,
 
@@ -182,13 +184,13 @@ Justification: {
 
     /** Text top is at object origin */
     Top: 3
-},
+};
 
 /**
- * Input type enum for {@link WL.InputComponent}
+ * Input type enum for {@link InputComponent}
  * @enum {number}
  */
-InputType: {
+export const InputType = {
     /** Head input */
     Head: 0,
 
@@ -209,43 +211,43 @@ InputType: {
 
     /** Right ray input */
     RayRight: 6,
-},
+};
 
 /**
- * Light type enum for {@link WL.LightComponent}
+ * Light type enum for {@link LightComponent}
  * @enum {number}
  */
-LightType: {
+export const LightType = {
     /** Point light */
     Point: 1,
 
     /** Sun light / Directional light */
     Sun: 2,
-},
+};
 
 /**
- * Animation state of {@link WL.AnimationComponent}
+ * Animation state of {@link AnimationComponent}
  * @enum {number}
  */
-AnimationState: {
+export const AnimationState = {
     /** Animation is currently playing */
     Playing: 1,
 
     /** Animation is paused and will continue at current playback
-    * time on {@link WL.AnimationComponent#play} */
+    * time on {@link AnimationComponent#play} */
     Paused: 2,
 
     /** Animation is stopped */
     Stopped: 3
-},
+};
 
 /**
- * Rigid body force mode for {@link WL.PhysXComponent#addForce} and {@link WL.PhysXComponent#addTorque}.
+ * Rigid body force mode for {@link PhysXComponent#addForce} and {@link PhysXComponent#addTorque}.
  * @enum {number}
  *
  * [PhysX API Reference](https://gameworksdocs.nvidia.com/PhysX/4.1/documentation/physxapi/files/structPxForceMode.html)
  */
-ForceMode: {
+export const ForceMode = {
     /** Apply as force */
     Force: 0,
 
@@ -257,27 +259,27 @@ ForceMode: {
 
     /** Apply as mass dependent force */
     Acceleration: 3
-},
+};
 
 /**
  * Collision callback event type
  * @enum {number}
  */
-CollisionEventType: {
+export const CollisionEventType = {
     /** Touch/contact detected, collision */
     Touch: 0,
 
     /** Touch/contact lost, uncollide */
     TouchLost: 1,
-},
+};
 
 /**
- * Rigid body {@link WL.PhysXComponent#shape|shape}.
+ * Rigid body {@link PhysXComponent#shape|shape}.
  * @enum {number}
  *
  * [PhysX SDK Guide](https://gameworksdocs.nvidia.com/PhysX/4.1/documentation/physxguide/Manual/Geometry.html#geometry-types)
  */
-Shape: {
+export const Shape = {
     /** No shape */
     None: 0,
 
@@ -298,18 +300,19 @@ Shape: {
 
     /** Triangle mesh shape */
     TriangleMesh: 6,
-},
+};
 
 /**
  * Canvas element that Wonderland Engine renders to
  * @type {HTMLCanvasElement}
  */
-canvas: null,
+export let canvas = null;
+
 /**
  * Current WebXR session or {@link null} if no session active
  * @type {XRSession}
  */
-xrSession: null,
+export let xrSession = null;
 /**
  * @callback xrSessionStartCallback
  * @param {XRSession} session WebXR session that started
@@ -321,12 +324,12 @@ xrSession: null,
  * List of functions to call if a WebXR session is started
  * @type {xrSessionStartCallback}
  */
-onXRSessionStart: [],
+export const onXRSessionStart = [];
 /**
  * List of functions to call if a WebXR session ends
  * @type {xrSessionEndCallback}
  */
-onXRSessionEnd: [],
+export const onXRSessionEnd = [];
 
 /**
  * @callback xrSupportCallback
@@ -341,7 +344,7 @@ onXRSessionEnd: [],
  * This allows you to notify the user of both cases: support and missing support of XR.
  * See the `supported` parameter of the callback, which indicates support.
  */
-onXRSupported: [],
+export let onXRSupported = [];
 
 /**
  * @callback sceneLoadedCallback
@@ -350,46 +353,72 @@ onXRSupported: [],
  * List of functions to call once the main scene has been loaded
  * @type {sceneLoadedCallback}
  */
-onSceneLoaded: [],
+export let onSceneLoaded = [];
 
 /**
  * Whether AR is supported by the browser
  *
  * `undefined` until support could be determined
  */
-arSupported: undefined,
+export let arSupported = undefined;
 /**
  * Whether VR is supported by the browser
  *
  * `undefined` until support could be determined
  */
-vrSupported: undefined,
+export let vrSupported = undefined;
 /**
  * Current main scene
- * @type{WL.Scene}
+ * @type{Scene}
  */
-scene: undefined,
+export let scene = undefined;
 /**
  * Physics, only available when physx is enabled in the runtime
- * @type{WL.Physics}
+ * @type{Physics}
  */
-physics: undefined,
+export let physics = undefined;
 
-_images: [],
+export let _images = [];
+let _tempMem = null;
+let _tempMemSize = 1024;
+let _tempMemFloat = null;
+let _tempMemInt = null;
+let _tempMemUint32 = null;
+let _tempMemUint16 = null;
+let _tempMemUint8 = null;
 
-_tempMem: null,
-_tempMemFloat: null,
-_tempMemInt: null,
-_tempMemUint32: null,
-};
+/** Initialize API resources, called by the engine automatically. */
+export function init() {
+    scene = new WL.Scene();
+    /* For internal testing, we provide compatibility with DOM-less execution */
+    canvas = (typeof document === 'undefined') ? null : document.getElementById('canvas');
+
+    /* Target memory for JS API functions that return arrays */
+    _tempMem = _malloc(_tempMemSize);
+    updateTempMemory();
+}
+
+/** Initialize API resources, called by the engine automatically, if
+ * PhysX is enabled. */
+export function _initPhysics() {
+    physics = new Physics();
+}
+
+export function updateTempMemory() {
+    _tempMemFloat = new Float32Array(HEAP8.buffer,_tempMem,_tempMemSize >> 4);
+    _tempMemInt = new Int32Array(HEAP8.buffer,_tempMem,_tempMemSize >> 4);
+    _tempMemUint32 = new Uint32Array(HEAP8.buffer,_tempMem,_tempMemSize >> 4);
+    _tempMemUint16 = new Uint16Array(HEAP8.buffer,_tempMem,_tempMemSize >> 2);
+    _tempMemUint8 = new Uint8Array(HEAP8.buffer,_tempMem,_tempMemSize);
+}
 
 /**
  * Provides global scene functionality like raycasting.
  */
-WL.Scene = class Scene {
+export class Scene {
     constructor() {
         this._rayHit = _malloc(4*(3*4+3*4+4+2)+4);
-        this._hit = new WL.RayHit(this._rayHit);
+        this._hit = new RayHit(this._rayHit);
 
         /* Hidden property, list of functions to call after a
          * frame has been rendered */
@@ -398,15 +427,15 @@ WL.Scene = class Scene {
     }
 
     /**
-     * @returns {WL.ViewComponent[]} currently active view components
+     * @returns {ViewComponent[]} currently active view components
      */
     get activeViews() {
-        const count = _wl_scene_get_active_views(WL._tempMem, 16);
+        const count = _wl_scene_get_active_views(_tempMem, 16);
 
         const views = [];
-        const viewTypeIndex = WL.Object._typeIndexFor("view");
+        const viewTypeIndex = Object._typeIndexFor("view");
         for(let i = 0; i < count; ++i) {
-            views.push(new WL.ViewComponent(viewTypeIndex, WL._tempMemInt[i]));
+            views.push(new ViewComponent(viewTypeIndex, _tempMemInt[i]));
         }
 
         return views;
@@ -423,8 +452,8 @@ WL.Scene = class Scene {
      * @param {number} group Collision group to filter by: only objects that are
      *        part of given group are considered for raycast.
      *
-     * @note The returned {@link WL.RayHit} object is owned by the Scene instance and
-     *       will be reused with the next {@link WL.Scene#rayCast} call.
+     * @note The returned {@link RayHit} object is owned by the Scene instance and
+     *       will be reused with the next {@link Scene#rayCast} call.
      */
     rayCast(o, d, group) {
         _wl_scene_ray_cast(
@@ -437,20 +466,20 @@ WL.Scene = class Scene {
     /**
      * Add object to the scene
      *
-     * @param {WL.Object} parent Parent object or {@link null}
-     * @returns {WL.Object} newly created object
+     * @param {Object} parent Parent object or {@link null}
+     * @returns {Object} newly created object
      */
     addObject(parent) {
         const parentId = parent ? parent.objectId : 0;
         const objectId = _wl_scene_add_object(parentId);
-        return new WL.Object(objectId);
+        return new Object(objectId);
     }
 
     /**
      * Batch-add objects to the scene
      *
      * Will provide better performance for adding multiple objects (e.g. > 16)
-     * than calling {@link WL.Scene#addObject} repeatidly in a loop.
+     * than calling {@link Scene#addObject} repeatidly in a loop.
      *
      * By providing upfront information of how many objects will be required,
      * the engine is able to batch-allocate the required memory rather than
@@ -459,16 +488,16 @@ WL.Scene = class Scene {
      * **Experimental:** This API might change in upcoming versions.
      *
      * @param {number} count Number of objects to add
-     * @param {WL.Object} parent Parent object or {@link null}, default {@link null}
+     * @param {Object} parent Parent object or {@link null}, default {@link null}
      * @param {number} componentCountHint Hint for how many components in total will
      *      be added to the created objects afterwards, default `0`.
-     * @returns {WL.Object[]} newly created objects
+     * @returns {Object[]} newly created objects
      */
     addObjects(count, parent, componentCountHint) {
         const parentId = parent ? parent.objectId : 0;
         const objectIdsPtr = _wl_scene_add_objects(parentId, count, componentCountHint || 0);
         const objects = Array.from(new Uint16Array(HEAPU16.buffer, objectIdsPtr, count),
-            id => new WL.Object(id));
+            id => new Object(id));
         _free(objectIdsPtr);
         return objects;
     }
@@ -496,7 +525,7 @@ WL.Scene = class Scene {
  *
  * Provides access to a native component instance of a specified component type
  */
-WL.Component = class Component {
+export class Component {
     constructor(managerIndex, id) {
         this._id = id;
         this._manager = managerIndex;
@@ -506,15 +535,15 @@ WL.Component = class Component {
      * @returns {string} the name of this component's type
      */
     get type() {
-        return this._type || WL.Object._typeNameFor(this._manager);
+        return this._type || Object._typeNameFor(this._manager);
     }
 
     /**
-     * @returns {WL.Object} The object this component is attached to
+     * @returns {Object} The object this component is attached to
      */
     get object() {
         const objectId = _wl_component_get_object(this._manager, this._id);
-        return new WL.Object(objectId);
+        return new Object(objectId);
     }
 
     /**
@@ -543,7 +572,7 @@ WL.Component = class Component {
      * Checks equality by comparing whether the wrapped native component ids
      * and component manager types are equal.
      *
-     * @param {?WL.Component} otherComponent Component to check equality with
+     * @param {?Component} otherComponent Component to check equality with
      * @returns {boolean} Whether this component equals the given component
      */
     equals(otherComponent) {
@@ -557,10 +586,10 @@ WL.Component = class Component {
  *
  * Provides access to a native collision component instance
  */
-WL.CollisionComponent = class CollisionComponent extends WL.Component {
+export class CollisionComponent extends Component {
 
     /**
-     * @returns {WL.Collider} Collision component collider
+     * @returns {Collider} Collision component collider
      */
     get collider() {
         return _wl_collision_component_get_collider(this._id);
@@ -569,14 +598,14 @@ WL.CollisionComponent = class CollisionComponent extends WL.Component {
     /**
      * Set collision component collider
      *
-     * @param {WL.Collider} collider Collider of the collision component.
+     * @param {Collider} collider Collider of the collision component.
      */
     set collider(collider) {
         _wl_collision_component_set_collider(this._id, collider);
     }
 
     /**
-     * If {@link WL.CollisionComponent#collider} returns {@link WL.Collider.Sphere}, only the first
+     * If {@link CollisionComponent#collider} returns {@link Collider.Sphere}, only the first
      * component of the returned vector is used.
      *
      * @returns {number[]} Collision component extents
@@ -588,7 +617,7 @@ WL.CollisionComponent = class CollisionComponent extends WL.Component {
     /**
      * Set collision component extents
      *
-     * If {@link WL.CollisionComponent#collider} returns {@link WL.Collider.Sphere}, only the first
+     * If {@link CollisionComponent#collider} returns {@link Collider.Sphere}, only the first
      * component of the passed vector is used.
      *
      * @param {number[]} extents Extents of the collision component, expects a
@@ -599,11 +628,11 @@ WL.CollisionComponent = class CollisionComponent extends WL.Component {
     }
 
     /**
-     * The groups is a bitmask that is compared to other components in {@link WL.CollisionComponent#queryOverlaps}
-     * or the group in {@link WL.Scene#rayCast}.
+     * The groups is a bitmask that is compared to other components in {@link CollisionComponent#queryOverlaps}
+     * or the group in {@link Scene#rayCast}.
      *
      * Colliders that have no common groups will not overlap with each other. If a collider
-     * has none of the groups set for {@link WL.Scene#rayCast}, the ray will not hit it.
+     * has none of the groups set for {@link Scene#rayCast}, the ray will not hit it.
      *
      * Each bit represents belonging to a group, see example.
      *
@@ -638,13 +667,13 @@ WL.CollisionComponent = class CollisionComponent extends WL.Component {
     /**
      * Query overlapping objects
      *
-     * @returns {WL.CollisionComponent[]} Collision components overlapping this collider.
+     * @returns {CollisionComponent[]} Collision components overlapping this collider.
      */
     queryOverlaps() {
-        const count = _wl_collision_component_query_overlaps(this._id, WL._tempMem, WL._tempMemSize >> 1);
+        const count = _wl_collision_component_query_overlaps(this._id, _tempMem, _tempMemSize >> 1);
         let overlaps = new Array(count);
         for(let i = 0; i < count; ++i) {
-            overlaps[i] = new WL.CollisionComponent(this._manager, WL._tempMemUint16[i]);
+            overlaps[i] = new CollisionComponent(this._manager, _tempMemUint16[i]);
         }
         return overlaps;
     }
@@ -655,10 +684,10 @@ WL.CollisionComponent = class CollisionComponent extends WL.Component {
  *
  * Provides access to a native text component instance
  */
-WL.TextComponent = class TextComponent extends WL.Component {
+export class TextComponent extends Component {
 
     /**
-     * @returns {WL.Alignment} Text component alignment
+     * @returns {Alignment} Text component alignment
      */
     get alignment() {
         return _wl_text_component_get_alignment(this._id) & 7;
@@ -667,14 +696,14 @@ WL.TextComponent = class TextComponent extends WL.Component {
     /**
      * Set text component alignment
      *
-     * @param {WL.Alignment} alignment Alignment for the text component.
+     * @param {Alignment} alignment Alignment for the text component.
      */
     set alignment(alignment) {
         _wl_text_component_set_alignment(this._id, this.justification << 3 | alignment);
     }
 
     /**
-     * @returns {WL.Justification} Text component justification
+     * @returns {Justification} Text component justification
      */
     get justification() {
         return _wl_text_component_get_alignment(this._id) >> 3;
@@ -683,7 +712,7 @@ WL.TextComponent = class TextComponent extends WL.Component {
     /**
      * Set text component justification
      *
-     * @param {WL.Justification} justification Justification for the text component.
+     * @param {Justification} justification Justification for the text component.
      */
     set justification(justification) {
         _wl_text_component_set_alignment(this._id, justification << 3 | this.alignment);
@@ -712,17 +741,17 @@ WL.TextComponent = class TextComponent extends WL.Component {
     /**
      * Set material to render the text with
      *
-     * @param {WL.Material} material New material
+     * @param {Material} material New material
      */
     set material(material) {
         _wl_text_component_set_material(this._id, material._index);
     }
 
     /**
-     * @returns {?WL.Material} Material used to render the text
+     * @returns {?Material} Material used to render the text
      */
     get material() {
-        return WL.Material.wrap(_wl_text_component_get_material(this._id));
+        return Material.wrap(_wl_text_component_get_material(this._id));
     }
 
 };
@@ -732,7 +761,7 @@ WL.TextComponent = class TextComponent extends WL.Component {
  *
  * Provides access to a native view component instance
  */
-WL.ViewComponent = class ViewComponent extends WL.Component {
+export class ViewComponent extends Component {
 
     /**
      * @returns {Float32Array} Projection matrix
@@ -748,10 +777,10 @@ WL.ViewComponent = class ViewComponent extends WL.Component {
  *
  * Provides access to a native input component instance
  */
-WL.InputComponent = class InputComponent extends WL.Component {
+export class InputComponent extends Component {
 
     /**
-     * @returns {WL.InputType} Input component type
+     * @returns {InputType} Input component type
      */
     get inputType() {
         return _wl_input_component_get_type(this._id);
@@ -760,7 +789,7 @@ WL.InputComponent = class InputComponent extends WL.Component {
     /**
      * Set input component type
      *
-     * @params {WL.InputType} New input component type
+     * @params {InputType} New input component type
      */
     set inputType(type) {
         _wl_input_component_set_type(this._id, type);
@@ -768,12 +797,12 @@ WL.InputComponent = class InputComponent extends WL.Component {
 
     /**
      * @returns {?XRInputSource} WebXR Device API input source associated
-     *          with this input component, if type {@link WL.InputType.ControllerLeft}
-     *          or {@link WL.InputType.ControllerRight}.
+     *          with this input component, if type {@link InputType.ControllerLeft}
+     *          or {@link InputType.ControllerRight}.
      */
     get xrInputSource() {
-        if(WL.xrSession) {
-            for(let inputSource of WL.xrSession.inputSources) {
+        if(xrSession) {
+            for(let inputSource of xrSession.inputSources) {
                 if(inputSource.handedness == this.handedness) {
                     return inputSource;
                 }
@@ -784,13 +813,13 @@ WL.InputComponent = class InputComponent extends WL.Component {
     }
 
     /**
-     * @returns {?string} 'left', 'right' or {@link null} depending on the {@link WL.InputComponent#inputType}.
+     * @returns {?string} 'left', 'right' or {@link null} depending on the {@link InputComponent#inputType}.
      */
     get handedness() {
         const inputType = this.inputType;
-        if(inputType == WL.InputType.ControllerRight || inputType == WL.InputType.RayRight || inputType == WL.InputType.EyeRight)
+        if(inputType == InputType.ControllerRight || inputType == InputType.RayRight || inputType == InputType.EyeRight)
             return 'right';
-        if(inputType == WL.InputType.ControllerLeft || inputType == WL.InputType.RayLeft || inputType == WL.InputType.EyeLeft)
+        if(inputType == InputType.ControllerLeft || inputType == InputType.RayLeft || inputType == InputType.EyeLeft)
             return 'left';
 
         return null;
@@ -802,14 +831,14 @@ WL.InputComponent = class InputComponent extends WL.Component {
  *
  * Provides access to a native light component instance
  */
-WL.LightComponent = class LightComponent extends WL.Component {
+export class LightComponent extends Component {
 
     /** @returns {Float32Array} View on the light color */
     get color() {
         return new Float32Array(HEAPF32.buffer, _wl_light_component_get_color(this._id), 4);
     }
 
-    /** @returns {WL.LightType} Light type */
+    /** @returns {LightType} Light type */
     get lightType() {
         return _wl_light_component_get_type(this._id);
     }
@@ -817,7 +846,7 @@ WL.LightComponent = class LightComponent extends WL.Component {
     /**
      * Set light type
      *
-     * @param {WL.LightType} lightType Type of the light component.
+     * @param {LightType} lightType Type of the light component.
      */
     set lightType(t) {
         return _wl_light_component_set_type(this._id, t);
@@ -829,23 +858,23 @@ WL.LightComponent = class LightComponent extends WL.Component {
  *
  * Provides access to a native animation component instance
  */
-WL.AnimationComponent = class AnimationComponent extends WL.Component {
+export class AnimationComponent extends Component {
 
     /**
      * Set animation to play
      *
-     * Make sure to {@link WL.Animation#retarget} the animation to affect the
+     * Make sure to {@link Animation#retarget} the animation to affect the
      * right objects.
      *
-     * @param {WL.Animation} animation to play
+     * @param {Animation} animation to play
      */
     set animation(anim) {
         _wl_animation_component_set_animation(this._id, anim._index);
     }
 
-    /** @returns {WL.Animation} animation set for this component */
+    /** @returns {Animation} animation set for this component */
     get animation() {
-        return new WL.Animation(_wl_animation_component_get_animation(this._id));
+        return new Animation(_wl_animation_component_get_animation(this._id));
     }
 
     /**
@@ -877,7 +906,7 @@ WL.AnimationComponent = class AnimationComponent extends WL.Component {
         _wl_animation_component_pause(this._id);
     }
 
-    /** @returns {WL.AnimationState} Current playing state of the animation */
+    /** @returns {AnimationState} Current playing state of the animation */
     get state() {
         return _wl_animation_component_state(this._id);
     }
@@ -889,44 +918,44 @@ WL.AnimationComponent = class AnimationComponent extends WL.Component {
  *
  * Provides access to a native mesh component instance
  */
-WL.MeshComponent = class MeshComponent extends WL.Component {
+export class MeshComponent extends Component {
     /**
      * Set material to render the mesh with
      *
-     * @param {?WL.Material} material Material to render the mesh with
+     * @param {?Material} material Material to render the mesh with
      */
     set material(material) {
         _wl_mesh_component_set_material(this._id, material._index);
     }
 
-    /** @returns {?WL.Material} Material used to render the mesh */
+    /** @returns {?Material} Material used to render the mesh */
     get material() {
-        return WL.Material.wrap(_wl_mesh_component_get_material(this._id));
+        return Material.wrap(_wl_mesh_component_get_material(this._id));
     }
 
-    /** @returns {?WL.Mesh} Mesh rendered by this component */
+    /** @returns {?Mesh} Mesh rendered by this component */
     get mesh() {
-        return new WL.Mesh(_wl_mesh_component_get_mesh(this._id));
+        return new Mesh(_wl_mesh_component_get_mesh(this._id));
     }
 
     /**
      * Set mesh to rendered with this component
      *
-     * @param {?WL.Mesh} mesh Mesh rendered by this component
+     * @param {?Mesh} mesh Mesh rendered by this component
      */
     set mesh(mesh) {
         _wl_mesh_component_set_mesh(this._id, mesh._index);
     }
 
-    /** @returns {?WL.Skin} Skin for this mesh component */
+    /** @returns {?Skin} Skin for this mesh component */
     get skin() {
-        return new WL.Skin(_wl_mesh_component_get_skin(this._id));
+        return new Skin(_wl_mesh_component_get_skin(this._id));
     }
 
     /**
      * Set skin to transform this mesh component
      *
-     * @param {?WL.Skin} skin Skin to use for rendering skinned meshes
+     * @param {?Skin} skin Skin to use for rendering skinned meshes
      */
     set skin(skin) {
         _wl_mesh_component_set_skin(this._id, skin._index);
@@ -939,7 +968,7 @@ WL.MeshComponent = class MeshComponent extends WL.Component {
  * Provides access to a native mesh component instance.
  * Only available when using physx enabled runtime, see "Project Settings > Runtime".
  */
-WL.PhysXComponent = class PhysXComponent extends WL.Component {
+export class PhysXComponent extends Component {
     /**
      * Set whether this rigid body is static
      *
@@ -985,7 +1014,7 @@ WL.PhysXComponent = class PhysXComponent extends WL.Component {
     /**
      * Set the shape for collision detection
      *
-     * @param {WL.Shape} s New shape
+     * @param {Shape} s New shape
      */
     set shape(s) {
         _wl_physx_component_set_shape(this._id, s);
@@ -1103,8 +1132,8 @@ WL.PhysXComponent = class PhysXComponent extends WL.Component {
 
     /** @returns {Float32Array} Linear velocity */
     get linearVelocity() {
-        _wl_physx_component_get_linearVelocity(this._id, WL._tempMem);
-        return new Float32Array(HEAPF32.buffer, WL._tempMem, 3);
+        _wl_physx_component_get_linearVelocity(this._id, _tempMem);
+        return new Float32Array(HEAPF32.buffer, _tempMem, 3);
     }
 
     /**
@@ -1120,8 +1149,8 @@ WL.PhysXComponent = class PhysXComponent extends WL.Component {
 
     /** @returns {Float32Array} Linear velocity */
     get angularVelocity() {
-        _wl_physx_component_get_angularVelocity(this._id, WL._tempMem);
-        return new Float32Array(HEAPF32.buffer, WL._tempMem, 3);
+        _wl_physx_component_get_angularVelocity(this._id, _tempMem);
+        return new Float32Array(HEAPF32.buffer, _tempMem, 3);
     }
 
     /**
@@ -1157,13 +1186,13 @@ WL.PhysXComponent = class PhysXComponent extends WL.Component {
      * [PhysX Manual - "Applying Forces and Torques"](https://gameworksdocs.nvidia.com/PhysX/4.1/documentation/physxguide/Manual/RigidBodyDynamics.html#applying-forces-and-torques)
      *
      * @param {number[]} f Force vector
-     * @param {number[]} m Force mode, see {@link WL.ForceMode}, default `Force`.
+     * @param {number[]} m Force mode, see {@link ForceMode}, default `Force`.
      * @param {number[]} localForce Whether the force vector is in local space, default `false`.
      * @param {number[]} p Position to apply force at, default is center of mass.
      * @param {number[]} local Whether position is in local space, default `false`.
      */
     addForce(f, m, localForce, p, local) {
-        m = m || WL.ForceMode.Force;
+        m = m || ForceMode.Force;
         if(!p) {
             _wl_physx_component_addForce(this._id, f[0], f[1], f[2], m, !!localForce);
         } else {
@@ -1177,17 +1206,17 @@ WL.PhysXComponent = class PhysXComponent extends WL.Component {
      * [PhysX Manual - "Applying Forces and Torques"](https://gameworksdocs.nvidia.com/PhysX/4.1/documentation/physxguide/Manual/RigidBodyDynamics.html#applying-forces-and-torques)
      *
      * @param {number[]} f Force vector
-     * @param {number[]} m Force mode, see {@link WL.ForceMode}, default `Force`.
+     * @param {number[]} m Force mode, see {@link ForceMode}, default `Force`.
      */
     addTorque(f, m) {
-        m = m || WL.ForceMode.Force;
+        m = m || ForceMode.Force;
         _wl_physx_component_addTorque(this._id, f[0], f[1], f[2], m);
     }
 
     /**
      * @callback collisionCallback
-     * @param {WL.CollisionEventType} type Type of the event
-     * @param {WL.PhysXComponent} other Other component that was (un)collided with
+     * @param {CollisionEventType} type Type of the event
+     * @param {PhysXComponent} other Other component that was (un)collided with
      */
     /**
      * Add on collision callback
@@ -1199,7 +1228,7 @@ WL.PhysXComponent = class PhysXComponent extends WL.Component {
      *  let rigidBody = this.object.getComponent('physx');
      *  rigidBody.onCollision(function(type, other) {
      *      // Ignore uncollides
-     *      if(type == WL.CollisionEventType.TouchLost) return;
+     *      if(type == CollisionEventType.TouchLost) return;
      *
      *      // Take damage on collision with enemies
      *      if(other.object.name.startsWith('enemy-')) {
@@ -1214,15 +1243,15 @@ WL.PhysXComponent = class PhysXComponent extends WL.Component {
     /**
      * Add filtered on collision callback
      *
-     * @param {WL.PhysXComponent} otherComp Component for which callbacks will
+     * @param {PhysXComponent} otherComp Component for which callbacks will
      *        be triggered. If you pass this component, the method is equivalent to
-     *        {@link WL.PhysXComponent#onCollision}.
+     *        {@link PhysXComponent#onCollision}.
      * @param {collisionCallback} callback Function to call when this rigid body
      *        (un)collides with `otherComp`.
      */
     onCollisionWith(otherComp, callback) {
-        WL.physics._callbacks[this._id] = WL.physics._callbacks[this._id] || [];
-        WL.physics._callbacks[this._id].push(callback);
+        physics._callbacks[this._id] = physics._callbacks[this._id] || [];
+        physics._callbacks[this._id].push(callback);
         _wl_physx_component_addCallback(this._id, otherComp._id || this._id);
     }
 };
@@ -1230,10 +1259,10 @@ WL.PhysXComponent = class PhysXComponent extends WL.Component {
 /**
  * Access to the physics scene
  */
-WL.Physics = class Physics {
+export class Physics {
     constructor() {
         this._rayHit = _malloc(4*(3*4+3*4+4+2)+4);
-        this._hit = new WL.RayHit(this._rayHit);
+        this._hit = new RayHit(this._rayHit);
         this._callbacks = {};
     }
 
@@ -1249,8 +1278,8 @@ WL.Physics = class Physics {
      *        part of given group are considered for raycast.
      * @param {number} maxDistance Maxium ray distance, default `100.0`.
      *
-     * @note The returned {@link WL.RayHit} object is owned by the Physics instance and
-     *       will be reused with the next {@link WL.Physics#rayCast} call.
+     * @note The returned {@link RayHit} object is owned by the Physics instance and
+     *       will be reused with the next {@link Physics#rayCast} call.
      */
     rayCast(o, d, group, maxDistance) {
         if(typeof maxDistance === 'undefined') maxDistance = 100.0;
@@ -1262,15 +1291,15 @@ WL.Physics = class Physics {
     }
 
     _callCollisionCallback(a, index, type, b) {
-        WL.physics._callbacks[a][index](type,
-            new WL.PhysXComponent(WL.Object._typeIndexFor('physx'), b));
+        physics._callbacks[a][index](type,
+            new PhysXComponent(Object._typeIndexFor('physx'), b));
     }
 };
 
 /**
  * Wrapper around a native mesh data
  */
-WL.Mesh = class Mesh {
+export class Mesh {
     /** Size of a vertex in float elements */
     static get VERTEX_FLOAT_SIZE() { return 3 + 3 + 2; }
     /** Size of a vertex in bytes */
@@ -1288,7 +1317,7 @@ WL.Mesh = class Mesh {
      *
      * @param params Either index to wrap or set of parameters to create a new mesh
      * @param {number[]} params.indexData Index data values
-     * @param {WL.MeshIndexType} params.indexType Index type
+     * @param {MeshIndexType} params.indexType Index type
      * @param {number[]} params.vertexData Interleaved vertex data values. A vertex is a set of 8 float values:
      *          - 0-3 Position
      *          - 4-7 Normal
@@ -1296,18 +1325,18 @@ WL.Mesh = class Mesh {
      */
     constructor(params) {
         if(typeof(params) === 'object') {
-            params.indexType = params.indexType || WL.MeshIndexType.UnsignedShort;
+            params.indexType = params.indexType || MeshIndexType.UnsignedShort;
             let indexData = _malloc(params.indexData.length*params.indexType);
             let vertexData = _malloc(params.vertexData.length*4 /* sizeof(float) */);
 
             switch(params.indexType) {
-                case WL.MeshIndexType.UnsignedByte:
+                case MeshIndexType.UnsignedByte:
                     HEAPU8.set(params.indexData, indexData);
                     break;
-                case WL.MeshIndexType.UnsignedShort:
+                case MeshIndexType.UnsignedShort:
                     HEAPU16.set(params.indexData, indexData >> 1);
                     break;
-                case WL.MeshIndexType.UnsignedInt:
+                case MeshIndexType.UnsignedInt:
                     HEAPU32.set(params.indexData, indexData >> 2);
                     break;
             }
@@ -1325,21 +1354,21 @@ WL.Mesh = class Mesh {
 
     /** @returns {Float32Array} Vertex data */
     get vertexData() {
-        let ptr = _wl_mesh_get_vertexData(this._index, WL._tempMem);
-        return new Float32Array(HEAPF32.buffer, ptr, HEAPU32[WL._tempMem/4]);
+        let ptr = _wl_mesh_get_vertexData(this._index, _tempMem);
+        return new Float32Array(HEAPF32.buffer, ptr, HEAPU32[_tempMem/4]);
     }
 
     /** @returns {Uint8Array|Uint16Array|Uint32Array} Vertex data */
     get indexData() {
-        let ptr = _wl_mesh_get_indexData(this._index, WL._tempMem, WL._tempMem + 4);
-        const indexCount = HEAPU32[WL._tempMem/4];
-        const indexSize = HEAPU32[WL._tempMem/4 + 1];
+        let ptr = _wl_mesh_get_indexData(this._index, _tempMem, _tempMem + 4);
+        const indexCount = HEAPU32[_tempMem/4];
+        const indexSize = HEAPU32[_tempMem/4 + 1];
         switch(indexSize) {
-            case WL.UnsignedByte:
+            case UnsignedByte:
                 return new Uint8Array(HEAPU8.buffer, ptr, indexCount);
-            case WL.UnsignedShort:
+            case UnsignedShort:
                 return new Uint16Array(HEAPU16.buffer, ptr, indexCount);
-            case WL.UnsignedInt:
+            case UnsignedInt:
                 return new Uint32Array(HEAPU32.buffer, ptr, indexCount);
         }
     }
@@ -1349,7 +1378,7 @@ WL.Mesh = class Mesh {
  * Mesh index type
  * @enum {number}
  */
-WL.MeshIndexType = {
+export const MeshIndexType = {
     /** Single byte mesh index, range 0-255 */
     UnsignedByte: 1,
 
@@ -1363,12 +1392,12 @@ WL.MeshIndexType = {
 /**
  * Wrapper around a native material
  */
-WL.Material = class Material {
+export class Material {
     /**
-     * Create a new WL.Material. Used internally by {@link WL.Material.wrap}.
+     * Create a new Material. Used internally by {@link Material.wrap}.
      *
      * @note Do not use this constructor directly, rather use
-     *     {@link WL.Material#clone} or {@link WL.Material.wrap} to create instances.
+     *     {@link Material#clone} or {@link Material.wrap} to create instances.
      */
     constructor(index) {
         this._index = index;
@@ -1382,11 +1411,11 @@ WL.Material = class Material {
     }
 
     /**
-     * Create a copy of the underlying native material and {@link WL.Material.wrap} the result
-     * @returns {WL.Material} Material clone
+     * Create a copy of the underlying native material and {@link Material.wrap} the result
+     * @returns {Material} Material clone
      */
     clone() {
-        return WL.Material.wrap(_wl_material_clone(this._index));
+        return Material.wrap(_wl_material_clone(this._index));
     }
 
     _paramIndex(name) {
@@ -1406,29 +1435,29 @@ WL.Material = class Material {
     /**
      * Wrap a native material index
      * @param {number} index
-     * @returns {WL.Material} Material instance or {@link null} if index <= 0.
+     * @returns {Material} Material instance or {@link null} if index <= 0.
      */
     static wrap(index) {
         if(index <= 0) return null;
 
-        const material = new WL.Material(index);
+        const material = new Material(index);
         return new Proxy(material, {
             get(target, prop) {
                 const paramIndex = target._paramIndex(prop);
                 if (paramIndex != -1) {
                     const paramType = target._paramType(paramIndex);
-                    if(_wl_material_get_param_value(target._index, paramIndex, WL._tempMem)) {
+                    if(_wl_material_get_param_value(target._index, paramIndex, _tempMem)) {
                         if(paramType.type == 0) {
-                            return paramType.componentCount == 1 ? WL._tempMemUint32[0] : new Uint32Array(HEAPF32.buffer, WL._tempMem, paramType.componentCount);
+                            return paramType.componentCount == 1 ? _tempMemUint32[0] : new Uint32Array(HEAPF32.buffer, _tempMem, paramType.componentCount);
                         }
                         if(paramType.type == 1) {
-                            return paramType.componentCount == 1 ? WL._tempMemInt[0] : new Int32Array(HEAPF32.buffer, WL._tempMem, paramType.componentCount);
+                            return paramType.componentCount == 1 ? _tempMemInt[0] : new Int32Array(HEAPF32.buffer, _tempMem, paramType.componentCount);
                         }
                         if(paramType.type == 2) {
-                            return paramType.componentCount == 1 ? WL._tempMemFloat[0] : new Float32Array(HEAPF32.buffer, WL._tempMem, paramType.componentCount);
+                            return paramType.componentCount == 1 ? _tempMemFloat[0] : new Float32Array(HEAPF32.buffer, _tempMem, paramType.componentCount);
                         }
                         if(paramType.type == 3) {
-                            return new WL.Texture(WL._tempMemInt[0]);
+                            return new Texture(_tempMemInt[0]);
                         }
                     }
                     throw new Error(`Invalid type ${paramType} on parameter ${paramIndex} for material ${target._index}`);
@@ -1440,20 +1469,20 @@ WL.Material = class Material {
             set(target, prop, value) {
                 const paramIndex = target._paramIndex(prop);
                 if(paramIndex >= 0) {
-                    if(value instanceof WL.Texture) {
+                    if(value instanceof Texture) {
                         _wl_material_set_param_value_uint(
                             target._index, paramIndex, value._id);
                     } else if(typeof(value) === 'number') {
-                        WL._tempMemFloat[0] = value;
+                        _tempMemFloat[0] = value;
                         _wl_material_set_param_value_float(
-                            target._index, paramIndex, WL._tempMem, 1);
+                            target._index, paramIndex, _tempMem, 1);
                     } else {
                         let length = value.length;
                         for(let i = 0; i < length; ++i) {
-                            WL._tempMemFloat[i] = value[i];
+                            _tempMemFloat[i] = value[i];
                         }
                         _wl_material_set_param_value_float(
-                            target._index, paramIndex, WL._tempMem, length);
+                            target._index, paramIndex, _tempMem, length);
                     }
                 } else {
                     target[prop] = value;
@@ -1467,17 +1496,17 @@ WL.Material = class Material {
 /**
  * Wrapper around a native texture data
  */
-WL.Texture = class Texture {
+export class Texture {
     constructor(param) {
         if(param instanceof HTMLImageElement || param instanceof HTMLVideoElement || param instanceof HTMLCanvasElement) {
-            const index = WL._images.length;
-            WL._images.push(param);
+            const index = _images.length;
+            _images.push(param);
             this._imageIndex = index;
             this._id = _wl_renderer_addImage(index);
         } else {
             this._id = param;
         }
-        WL.textures[this._id] = this;
+        textures[this._id] = this;
     }
 
     /** @returns {boolean} Whether this texture is valid */
@@ -1494,13 +1523,13 @@ WL.Texture = class Texture {
 /**
  * Access to the texures managed by Wonderland Engine
  */
-WL.textures = {
+export const textures = {
 
     /**
-     * Load an image from URL as {@link WL.Texture}
+     * Load an image from URL as {@link Texture}
      * @param {string} filename URL to load from
      * @param {string} crossOrigin Cross origin flag for the {@link Image} object
-     * @returns {Promise<WL.Texture>} Loaded texture
+     * @returns {Promise<Texture>} Loaded texture
      */
     load: function(filename, crossOrigin) {
         let image = new Image();
@@ -1510,7 +1539,7 @@ WL.textures = {
         image.src = filename;
         return new Promise((resolve, reject) => {
             image.onload = function() {
-                let texture = new WL.Texture(image);
+                let texture = new Texture(image);
                 if(!texture.valid) {
                     reject("Failed to add image " + image.src + " to texture atlas. Probably incompatible format.");
                 }
@@ -1523,7 +1552,7 @@ WL.textures = {
 /**
  * Wrapper around a native animation
  */
-WL.Animation = class Animation {
+export class Animation {
     constructor(index) {
         this._index = index;
     }
@@ -1546,18 +1575,18 @@ WL.Animation = class Animation {
      *
      * **Experimental:** This API might change in upcoming versions.
      *
-     * If retargetting to {@link WL.Skin}, the join names will be used to determine a mapping
+     * If retargetting to {@link Skin}, the join names will be used to determine a mapping
      * from the previous skin to the new skin. The source skin will be retrieved from
      * the first track in the animation that targets a joint.
      *
-     * @param {WL.Object[]|WL.Skin} newTargets New targets per track. Expected to have
-     *      {@link WL.Animation#trackCount} elements or to be a {@link WL.Skin}.
-     * @returns {WL.Animation} The retargeted clone of this animation.
+     * @param {Object[]|Skin} newTargets New targets per track. Expected to have
+     *      {@link Animation#trackCount} elements or to be a {@link Skin}.
+     * @returns {Animation} The retargeted clone of this animation.
      */
     retarget(newTargets) {
-        if(newTargets instanceof WL.Skin) {
+        if(newTargets instanceof Skin) {
             const animId = _wl_animation_retargetToSkin(this._index, newTargets._index);
-            return new WL.Animation(animId);
+            return new Animation(animId);
         }
 
         if(newTargets.length != this.trackCount) {
@@ -1570,7 +1599,7 @@ WL.Animation = class Animation {
         const animId = _wl_animation_retarget(this._index, ptr);
         _free(ptr);
 
-        return new WL.Animation(animId);
+        return new Animation(animId);
     }
 };
 
@@ -1579,16 +1608,16 @@ WL.Animation = class Animation {
  *
  * Node in the scene graph or "entity". Consists of transformation and a reference
  * to its parent object. Usually holds components and is accessible by components
- * through {@link WL.Component#object}.
+ * through {@link Component#object}.
  *
  * Objects are stored in a data oriented mannor inside WebAssembly memory. This class
  * is a JavaScript API wrapper around this memory for more conventient use in
  * components.
  *
  * Objects can be created and added to a scene through
- * {@link WL.Scene#addObject} on the {@link WL.scene|main scene}.
+ * {@link Scene#addObject} on the {@link scene|main scene}.
  */
-WL.Object = class Object {
+export class Object {
     /**
      * @param {number} o Object id to wrap
      */
@@ -1617,32 +1646,32 @@ WL.Object = class Object {
     }
 
     /**
-     * @returns {WL.Object} Parent of this object or {@link null} if parented to root
+     * @returns {Object} Parent of this object or {@link null} if parented to root
      */
     get parent() {
         const p = _wl_object_parent(this.objectId);
-        return p == 0 ? null : new WL.Object(p);
+        return p == 0 ? null : new Object(p);
     }
 
     /**
-     * @returns {WL.Object[]} Children of this object
+     * @returns {Object[]} Children of this object
      *
      * @warning This method will currently return at most 512 child object.
      */
     get children() {
-        const childrenCount = _wl_object_get_children(this.objectId, WL._tempMem, WL._tempMemSize >> 1);
+        const childrenCount = _wl_object_get_children(this.objectId, _tempMem, _tempMemSize >> 1);
         if(childrenCount == 0) return [];
 
         const children = new Array(childrenCount);
         for(let i = 0; i < childrenCount; ++i) {
-            children[i] = new WL.Object(WL._tempMemUint16[i]);
+            children[i] = new Object(_tempMemUint16[i]);
         }
         return children;
     }
 
     /**
      * Reparent object to given object.
-     * @param {WL.Object} New parent or {@link null} to parent to root
+     * @param {Object} New parent or {@link null} to parent to root
      * @note Reparenting is not trivial and might have a noticable performance impact
      */
     set parent(newParent) {
@@ -1663,7 +1692,7 @@ WL.Object = class Object {
     /**
      * Reset local rotation, keep translation.
      * @note To reset both rotation and translation, prefer
-     *       {@link WL.Object#resetTranslationRotation}.
+     *       {@link Object#resetTranslationRotation}.
      */
     resetRotation() {
         _wl_object_reset_rotation(this.objectId);
@@ -1672,7 +1701,7 @@ WL.Object = class Object {
     /**
      * Reset local translation, keep rotation.
      * @note To reset both rotation and translation, prefer
-     *       {@link WL.Object#resetTranslationRotation}.
+     *       {@link Object#resetTranslationRotation}.
      */
     resetTranslation() {
         _wl_object_reset_translation(this.objectId);
@@ -1714,9 +1743,9 @@ WL.Object = class Object {
      *
      * @note If the object is translated the rotation will be around
      *     the parent. To rotate around the object origin, use
-     *     {@link WL.Object#rotateAxisAngleDegObject}
+     *     {@link Object#rotateAxisAngleDegObject}
      *
-     * @see {@link WL.Object#rotateAxisAngleRad}
+     * @see {@link Object#rotateAxisAngleRad}
      */
     rotateAxisAngleDeg(a, d) {
         _wl_object_rotate_axis_angle(this.objectId, a[0], a[1], a[2], d);
@@ -1729,9 +1758,9 @@ WL.Object = class Object {
      *
      * @note If the object is translated the rotation will be around
      *     the parent. To rotate around the object origin, use
-     *     {@link WL.Object#rotateAxisAngleDegObject}
+     *     {@link Object#rotateAxisAngleDegObject}
      *
-     * @see {@link WL.Object#rotateAxisAngleDeg}
+     * @see {@link Object#rotateAxisAngleDeg}
      */
     rotateAxisAngleRad(a, d) {
         _wl_object_rotate_axis_angle_rad(this.objectId, a[0], a[1], a[2], d);
@@ -1745,7 +1774,7 @@ WL.Object = class Object {
      * Equivalent to prepending a rotation quaternion to the object's
      * local transformation.
      *
-     * @see {@link WL.Object#rotateAxisAngleRadObject}
+     * @see {@link Object#rotateAxisAngleRadObject}
      */
     rotateAxisAngleDegObject(a, d) {
         _wl_object_rotate_axis_angle_obj(this.objectId, a[0], a[1], a[2], d);
@@ -1759,7 +1788,7 @@ WL.Object = class Object {
      * @param {number[]} a Vector representing the rotation axis
      * @param {number} d Angle in degrees
      *
-     * @see {@link WL.Object#rotateAxisAngleDegObject}
+     * @see {@link Object#rotateAxisAngleDegObject}
      */
     rotateAxisAngleRadObject(a, d) {
         _wl_object_rotate_axis_angle_rad_obj(this.objectId, a[0], a[1], a[2], d);
@@ -1807,10 +1836,10 @@ WL.Object = class Object {
      * @return {number[]} out
      */
     getTranslationLocal(out) {
-        _wl_object_get_translation_local(this.objectId, WL._tempMem);
-        out[0] = WL._tempMemFloat[0];
-        out[1] = WL._tempMemFloat[1];
-        out[2] = WL._tempMemFloat[2];
+        _wl_object_get_translation_local(this.objectId, _tempMem);
+        out[0] = _tempMemFloat[0];
+        out[1] = _tempMemFloat[1];
+        out[2] = _tempMemFloat[2];
         return out;
     }
 
@@ -1825,10 +1854,10 @@ WL.Object = class Object {
      * @return {number[]} out
      */
     getTranslationWorld(out) {
-        _wl_object_get_translation_world(this.objectId, WL._tempMem);
-        out[0] = WL._tempMemFloat[0];
-        out[1] = WL._tempMemFloat[1];
-        out[2] = WL._tempMemFloat[2];
+        _wl_object_get_translation_world(this.objectId, _tempMem);
+        out[0] = _tempMemFloat[0];
+        out[1] = _tempMemFloat[1];
+        out[2] = _tempMemFloat[2];
         return out;
     }
 
@@ -1890,10 +1919,10 @@ WL.Object = class Object {
      * @return {number[]} out
      */
     getForward(out) {
-        _wl_object_get_forward(this.objectId, WL._tempMem);
-        out[0] = WL._tempMemFloat[0];
-        out[1] = WL._tempMemFloat[1];
-        out[2] = WL._tempMemFloat[2];
+        _wl_object_get_forward(this.objectId, _tempMem);
+        out[0] = _tempMemFloat[0];
+        out[1] = _tempMemFloat[1];
+        out[2] = _tempMemFloat[2];
         return out;
     }
 
@@ -1904,10 +1933,10 @@ WL.Object = class Object {
      * @return {number[]} out
      */
     getUp(out) {
-        _wl_object_get_up(this.objectId, WL._tempMem);
-        out[0] = WL._tempMemFloat[0];
-        out[1] = WL._tempMemFloat[1];
-        out[2] = WL._tempMemFloat[2];
+        _wl_object_get_up(this.objectId, _tempMem);
+        out[0] = _tempMemFloat[0];
+        out[1] = _tempMemFloat[1];
+        out[2] = _tempMemFloat[2];
         return out;
     }
 
@@ -1918,10 +1947,10 @@ WL.Object = class Object {
      * @return {number[]} out
      */
     getRight(out) {
-        _wl_object_get_right(this.objectId, WL._tempMem);
-        out[0] = WL._tempMemFloat[0];
-        out[1] = WL._tempMemFloat[1];
-        out[2] = WL._tempMemFloat[2];
+        _wl_object_get_right(this.objectId, _tempMem);
+        out[0] = _tempMemFloat[0];
+        out[1] = _tempMemFloat[1];
+        out[2] = _tempMemFloat[2];
         return out;
     }
 
@@ -1944,9 +1973,9 @@ WL.Object = class Object {
     /**
      * @summary Mark transformation dirty
      *
-     * Causes an eventual recalculation of {@link WL.Object#transformWorld}, either
-     * on next {@link WL.Object#getTranslationWorld}, {@link WL.Object#transformWorld} or
-     * {@link WL.Object#scalingWorld} or the beginning of next frame, whichever
+     * Causes an eventual recalculation of {@link Object#transformWorld}, either
+     * on next {@link Object#getTranslationWorld}, {@link Object#transformWorld} or
+     * {@link Object#scalingWorld} or the beginning of next frame, whichever
      * happens first.
      */
     setDirty() {
@@ -1958,7 +1987,7 @@ WL.Object = class Object {
      * @param {string} type Type name
      * @param {number} index=0 Index for component of given type. This can be used to access specific
      *      components if the object has multiple components of the same type.
-     * @returns {?(WL.Component|WL.CollisionComponent|WL.TextComponent|WL.ViewComponent|WL.MeshComponent|WL.InputComponent|WL.LightComponent|WL.AnimationComponent|WL.PhysXComponent)} The component or {@link null} if there is no such component on this object
+     * @returns {?(Component|CollisionComponent|TextComponent|ViewComponent|MeshComponent|InputComponent|LightComponent|AnimationComponent|PhysXComponent)} The component or {@link null} if there is no such component on this object
      */
     getComponent(type, index) {
         const lengthBytes = lengthBytesUTF8(type) + 1;
@@ -1975,28 +2004,28 @@ WL.Object = class Object {
         _free(mem);
 
         const componentId = _wl_get_component_id(this.objectId, componentType, index || 0);
-        return WL.Object._wrapComponent(type, componentType, componentId);
+        return Object._wrapComponent(type, componentType, componentId);
     }
 
     /**
      * @param {?string} type Type name, pass a falsey value (`undefined` or {@link null}) to retrieve all
-     * @returns {WL.Component[]} All components of given type attached to this object
+     * @returns {Component[]} All components of given type attached to this object
      *
      * @warning This method will currently return at most 341 components.
      */
     getComponents(type) {
-        const componentType = type ? WL.Object._typeIndexFor(type) : null;
+        const componentType = type ? Object._typeIndexFor(type) : null;
 
         const components = [];
         const componentsCount = Math.min(85,
-            _wl_object_get_components(this.objectId, WL._tempMem, WL._tempMemSize >> 1));
+            _wl_object_get_components(this.objectId, _tempMem, _tempMemSize >> 1));
         const offset = 2*componentsCount;
-        _wl_object_get_component_types(this.objectId, WL._tempMem + offset, WL._tempMemSize - offset);
+        _wl_object_get_component_types(this.objectId, _tempMem + offset, _tempMemSize - offset);
 
-        const jsManagerIndex = WL.Object._typeIndexFor('js');
+        const jsManagerIndex = Object._typeIndexFor('js');
         for(let i = 0; i < componentsCount; ++i) {
-            const t = WL._tempMemUint8[i + offset];
-            const componentId = WL._tempMemUint16[i];
+            const t = _tempMemUint8[i + offset];
+            const componentId = _tempMemUint16[i];
             /* Handle JS types separately */
             if(t == jsManagerIndex) {
                 const comp = _WL._components[_wl_get_js_component_index_for_id(componentId)];
@@ -2005,12 +2034,12 @@ WL.Object = class Object {
             }
 
             if(componentType === null) {
-                const managerName = WL.Object._typeNameFor(componentType);
-                components.push(WL.Object._wrapComponent(
+                const managerName = Object._typeNameFor(componentType);
+                components.push(Object._wrapComponent(
                     managerName, componentType, componentId));
             } else if(t == componentType) {
                 /* Optimized manager name retrieval, already have type */
-                components.push(WL.Object._wrapComponent(
+                components.push(Object._wrapComponent(
                     type, componentType, componentId));
             }
         }
@@ -2026,10 +2055,10 @@ WL.Object = class Object {
      *
      * @note As this function is non-trivial, avoid using it in `update()` repeatidly, but rather
      *  store its result in `init()` or `start()`
-     * @returns {?(WL.Component|WL.CollisionComponent|WL.TextComponent|WL.ViewComponent|WL.MeshComponent|WL.InputComponent|WL.LightComponent|WL.AnimationComponent|WL.PhysXComponent)} The component or {@link null} if the type was not found
+     * @returns {?(Component|CollisionComponent|TextComponent|ViewComponent|MeshComponent|InputComponent|LightComponent|AnimationComponent|PhysXComponent)} The component or {@link null} if the type was not found
      */
     addComponent(type, params) {
-        const componentType = WL.Object._typeIndexFor(type);
+        const componentType = Object._typeIndexFor(type);
         if(componentType < 0) {
             if(!(type in _WL._componentTypeIndices)) {
                 throw new TypeError("Unknown component type '" + type + "'");
@@ -2056,7 +2085,7 @@ WL.Object = class Object {
         }
         const componentId = _wl_object_add_component(this.objectId, componentType);
 
-        const component = WL.Object._wrapComponent(type, componentType, componentId);
+        const component = Object._wrapComponent(type, componentType, componentId);
         if(params !== undefined) {
             for(key in params) {
                 component[key] = params[key];
@@ -2070,7 +2099,7 @@ WL.Object = class Object {
      * Checks equality by comparing whether the wrapped native component ids
      * and component manager types are equal.
      *
-     * @param {?WL.Object} otherObject Object to check equality with
+     * @param {?Object} otherObject Object to check equality with
      * @returns {boolean} Whether this object equals the given object
      */
     equals(otherObject) {
@@ -2096,29 +2125,29 @@ WL.Object = class Object {
      * @param {string} type component type name
      * @param {number} componentType Component manager index
      * @param {number} componentId Component id in the manager
-     * @returns {(WL.CollisionComponent|WL.TextComponent|WL.ViewComponent|WL.MeshComponent|WL.InputComponent|WL.LightComponent|WL.AnimationComponent|WL.PhysXComponent)} JavaScript instance wrapping the native component
+     * @returns {(CollisionComponent|TextComponent|ViewComponent|MeshComponent|InputComponent|LightComponent|AnimationComponent|PhysXComponent)} JavaScript instance wrapping the native component
      */
     static _wrapComponent(type, componentType, componentId) {
         if(componentId < 0) return null;
 
         if(type == 'collision') {
-            return new WL.CollisionComponent(componentType, componentId);
+            return new CollisionComponent(componentType, componentId);
         } else if(type == 'text') {
-            return new WL.TextComponent(componentType, componentId);
+            return new TextComponent(componentType, componentId);
         } else if(type == 'view') {
-            return new WL.ViewComponent(componentType, componentId);
+            return new ViewComponent(componentType, componentId);
         } else if(type == 'mesh') {
-            return new WL.MeshComponent(componentType, componentId);
+            return new MeshComponent(componentType, componentId);
         } else if(type == 'input') {
-            return new WL.InputComponent(componentType, componentId);
+            return new InputComponent(componentType, componentId);
         } else if(type == 'light') {
-            return new WL.LightComponent(componentType, componentId);
+            return new LightComponent(componentType, componentId);
         } else if(type == 'animation') {
-            return new WL.AnimationComponent(componentType, componentId);
+            return new AnimationComponent(componentType, componentId);
         } else if(type == 'physx') {
-            return new WL.PhysXComponent(componentType, componentId);
+            return new PhysXComponent(componentType, componentId);
         } else {
-            return new WL.Component(componentType, componentId);
+            return new Component(componentType, componentId);
         }
     }
 };
@@ -2126,7 +2155,7 @@ WL.Object = class Object {
 /**
  * Wrapper around a native skin data
  */
-WL.Skin = class Skin {
+export class Skin {
     constructor(index) {
         this._index = index;
     }
@@ -2143,7 +2172,7 @@ WL.Skin = class Skin {
     }
 
     /**
-     * Dual quaternions in a flat array of size 8 times {@link WL.Skin#jointCount}
+     * Dual quaternions in a flat array of size 8 times {@link Skin#jointCount}
      *
      * @returns {Float32Array} Inverse bind transforms of the skin
      */
@@ -2154,7 +2183,7 @@ WL.Skin = class Skin {
     }
 
     /**
-     * Vectors in a flat array of size 3 times {@link WL.Skin#jointCount}
+     * Vectors in a flat array of size 3 times {@link Skin#jointCount}
      *
      * @returns {Float32Array} Inverse bind scalings of the skin
      */
@@ -2168,13 +2197,13 @@ WL.Skin = class Skin {
 /**
  * @summary Ray hit
  *
- * Result of a {@link WL.Scene#rayCast|ray cast}
+ * Result of a {@link Scene#rayCast|ray cast}
  *
  * @param {number} ptr Pointer to the ray hits memory
  * @note this class wraps internal engine data and should only be created
  * internally.
  */
-WL.RayHit = class RayHit {
+export class RayHit {
     constructor(ptr) {
         assert((this._ptr & 3) == 0, MISALIGNED_MSG);
         this._ptr = ptr;
@@ -2190,7 +2219,7 @@ WL.RayHit = class RayHit {
         return l;
     }
 
-    /** @returns {Float32Array[]} array of ray hit normals (only when using {@link WL.Physics#rayCast} */
+    /** @returns {Float32Array[]} array of ray hit normals (only when using {@link Physics#rayCast} */
     get normals() {
         let p = this._ptr + 48;
         let l = [];
@@ -2210,15 +2239,15 @@ WL.RayHit = class RayHit {
         return new Float32Array(HEAPF32.buffer, p, this.hitCount);
     }
 
-    /** @returns {WL.Object[]} Hit objects */
+    /** @returns {Object[]} Hit objects */
     get objects() {
         let p = this._ptr + (48*2 + 16);
         let objIds = new Uint16Array(HEAPU16.buffer, p, this.hitCount);
         return [
-            objIds[0] <= 0 ? null : new WL.Object(objIds[0]),
-            objIds[1] <= 0 ? null : new WL.Object(objIds[1]),
-            objIds[2] <= 0 ? null : new WL.Object(objIds[2]),
-            objIds[3] <= 0 ? null : new WL.Object(objIds[3]),
+            objIds[0] <= 0 ? null : new Object(objIds[0]),
+            objIds[1] <= 0 ? null : new Object(objIds[1]),
+            objIds[2] <= 0 ? null : new Object(objIds[2]),
+            objIds[3] <= 0 ? null : new Object(objIds[3]),
         ];
     }
 

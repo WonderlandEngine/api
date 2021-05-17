@@ -11,7 +11,8 @@
     "esbuild": "^0.11.14"
   },
   "scripts": {
-    "build": "esbuild wonderland.js --minify --bundle --sourcemap --outfile=../wonderland.min.js"
+    "build": "esbuild index.js --minify --bundle --sourcemap --outfile=../wonderland.min.js --global-name=WL",
+    "watch": "esbuild index.js --minify --bundle --sourcemap --outfile=../wonderland.min.js --global-name=WL --watch"
   },
   "repository": {
     "type": "git",
