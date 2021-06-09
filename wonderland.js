@@ -1,7 +1,7 @@
 const MISALIGNED_MSG = "Misaligned pointer: please report a bug";
 
 /**
- * Wonderland Engine Library
+ * Wonderland Engine API
  * @namespace WL
  */
 
@@ -30,7 +30,7 @@ const MISALIGNED_MSG = "Misaligned pointer: please report a bug";
  *  onDeactivate: function() {},
  * });
  */
-export function registerComponent(name, params, object) {
+function registerComponent(name, params, object) {
     _WL.registerComponent(name, params, object);
 };
 
@@ -38,7 +38,7 @@ export function registerComponent(name, params, object) {
  * Component parameter type enum
  * @enum {number}
  */
-export const Type = {
+const Type = {
     /**
      * **Bool**:
      *
@@ -122,12 +122,13 @@ export const Type = {
      */
     Skin: 1<<11,
 };
+export { Type };
 
 /**
  * Collider type enum for {@link CollisionComponent}
  * @enum {number}
  */
-export const Collider = {
+const Collider = {
     /**
      * **Sphere Collider**:
      *
@@ -155,12 +156,13 @@ export const Collider = {
      */
     Box: 2
 };
+export { Collider };
 
 /**
  * Alignment type enum for {@link TextComponent}
  * @enum {number}
  */
-export const Alignment = {
+const Alignment = {
     /** Text start is at object origin */
     Left: 1,
 
@@ -170,12 +172,13 @@ export const Alignment = {
     /** Text end is at object origin */
     Right: 3
 };
+export { Alignment };
 
 /**
  * Justification type enum for {@link TextComponent}
  * @enum {number}
  */
-export const Justification = {
+const Justification = {
     /** Text line is at object origin */
     Line: 1,
 
@@ -185,12 +188,13 @@ export const Justification = {
     /** Text top is at object origin */
     Top: 3
 };
+export { Justification };
 
 /**
  * Input type enum for {@link InputComponent}
  * @enum {number}
  */
-export const InputType = {
+const InputType = {
     /** Head input */
     Head: 0,
 
@@ -212,24 +216,26 @@ export const InputType = {
     /** Right ray input */
     RayRight: 6,
 };
+export { InputType };
 
 /**
  * Light type enum for {@link LightComponent}
  * @enum {number}
  */
-export const LightType = {
+const LightType = {
     /** Point light */
     Point: 1,
 
     /** Sun light / Directional light */
     Sun: 2,
 };
+export { LightType };
 
 /**
  * Animation state of {@link AnimationComponent}
  * @enum {number}
  */
-export const AnimationState = {
+const AnimationState = {
     /** Animation is currently playing */
     Playing: 1,
 
@@ -240,6 +246,7 @@ export const AnimationState = {
     /** Animation is stopped */
     Stopped: 3
 };
+export { AnimationState };
 
 /**
  * Rigid body force mode for {@link PhysXComponent#addForce} and {@link PhysXComponent#addTorque}.
@@ -247,7 +254,7 @@ export const AnimationState = {
  *
  * [PhysX API Reference](https://gameworksdocs.nvidia.com/PhysX/4.1/documentation/physxapi/files/structPxForceMode.html)
  */
-export const ForceMode = {
+const ForceMode = {
     /** Apply as force */
     Force: 0,
 
@@ -260,18 +267,20 @@ export const ForceMode = {
     /** Apply as mass dependent force */
     Acceleration: 3
 };
+export { ForceMode };
 
 /**
  * Collision callback event type
  * @enum {number}
  */
-export const CollisionEventType = {
+const CollisionEventType = {
     /** Touch/contact detected, collision */
     Touch: 0,
 
     /** Touch/contact lost, uncollide */
     TouchLost: 1,
 };
+export { CollisionEventType };
 
 /**
  * Rigid body {@link PhysXComponent#shape|shape}.
@@ -279,7 +288,7 @@ export const CollisionEventType = {
  *
  * [PhysX SDK Guide](https://gameworksdocs.nvidia.com/PhysX/4.1/documentation/physxguide/Manual/Geometry.html#geometry-types)
  */
-export const Shape = {
+const Shape = {
     /** No shape */
     None: 0,
 
@@ -301,18 +310,19 @@ export const Shape = {
     /** Triangle mesh shape */
     TriangleMesh: 6,
 };
+export { Shape };
 
 /**
  * Canvas element that Wonderland Engine renders to
  * @type {HTMLCanvasElement}
  */
-export let canvas = null;
+let canvas = null;
 
 /**
  * Current WebXR session or {@link null} if no session active
  * @type {XRSession}
  */
-export let xrSession = null;
+let xrSession = null;
 /**
  * @callback xrSessionStartCallback
  * @param {XRSession} session WebXR session that started
@@ -324,12 +334,12 @@ export let xrSession = null;
  * List of functions to call if a WebXR session is started
  * @type {xrSessionStartCallback}
  */
-export const onXRSessionStart = [];
+const onXRSessionStart = [ (s) => { xrSession = s; } ];
 /**
  * List of functions to call if a WebXR session ends
  * @type {xrSessionEndCallback}
  */
-export const onXRSessionEnd = [];
+const onXRSessionEnd = [ () => { xrSession = null; } ];
 
 /**
  * @callback xrSupportCallback
@@ -344,7 +354,12 @@ export const onXRSessionEnd = [];
  * This allows you to notify the user of both cases: support and missing support of XR.
  * See the `supported` parameter of the callback, which indicates support.
  */
-export let onXRSupported = [];
+let onXRSupported = [
+  (type, supported) => {
+    if(type == 'ar') arSupported = supported;
+    if(type == 'vr') vrSupported = supported;
+  }
+];
 
 /**
  * @callback sceneLoadedCallback
@@ -353,32 +368,32 @@ export let onXRSupported = [];
  * List of functions to call once the main scene has been loaded
  * @type {sceneLoadedCallback}
  */
-export let onSceneLoaded = [];
+let onSceneLoaded = [];
 
 /**
  * Whether AR is supported by the browser
  *
  * `undefined` until support could be determined
  */
-export let arSupported = undefined;
+let arSupported = undefined;
 /**
  * Whether VR is supported by the browser
  *
  * `undefined` until support could be determined
  */
-export let vrSupported = undefined;
+let vrSupported = undefined;
 /**
  * Current main scene
  * @type{Scene}
  */
-export let scene = undefined;
+let scene = undefined;
 /**
  * Physics, only available when physx is enabled in the runtime
  * @type{Physics}
  */
-export let physics = undefined;
+let physics = undefined;
 
-export let _images = [];
+let _images = [];
 let _tempMem = null;
 let _tempMemSize = 1024;
 let _tempMemFloat = null;
@@ -388,7 +403,7 @@ let _tempMemUint16 = null;
 let _tempMemUint8 = null;
 
 /** Initialize API resources, called by the engine automatically. */
-export function init() {
+function init() {
     scene = new WL.Scene();
     /* For internal testing, we provide compatibility with DOM-less execution */
     canvas = (typeof document === 'undefined') ? null : document.getElementById('canvas');
@@ -400,11 +415,11 @@ export function init() {
 
 /** Initialize API resources, called by the engine automatically, if
  * PhysX is enabled. */
-export function _initPhysics() {
+function _initPhysics() {
     physics = new Physics();
 }
 
-export function updateTempMemory() {
+function updateTempMemory() {
     _tempMemFloat = new Float32Array(HEAP8.buffer,_tempMem,_tempMemSize >> 4);
     _tempMemInt = new Int32Array(HEAP8.buffer,_tempMem,_tempMemSize >> 4);
     _tempMemUint32 = new Uint32Array(HEAP8.buffer,_tempMem,_tempMemSize >> 4);
@@ -412,10 +427,30 @@ export function updateTempMemory() {
     _tempMemUint8 = new Uint8Array(HEAP8.buffer,_tempMem,_tempMemSize);
 }
 
+export {
+    registerComponent,
+
+    canvas,
+    xrSession,
+    onXRSessionStart,
+    onXRSessionEnd,
+    onXRSupported,
+    onSceneLoaded,
+    arSupported,
+    vrSupported,
+    physics,
+    _images,
+    textures,
+
+    init,
+    _initPhysics,
+    updateTempMemory,
+};
+
 /**
  * Provides global scene functionality like raycasting.
  */
-export class Scene {
+class Scene {
     constructor() {
         this._rayHit = _malloc(4*(3*4+3*4+4+2)+4);
         this._hit = new RayHit(this._rayHit);
@@ -433,7 +468,7 @@ export class Scene {
         const count = _wl_scene_get_active_views(_tempMem, 16);
 
         const views = [];
-        const viewTypeIndex = Object._typeIndexFor("view");
+        const viewTypeIndex = $Object._typeIndexFor("view");
         for(let i = 0; i < count; ++i) {
             views.push(new ViewComponent(viewTypeIndex, _tempMemInt[i]));
         }
@@ -466,13 +501,13 @@ export class Scene {
     /**
      * Add object to the scene
      *
-     * @param {Object} parent Parent object or {@link null}
-     * @returns {Object} newly created object
+     * @param {$Object} parent Parent object or {@link null}
+     * @returns {$Object} newly created object
      */
     addObject(parent) {
         const parentId = parent ? parent.objectId : 0;
         const objectId = _wl_scene_add_object(parentId);
-        return new Object(objectId);
+        return new $Object(objectId);
     }
 
     /**
@@ -488,18 +523,27 @@ export class Scene {
      * **Experimental:** This API might change in upcoming versions.
      *
      * @param {number} count Number of objects to add
-     * @param {Object} parent Parent object or {@link null}, default {@link null}
+     * @param {$Object} parent Parent object or {@link null}, default {@link null}
      * @param {number} componentCountHint Hint for how many components in total will
      *      be added to the created objects afterwards, default `0`.
-     * @returns {Object[]} newly created objects
+     * @returns {$Object[]} newly created objects
      */
     addObjects(count, parent, componentCountHint) {
         const parentId = parent ? parent.objectId : 0;
         const objectIdsPtr = _wl_scene_add_objects(parentId, count, componentCountHint || 0);
         const objects = Array.from(new Uint16Array(HEAPU16.buffer, objectIdsPtr, count),
-            id => new Object(id));
+            id => new $Object(id));
         _free(objectIdsPtr);
         return objects;
+    }
+
+    /**
+     * Set the background clear color
+     *
+     * @param {number[]} color new clear color (RGBA)
+     */
+    set clearColor(color) {
+        _wl_scene_set_clearColor(color[0], color[1], color[2], color[3]);
     }
 
     /**
@@ -519,13 +563,14 @@ export class Scene {
         _free(ptr);
     }
 };
+export { Scene };
 
 /**
  * Native component
  *
  * Provides access to a native component instance of a specified component type
  */
-export class Component {
+class Component {
     constructor(managerIndex, id) {
         this._id = id;
         this._manager = managerIndex;
@@ -535,15 +580,15 @@ export class Component {
      * @returns {string} the name of this component's type
      */
     get type() {
-        return this._type || Object._typeNameFor(this._manager);
+        return this._type || $Object._typeNameFor(this._manager);
     }
 
     /**
-     * @returns {Object} The object this component is attached to
+     * @returns {$Object} The object this component is attached to
      */
     get object() {
         const objectId = _wl_component_get_object(this._manager, this._id);
-        return new Object(objectId);
+        return new $Object(objectId);
     }
 
     /**
@@ -580,13 +625,14 @@ export class Component {
         return this._manager == otherComponent._manager && this._id == otherComponent._id;
     }
 };
+export { Component };
 
 /**
  * Native collision component
  *
  * Provides access to a native collision component instance
  */
-export class CollisionComponent extends Component {
+class CollisionComponent extends Component {
 
     /**
      * @returns {Collider} Collision component collider
@@ -678,13 +724,14 @@ export class CollisionComponent extends Component {
         return overlaps;
     }
 };
+export { CollisionComponent };
 
 /**
  * Native text component
  *
  * Provides access to a native text component instance
  */
-export class TextComponent extends Component {
+class TextComponent extends Component {
 
     /**
      * @returns {Alignment} Text component alignment
@@ -755,13 +802,14 @@ export class TextComponent extends Component {
     }
 
 };
+export { TextComponent };
 
 /**
  * Native view component
  *
  * Provides access to a native view component instance
  */
-export class ViewComponent extends Component {
+class ViewComponent extends Component {
 
     /**
      * @returns {Float32Array} Projection matrix
@@ -771,13 +819,14 @@ export class ViewComponent extends Component {
             _wl_view_component_get_projection_matrix(this._id), 16);
     }
 };
+export { ViewComponent };
 
 /**
  * Native input component
  *
  * Provides access to a native input component instance
  */
-export class InputComponent extends Component {
+class InputComponent extends Component {
 
     /**
      * @returns {InputType} Input component type
@@ -825,13 +874,14 @@ export class InputComponent extends Component {
         return null;
     }
 };
+export { InputComponent };
 
 /**
  * Native light component
  *
  * Provides access to a native light component instance
  */
-export class LightComponent extends Component {
+class LightComponent extends Component {
 
     /** @returns {Float32Array} View on the light color */
     get color() {
@@ -852,13 +902,14 @@ export class LightComponent extends Component {
         return _wl_light_component_set_type(this._id, t);
     }
 };
+export { LightComponent };
 
 /**
  * Native animation component
  *
  * Provides access to a native animation component instance
  */
-export class AnimationComponent extends Component {
+class AnimationComponent extends Component {
 
     /**
      * Set animation to play
@@ -912,13 +963,14 @@ export class AnimationComponent extends Component {
     }
 
 };
+export { AnimationComponent };
 
 /**
  * Native mesh component
  *
  * Provides access to a native mesh component instance
  */
-export class MeshComponent extends Component {
+class MeshComponent extends Component {
     /**
      * Set material to render the mesh with
      *
@@ -961,6 +1013,7 @@ export class MeshComponent extends Component {
         _wl_mesh_component_set_skin(this._id, skin._index);
     }
 };
+export { MeshComponent };
 
 /**
  * Native physx rigid body component
@@ -968,7 +1021,7 @@ export class MeshComponent extends Component {
  * Provides access to a native mesh component instance.
  * Only available when using physx enabled runtime, see "Project Settings > Runtime".
  */
-export class PhysXComponent extends Component {
+class PhysXComponent extends Component {
     /**
      * Set whether this rigid body is static
      *
@@ -1255,11 +1308,12 @@ export class PhysXComponent extends Component {
         _wl_physx_component_addCallback(this._id, otherComp._id || this._id);
     }
 };
+export { PhysXComponent };
 
 /**
  * Access to the physics scene
  */
-export class Physics {
+class Physics {
     constructor() {
         this._rayHit = _malloc(4*(3*4+3*4+4+2)+4);
         this._hit = new RayHit(this._rayHit);
@@ -1292,14 +1346,15 @@ export class Physics {
 
     _callCollisionCallback(a, index, type, b) {
         physics._callbacks[a][index](type,
-            new PhysXComponent(Object._typeIndexFor('physx'), b));
+            new PhysXComponent($Object._typeIndexFor('physx'), b));
     }
 };
+export { Physics };
 
 /**
  * Wrapper around a native mesh data
  */
-export class Mesh {
+class Mesh {
     /** Size of a vertex in float elements */
     static get VERTEX_FLOAT_SIZE() { return 3 + 3 + 2; }
     /** Size of a vertex in bytes */
@@ -1373,12 +1428,13 @@ export class Mesh {
         }
     }
 };
+export { Mesh };
 
 /**
  * Mesh index type
  * @enum {number}
  */
-export const MeshIndexType = {
+const MeshIndexType = {
     /** Single byte mesh index, range 0-255 */
     UnsignedByte: 1,
 
@@ -1388,11 +1444,12 @@ export const MeshIndexType = {
     /** Four byte mesh index, range 0-4294967295 */
     UnsignedInt: 4,
 };
+export { MeshIndexType };
 
 /**
  * Wrapper around a native material
  */
-export class Material {
+class Material {
     /**
      * Create a new Material. Used internally by {@link Material.wrap}.
      *
@@ -1492,11 +1549,12 @@ export class Material {
         });
     }
 };
+export { Material };
 
 /**
  * Wrapper around a native texture data
  */
-export class Texture {
+class Texture {
     constructor(param) {
         if(param instanceof HTMLImageElement || param instanceof HTMLVideoElement || param instanceof HTMLCanvasElement) {
             const index = _images.length;
@@ -1519,11 +1577,12 @@ export class Texture {
         _wl_renderer_updateTexture(this._id, this._imageIndex);
     }
 };
+export { Texture };
 
 /**
  * Access to the texures managed by Wonderland Engine
  */
-export const textures = {
+const textures = {
 
     /**
      * Load an image from URL as {@link Texture}
@@ -1552,7 +1611,7 @@ export const textures = {
 /**
  * Wrapper around a native animation
  */
-export class Animation {
+class Animation {
     constructor(index) {
         this._index = index;
     }
@@ -1579,7 +1638,7 @@ export class Animation {
      * from the previous skin to the new skin. The source skin will be retrieved from
      * the first track in the animation that targets a joint.
      *
-     * @param {Object[]|Skin} newTargets New targets per track. Expected to have
+     * @param {$Object[]|Skin} newTargets New targets per track. Expected to have
      *      {@link Animation#trackCount} elements or to be a {@link Skin}.
      * @returns {Animation} The retargeted clone of this animation.
      */
@@ -1602,6 +1661,7 @@ export class Animation {
         return new Animation(animId);
     }
 };
+export { Animation };
 
 /**
  * Scene graph object
@@ -1617,7 +1677,7 @@ export class Animation {
  * Objects can be created and added to a scene through
  * {@link Scene#addObject} on the {@link scene|main scene}.
  */
-export class Object {
+class $Object {
     /**
      * @param {number} o Object id to wrap
      */
@@ -1646,15 +1706,15 @@ export class Object {
     }
 
     /**
-     * @returns {Object} Parent of this object or {@link null} if parented to root
+     * @returns {$Object} Parent of this object or {@link null} if parented to root
      */
     get parent() {
         const p = _wl_object_parent(this.objectId);
-        return p == 0 ? null : new Object(p);
+        return p == 0 ? null : new $Object(p);
     }
 
     /**
-     * @returns {Object[]} Children of this object
+     * @returns {$Object[]} Children of this object
      *
      * @warning This method will currently return at most 512 child object.
      */
@@ -1664,14 +1724,14 @@ export class Object {
 
         const children = new Array(childrenCount);
         for(let i = 0; i < childrenCount; ++i) {
-            children[i] = new Object(_tempMemUint16[i]);
+            children[i] = new $Object(_tempMemUint16[i]);
         }
         return children;
     }
 
     /**
      * Reparent object to given object.
-     * @param {Object} New parent or {@link null} to parent to root
+     * @param {$Object} newParent New parent or {@link null} to parent to root
      * @note Reparenting is not trivial and might have a noticable performance impact
      */
     set parent(newParent) {
@@ -1692,7 +1752,7 @@ export class Object {
     /**
      * Reset local rotation, keep translation.
      * @note To reset both rotation and translation, prefer
-     *       {@link Object#resetTranslationRotation}.
+     *       {@link $Object#resetTranslationRotation}.
      */
     resetRotation() {
         _wl_object_reset_rotation(this.objectId);
@@ -1701,7 +1761,7 @@ export class Object {
     /**
      * Reset local translation, keep rotation.
      * @note To reset both rotation and translation, prefer
-     *       {@link Object#resetTranslationRotation}.
+     *       {@link $Object#resetTranslationRotation}.
      */
     resetTranslation() {
         _wl_object_reset_translation(this.objectId);
@@ -1743,9 +1803,9 @@ export class Object {
      *
      * @note If the object is translated the rotation will be around
      *     the parent. To rotate around the object origin, use
-     *     {@link Object#rotateAxisAngleDegObject}
+     *     {@link $Object#rotateAxisAngleDegObject}
      *
-     * @see {@link Object#rotateAxisAngleRad}
+     * @see {@link $Object#rotateAxisAngleRad}
      */
     rotateAxisAngleDeg(a, d) {
         _wl_object_rotate_axis_angle(this.objectId, a[0], a[1], a[2], d);
@@ -1758,9 +1818,9 @@ export class Object {
      *
      * @note If the object is translated the rotation will be around
      *     the parent. To rotate around the object origin, use
-     *     {@link Object#rotateAxisAngleDegObject}
+     *     {@link $Object#rotateAxisAngleDegObject}
      *
-     * @see {@link Object#rotateAxisAngleDeg}
+     * @see {@link $Object#rotateAxisAngleDeg}
      */
     rotateAxisAngleRad(a, d) {
         _wl_object_rotate_axis_angle_rad(this.objectId, a[0], a[1], a[2], d);
@@ -1774,7 +1834,7 @@ export class Object {
      * Equivalent to prepending a rotation quaternion to the object's
      * local transformation.
      *
-     * @see {@link Object#rotateAxisAngleRadObject}
+     * @see {@link $Object#rotateAxisAngleRadObject}
      */
     rotateAxisAngleDegObject(a, d) {
         _wl_object_rotate_axis_angle_obj(this.objectId, a[0], a[1], a[2], d);
@@ -1788,7 +1848,7 @@ export class Object {
      * @param {number[]} a Vector representing the rotation axis
      * @param {number} d Angle in degrees
      *
-     * @see {@link Object#rotateAxisAngleDegObject}
+     * @see {@link $Object#rotateAxisAngleDegObject}
      */
     rotateAxisAngleRadObject(a, d) {
         _wl_object_rotate_axis_angle_rad_obj(this.objectId, a[0], a[1], a[2], d);
@@ -1827,6 +1887,16 @@ export class Object {
     /** @returns {Float32Array} Local / object space transformation */
     get transformLocal() {
         return new Float32Array(HEAPF32.buffer, _wl_object_trans_local(this.objectId), 8);
+    }
+
+    /**
+     * Set world transform.
+     *
+     * @param {number} t Local space transformation
+     */
+    set transformLocal(t) {
+        this.transformLocal.set(t);
+        this.setDirty();
     }
 
     /**
@@ -1895,6 +1965,16 @@ export class Object {
      */
     get transformWorld() {
         return new Float32Array(HEAPF32.buffer, _wl_object_trans_world(this.objectId), 8);
+    }
+
+    /**
+     * Set world transform.
+     *
+     * @param {number} t Global / world space transformation
+     */
+    set transformWorld(t) {
+        this.transformWorld.set(t);
+        _wl_object_trans_world_to_local(this.objectId);
     }
 
     /** @returns {Float32Array} Local / object space scaling */
@@ -1971,15 +2051,27 @@ export class Object {
     }
 
     /**
-     * @summary Mark transformation dirty
+     * Mark transformation dirty
      *
-     * Causes an eventual recalculation of {@link Object#transformWorld}, either
-     * on next {@link Object#getTranslationWorld}, {@link Object#transformWorld} or
-     * {@link Object#scalingWorld} or the beginning of next frame, whichever
+     * Causes an eventual recalculation of {@link $Object#transformWorld}, either
+     * on next {@link $Object#getTranslationWorld}, {@link $Object#transformWorld} or
+     * {@link $Object#scalingWorld} or the beginning of next frame, whichever
      * happens first.
      */
     setDirty() {
         _wl_object_set_dirty(this.objectId);
+    }
+
+    /**
+     * Disable/enable all components of this object
+     *
+     * @param {boolean} b New state for the components
+     */
+    set active(b) {
+        const comps = this.getComponents();
+        for(let c of comps) {
+            c.active = b;
+        }
     }
 
     /**
@@ -2004,7 +2096,7 @@ export class Object {
         _free(mem);
 
         const componentId = _wl_get_component_id(this.objectId, componentType, index || 0);
-        return Object._wrapComponent(type, componentType, componentId);
+        return $Object._wrapComponent(type, componentType, componentId);
     }
 
     /**
@@ -2014,15 +2106,16 @@ export class Object {
      * @warning This method will currently return at most 341 components.
      */
     getComponents(type) {
-        const componentType = type ? Object._typeIndexFor(type) : null;
+        const componentType = type ? $Object._typeIndexFor(type) : null;
 
         const components = [];
-        const componentsCount = Math.min(85,
-            _wl_object_get_components(this.objectId, _tempMem, _tempMemSize >> 1));
+        const maxComps = Math.floor(_tempMemSize/3*2);
+        const componentsCount =
+            _wl_object_get_components(this.objectId, _tempMem, maxComps);
         const offset = 2*componentsCount;
-        _wl_object_get_component_types(this.objectId, _tempMem + offset, _tempMemSize - offset);
+        _wl_object_get_component_types(this.objectId, _tempMem + offset, maxComps);
 
-        const jsManagerIndex = Object._typeIndexFor('js');
+        const jsManagerIndex = $Object._typeIndexFor('js');
         for(let i = 0; i < componentsCount; ++i) {
             const t = _tempMemUint8[i + offset];
             const componentId = _tempMemUint16[i];
@@ -2034,12 +2127,12 @@ export class Object {
             }
 
             if(componentType === null) {
-                const managerName = Object._typeNameFor(componentType);
-                components.push(Object._wrapComponent(
-                    managerName, componentType, componentId));
+                const managerName = $Object._typeNameFor(t);
+                components.push($Object._wrapComponent(
+                    managerName, t, componentId));
             } else if(t == componentType) {
                 /* Optimized manager name retrieval, already have type */
-                components.push(Object._wrapComponent(
+                components.push($Object._wrapComponent(
                     type, componentType, componentId));
             }
         }
@@ -2058,7 +2151,7 @@ export class Object {
      * @returns {?(Component|CollisionComponent|TextComponent|ViewComponent|MeshComponent|InputComponent|LightComponent|AnimationComponent|PhysXComponent)} The component or {@link null} if the type was not found
      */
     addComponent(type, params) {
-        const componentType = Object._typeIndexFor(type);
+        const componentType = $Object._typeIndexFor(type);
         if(componentType < 0) {
             if(!(type in _WL._componentTypeIndices)) {
                 throw new TypeError("Unknown component type '" + type + "'");
@@ -2074,7 +2167,7 @@ export class Object {
                 }
             }
             _wljs_component_init(componentIndex);
-            _wljs_component_start(componentIndex);
+            /* start() is called through onActivate() */
 
             /* If active was not explicitly set by the user already, we set it to true */
             if(!params || !('active' in params)) {
@@ -2085,7 +2178,7 @@ export class Object {
         }
         const componentId = _wl_object_add_component(this.objectId, componentType);
 
-        const component = Object._wrapComponent(type, componentType, componentId);
+        const component = $Object._wrapComponent(type, componentType, componentId);
         if(params !== undefined) {
             for(key in params) {
                 component[key] = params[key];
@@ -2099,7 +2192,7 @@ export class Object {
      * Checks equality by comparing whether the wrapped native component ids
      * and component manager types are equal.
      *
-     * @param {?Object} otherObject Object to check equality with
+     * @param {?$Object} otherObject Object to check equality with
      * @returns {boolean} Whether this object equals the given object
      */
     equals(otherObject) {
@@ -2155,7 +2248,7 @@ export class Object {
 /**
  * Wrapper around a native skin data
  */
-export class Skin {
+class Skin {
     constructor(index) {
         this._index = index;
     }
@@ -2193,6 +2286,10 @@ export class Skin {
             3*this.jointCount);
     }
 };
+export { Skin };
+/* Unfortunately, the name "Object" is reserved, so internally we
+ * use $Object, while we expose WL.Object as previously. */
+export { $Object as Object };
 
 /**
  * @summary Ray hit
@@ -2203,7 +2300,7 @@ export class Skin {
  * @note this class wraps internal engine data and should only be created
  * internally.
  */
-export class RayHit {
+class RayHit {
     constructor(ptr) {
         assert((this._ptr & 3) == 0, MISALIGNED_MSG);
         this._ptr = ptr;
@@ -2239,15 +2336,15 @@ export class RayHit {
         return new Float32Array(HEAPF32.buffer, p, this.hitCount);
     }
 
-    /** @returns {Object[]} Hit objects */
+    /** @returns {$Object[]} Hit objects */
     get objects() {
         let p = this._ptr + (48*2 + 16);
         let objIds = new Uint16Array(HEAPU16.buffer, p, this.hitCount);
         return [
-            objIds[0] <= 0 ? null : new Object(objIds[0]),
-            objIds[1] <= 0 ? null : new Object(objIds[1]),
-            objIds[2] <= 0 ? null : new Object(objIds[2]),
-            objIds[3] <= 0 ? null : new Object(objIds[3]),
+            objIds[0] <= 0 ? null : new $Object(objIds[0]),
+            objIds[1] <= 0 ? null : new $Object(objIds[1]),
+            objIds[2] <= 0 ? null : new $Object(objIds[2]),
+            objIds[3] <= 0 ? null : new $Object(objIds[3]),
         ];
     }
 
@@ -2256,3 +2353,4 @@ export class RayHit {
         return Math.min(HEAPU32[(this._ptr/4) + 30], 4);
     }
 };
+export { RayHit };
