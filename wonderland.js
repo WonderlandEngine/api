@@ -541,6 +541,7 @@ class Scene {
      * Set the background clear color
      *
      * @param {number[]} color new clear color (RGBA)
+     * @since 0.8.5
      */
     set clearColor(color) {
         _wl_scene_set_clearColor(color[0], color[1], color[2], color[3]);
@@ -1068,6 +1069,7 @@ class PhysXComponent extends Component {
      * Set the shape for collision detection
      *
      * @param {Shape} s New shape
+     * @since 0.8.5
      */
     set shape(s) {
         _wl_physx_component_set_shape(this._id, s);
@@ -1084,6 +1086,7 @@ class PhysXComponent extends Component {
      * Set the shape extents for collision detection
      *
      * @param {number[]} e New extents for the shape
+     * @since 0.8.5
      */
     set extents(e) {
         this.extents.set(e);
@@ -1716,7 +1719,7 @@ class $Object {
     /**
      * @returns {$Object[]} Children of this object
      *
-     * @warning This method will currently return at most 512 child object.
+     * @warning This method will currently return at most 512 child objects.
      */
     get children() {
         const childrenCount = _wl_object_get_children(this.objectId, _tempMem, _tempMemSize >> 1);
@@ -1893,6 +1896,8 @@ class $Object {
      * Set world transform.
      *
      * @param {number} t Local space transformation
+     *
+     * @since 0.8.5
      */
     set transformLocal(t) {
         this.transformLocal.set(t);
@@ -1971,6 +1976,8 @@ class $Object {
      * Set world transform.
      *
      * @param {number} t Global / world space transformation
+     *
+     * @since 0.8.5
      */
     set transformWorld(t) {
         this.transformWorld.set(t);
@@ -2066,6 +2073,7 @@ class $Object {
      * Disable/enable all components of this object
      *
      * @param {boolean} b New state for the components
+     * @since 0.8.5
      */
     set active(b) {
         const comps = this.getComponents();
