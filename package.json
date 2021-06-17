@@ -12,6 +12,7 @@
   },
   "scripts": {
     "build": "esbuild index.js --minify --bundle --sourcemap --outfile=../wonderland.min.js --global-name=WL",
+    "build-dev": "esbuild index.js --bundle --sourcemap --outfile=../wonderland.min.js --global-name=WL",
     "watch": "esbuild index.js --minify --bundle --sourcemap --outfile=../wonderland.min.js --global-name=WL --watch"
   },
   "repository": {
