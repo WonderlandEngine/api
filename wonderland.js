@@ -408,7 +408,7 @@ let _tempMemUint8 = null;
 
 /** Initialize API resources, called by the engine automatically. */
 function init() {
-    scene = new WL.Scene();
+    scene = new Scene();
     /* For internal testing, we provide compatibility with DOM-less execution */
     canvas = (typeof document === 'undefined') ? null : document.getElementById('canvas');
 
@@ -439,6 +439,7 @@ export {
     registerComponent,
 
     canvas,
+    scene,
     xrSession,
     onXRSessionStart,
     onXRSessionEnd,
