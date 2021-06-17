@@ -1,4 +1,8 @@
 const MISALIGNED_MSG = "Misaligned pointer: please report a bug";
+/* Component class instances per type to avoid GC */
+let ComponentCache = {};
+/* Object class instances per type to avoid GC */
+let ObjectCache = [];
 
 /**
  * Wonderland Engine API
@@ -408,6 +412,10 @@ function init() {
     /* For internal testing, we provide compatibility with DOM-less execution */
     canvas = (typeof document === 'undefined') ? null : document.getElementById('canvas');
 
+    ComponentCache = {};
+    /* Object class instances per type to avoid GC */
+    ObjectCache = [];
+
     /* Target memory for JS API functions that return arrays */
     _tempMem = _malloc(_tempMemSize);
     updateTempMemory();
@@ -507,7 +515,7 @@ class Scene {
     addObject(parent) {
         const parentId = parent ? parent.objectId : 0;
         const objectId = _wl_scene_add_object(parentId);
-        return new $Object(objectId);
+        return $Object._wrapObject(objectId);
     }
 
     /**
@@ -532,7 +540,7 @@ class Scene {
         const parentId = parent ? parent.objectId : 0;
         const objectIdsPtr = _wl_scene_add_objects(parentId, count, componentCountHint || 0);
         const objects = Array.from(new Uint16Array(HEAPU16.buffer, objectIdsPtr, count),
-            id => new $Object(id));
+            id => $Object._wrapObject(id));
         _free(objectIdsPtr);
         return objects;
     }
@@ -589,7 +597,7 @@ class Component {
      */
     get object() {
         const objectId = _wl_component_get_object(this._manager, this._id);
-        return new $Object(objectId);
+        return $Object._wrapObject(objectId);
     }
 
     /**
@@ -1713,7 +1721,7 @@ class $Object {
      */
     get parent() {
         const p = _wl_object_parent(this.objectId);
-        return p == 0 ? null : new $Object(p);
+        return p == 0 ? null : $Object._wrapObject(p);
     }
 
     /**
@@ -1727,7 +1735,7 @@ class $Object {
 
         const children = new Array(childrenCount);
         for(let i = 0; i < childrenCount; ++i) {
-            children[i] = new $Object(_tempMemUint16[i]);
+            children[i] = $Object._wrapObject(_tempMemUint16[i]);
         }
         return children;
     }
@@ -2177,8 +2185,9 @@ class $Object {
             _wljs_component_init(componentIndex);
             /* start() is called through onActivate() */
 
-            /* If active was not explicitly set by the user already, we set it to true */
-            if(!params || !('active' in params)) {
+            /* If it was not explicitly requested by the user to leave the component inactive,
+             * we activate it as a final step. This invalidates componentIndex! */
+            if(!params || !('active' in params && !params.active)) {
                 component.active = true;
             }
 
@@ -2231,25 +2240,34 @@ class $Object {
     static _wrapComponent(type, componentType, componentId) {
         if(componentId < 0) return null;
 
+        const c = ComponentCache[componentType] || (ComponentCache[componentType] = []);
         if(type == 'collision') {
-            return new CollisionComponent(componentType, componentId);
+            return (c[componentId] || (c[componentId] = new CollisionComponent(componentType, componentId)));
         } else if(type == 'text') {
-            return new TextComponent(componentType, componentId);
+            return (c[componentId] || (c[componentId] = new TextComponent(componentType, componentId)));
         } else if(type == 'view') {
-            return new ViewComponent(componentType, componentId);
+            return (c[componentId] || (c[componentId] = new ViewComponent(componentType, componentId)));
         } else if(type == 'mesh') {
-            return new MeshComponent(componentType, componentId);
+            return (c[componentId] || (c[componentId] = new MeshComponent(componentType, componentId)));
         } else if(type == 'input') {
-            return new InputComponent(componentType, componentId);
+            return (c[componentId] || (c[componentId] = new InputComponent(componentType, componentId)));
         } else if(type == 'light') {
-            return new LightComponent(componentType, componentId);
+            return (c[componentId] || (c[componentId] = new LightComponent(componentType, componentId)));
         } else if(type == 'animation') {
-            return new AnimationComponent(componentType, componentId);
+            return (c[componentId] || (c[componentId] = new AnimationComponent(componentType, componentId)));
         } else if(type == 'physx') {
-            return new PhysXComponent(componentType, componentId);
+            return (c[componentId] || (c[componentId] = new PhysXComponent(componentType, componentId)));
         } else {
-            return new Component(componentType, componentId);
+            return (c[componentId] || (c[componentId] = new Component(componentType, componentId)));
         }
+    }
+
+    /*
+     * @param {number} objectId Object ID to wrap
+     * @returns {$Object} Wrapped object
+     */
+    static _wrapObject(objectId) {
+        return ObjectCache[objectId] || (ObjectCache[objectId] = new $Object(objectId));
     }
 };
 
@@ -2349,10 +2367,10 @@ class RayHit {
         let p = this._ptr + (48*2 + 16);
         let objIds = new Uint16Array(HEAPU16.buffer, p, this.hitCount);
         return [
-            objIds[0] <= 0 ? null : new $Object(objIds[0]),
-            objIds[1] <= 0 ? null : new $Object(objIds[1]),
-            objIds[2] <= 0 ? null : new $Object(objIds[2]),
-            objIds[3] <= 0 ? null : new $Object(objIds[3]),
+            objIds[0] <= 0 ? null : $Object._wrapObject(objIds[0]),
+            objIds[1] <= 0 ? null : $Object._wrapObject(objIds[1]),
+            objIds[2] <= 0 ? null : $Object._wrapObject(objIds[2]),
+            objIds[3] <= 0 ? null : $Object._wrapObject(objIds[3]),
         ];
     }
 
