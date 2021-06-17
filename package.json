@@ -1,12 +1,11 @@
 {
   "name": "@wonderlandengine/api",
-  "version": "0.8.5",
+  "version": "0.8.6",
   "description": "Wonderland Engine's JavaScript API.",
   "main": "wonderland.js",
   "files": [
     "*.js"
   ],
-  "dependencies": {},
   "devDependencies": {
     "esbuild": "^0.11.14"
   },
