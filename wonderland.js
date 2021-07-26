@@ -1436,7 +1436,7 @@ class Mesh {
     /** @returns {Float32Array} Vertex data */
     get vertexData() {
         let ptr = _wl_mesh_get_vertexData(this._index, _tempMem);
-        return new Float32Array(HEAPF32.buffer, ptr, HEAPU32[_tempMem/4]);
+        return new Float32Array(HEAPF32.buffer, ptr, WL.Mesh.VERTEX_FLOAT_SIZE*HEAPU32[_tempMem/4]);
     }
 
     /** @returns {Uint8Array|Uint16Array|Uint32Array} Vertex data */
