@@ -399,7 +399,7 @@ let physics = undefined;
 
 let _images = [];
 let _tempMem = null;
-let _tempMemSize = 1024;
+let _tempMemSize = 0;
 let _tempMemFloat = null;
 let _tempMemInt = null;
 let _tempMemUint32 = null;
@@ -417,8 +417,7 @@ function init() {
     ObjectCache = [];
 
     /* Target memory for JS API functions that return arrays */
-    _tempMem = _malloc(_tempMemSize);
-    updateTempMemory();
+    allocateTempMemory(1024);
 }
 
 /** Initialize API resources, called by the engine automatically, if
@@ -427,11 +426,26 @@ function _initPhysics() {
     physics = new Physics();
 }
 
+function allocateTempMemory(size) {
+    console.log("Allocating temp mem:", size);
+    _tempMemSize = size;
+    if(_tempMem) _free(_tempMem);
+    _tempMem = _malloc(_tempMemSize);
+    updateTempMemory();
+}
+
+function requireTempMem(size) {
+    if(_tempMemSize < size) {
+        /* Grow in 1kb increments */
+        allocateTempMemory(Math.ceil(size/1024)*1024);
+    }
+}
+
 function updateTempMemory() {
-    _tempMemFloat = new Float32Array(HEAP8.buffer,_tempMem,_tempMemSize >> 4);
-    _tempMemInt = new Int32Array(HEAP8.buffer,_tempMem,_tempMemSize >> 4);
-    _tempMemUint32 = new Uint32Array(HEAP8.buffer,_tempMem,_tempMemSize >> 4);
-    _tempMemUint16 = new Uint16Array(HEAP8.buffer,_tempMem,_tempMemSize >> 2);
+    _tempMemFloat = new Float32Array(HEAP8.buffer,_tempMem,_tempMemSize >> 2);
+    _tempMemInt = new Int32Array(HEAP8.buffer,_tempMem,_tempMemSize >> 2);
+    _tempMemUint32 = new Uint32Array(HEAP8.buffer,_tempMem,_tempMemSize >> 2);
+    _tempMemUint16 = new Uint16Array(HEAP8.buffer,_tempMem,_tempMemSize >> 1);
     _tempMemUint8 = new Uint8Array(HEAP8.buffer,_tempMem,_tempMemSize);
 }
 
@@ -539,10 +553,10 @@ class Scene {
      */
     addObjects(count, parent, componentCountHint) {
         const parentId = parent ? parent.objectId : 0;
-        const objectIdsPtr = _wl_scene_add_objects(parentId, count, componentCountHint || 0);
-        const objects = Array.from(new Uint16Array(HEAPU16.buffer, objectIdsPtr, count),
-            id => $Object._wrapObject(id));
-        _free(objectIdsPtr);
+        requireTempMem(count*2);
+        const actualCount = _wl_scene_add_objects(parentId, count, componentCountHint || 0, _tempMem, _tempMemSize >> 1);
+        const ids = _tempMemUint16.subarray(0, actualCount);
+        const objects = Array.from(ids, $Object._wrapObject);
         return objects;
     }
 
