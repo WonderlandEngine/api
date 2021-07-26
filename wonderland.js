@@ -2080,7 +2080,7 @@ class $Object {
      * @return {number[]} out
      */
     getForward(out) {
-        out[0] = 0; out[1] = 1; out[2] = -1;
+        out[0] = 0; out[1] = 0; out[2] = -1;
         this.transformVectorWorld(out);
         return out;
     }
