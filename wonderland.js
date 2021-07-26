@@ -2018,6 +2018,18 @@ class $Object {
     }
 
     /**
+     * Set scaling local
+     *
+     * @param {number} t Global / world space transformation
+     *
+     * @since 0.8.7
+     */
+    set scalingLocal(s) {
+        this.scalingLocal.set(s);
+        this.setDirty();
+    }
+
+    /**
      * @returns {Float32Array} Global / world space scaling
      *
      * May recompute transformations of the hierarchy of this object,
@@ -2028,16 +2040,48 @@ class $Object {
     }
 
     /**
+     * Set scaling world
+     *
+     * @param {number} t Global / world space transformation
+     *
+     * @since 0.8.7
+     */
+    set scalingWorld(s) {
+        this.scalingWorld.set(s);
+        _wl_object_scaling_world_to_local(this.objectId);
+    }
+
+    /**
+     * Set rotation local
+     *
+     * @param {number} r Local space rotation
+     *
+     * @since 0.8.7
+     */
+    set rotationLocal(r) {
+        _wl_object_set_rotation_local(this.objectId, r[0], r[1], r[2], r[3]);
+    }
+
+    /**
+     * Set rotation world
+     *
+     * @param {number} r Global / world space rotation
+     *
+     * @since 0.8.7
+     */
+    set rotationWorld(r) {
+        _wl_object_set_rotation_world(this.objectId, r[0], r[1], r[2], r[3]);
+    }
+
+    /**
      * Compute the object's forward facing world space vector
      * @param {number[]} out Destination array/vector, expected to have at
      *                       least 3 elements.
      * @return {number[]} out
      */
     getForward(out) {
-        _wl_object_get_forward(this.objectId, _tempMem);
-        out[0] = _tempMemFloat[0];
-        out[1] = _tempMemFloat[1];
-        out[2] = _tempMemFloat[2];
+        out[0] = 0; out[1] = 1; out[2] = -1;
+        this.transformVectorWorld(out);
         return out;
     }
 
@@ -2048,10 +2092,8 @@ class $Object {
      * @return {number[]} out
      */
     getUp(out) {
-        _wl_object_get_up(this.objectId, _tempMem);
-        out[0] = _tempMemFloat[0];
-        out[1] = _tempMemFloat[1];
-        out[2] = _tempMemFloat[2];
+        out[0] = 0; out[1] = 1; out[2] = 0;
+        this.transformVectorWorld(out);
         return out;
     }
 
@@ -2062,10 +2104,254 @@ class $Object {
      * @return {number[]} out
      */
     getRight(out) {
-        _wl_object_get_right(this.objectId, _tempMem);
+        out[0] = 1; out[1] = 0; out[2] = 0;
+        this.transformVectorWorld(out);
+        return out;
+    }
+
+    /**
+     * Transform a vector by this object's world transform
+     *
+     * @param {number[]} out Out point
+     * @param {number[]} v Point to transform, default `out`
+     * @return {number[]} out
+     *
+     * @since 0.8.7
+     */
+    transformVectorWorld(out, v) {
+        v = v || out;
+        _tempMemFloat[0] = v[0];
+        _tempMemFloat[1] = v[1];
+        _tempMemFloat[2] = v[2];
+        _wl_object_transformVectorWorld(this.objectId, _tempMem);
         out[0] = _tempMemFloat[0];
         out[1] = _tempMemFloat[1];
         out[2] = _tempMemFloat[2];
+
+        return out;
+    }
+
+    /**
+     * Transform a vector by this object's local transform
+     *
+     * @param {number[]} out Out point
+     * @param {number[]} v Point to transform, default `out`
+     * @return {number[]} out
+     *
+     * @since 0.8.7
+     */
+    transformVectorLocal(out, v) {
+        v = v || out;
+        _tempMemFloat[0] = v[0];
+        _tempMemFloat[1] = v[1];
+        _tempMemFloat[2] = v[2];
+        _wl_object_transformVectorLocal(this.objectId, _tempMem);
+        out[0] = _tempMemFloat[0];
+        out[1] = _tempMemFloat[1];
+        out[2] = _tempMemFloat[2];
+
+        return out;
+    }
+
+    /**
+     * Transform a point by this object's world transform
+     *
+     * @param {number[]} out Out point
+     * @param {number[]} v Point to transform, default `out`
+     * @return {number[]} out
+     *
+     * @since 0.8.7
+     */
+    transformPointWorld(out, p) {
+        p = p || out;
+        _tempMemFloat[0] = p[0];
+        _tempMemFloat[1] = p[1];
+        _tempMemFloat[2] = p[2];
+        _wl_object_transformPointWorld(this.objectId, _tempMem);
+        out[0] = _tempMemFloat[0];
+        out[1] = _tempMemFloat[1];
+        out[2] = _tempMemFloat[2];
+
+        return out;
+    }
+
+    /**
+     * Transform a point by this object's local transform
+     *
+     * @param {number[]} out Out point
+     * @param {number[]} v Point to transform, default `out`
+     * @return {number[]} out
+     *
+     * @since 0.8.7
+     */
+    transformPointLocal(out, p) {
+        p = p || out;
+        _tempMemFloat[0] = p[0];
+        _tempMemFloat[1] = p[1];
+        _tempMemFloat[2] = p[2];
+        _wl_object_transformPointLocal(this.objectId, _tempMem);
+        out[0] = _tempMemFloat[0];
+        out[1] = _tempMemFloat[1];
+        out[2] = _tempMemFloat[2];
+
+        return out;
+    }
+
+    /**
+     * Transform a vector by this object's inverse world transform
+     *
+     * @param {number[]} out Out point
+     * @param {number[]} v Point to transform, default `out`
+     * @return {number[]} out
+     *
+     * @since 0.8.7
+     */
+    transformVectorInverseWorld(out, v) {
+        v = v || out;
+        _tempMemFloat[0] = v[0];
+        _tempMemFloat[1] = v[1];
+        _tempMemFloat[2] = v[2];
+        _wl_object_transformVectorInverseWorld(this.objectId, _tempMem);
+        out[0] = _tempMemFloat[0];
+        out[1] = _tempMemFloat[1];
+        out[2] = _tempMemFloat[2];
+
+        return out;
+    }
+
+    /**
+     * Transform a point by this object's inverse local transform
+     *
+     * @param {number[]} out Out point
+     * @param {number[]} v Point to transform, default `out`
+     * @return {number[]} out
+     *
+     * @since 0.8.7
+     */
+    transformVectorInverseLocal(out, v) {
+        v = v || out;
+        _tempMemFloat[0] = v[0];
+        _tempMemFloat[1] = v[1];
+        _tempMemFloat[2] = v[2];
+        _wl_object_transformVectorInverseLocal(this.objectId, _tempMem);
+        out[0] = _tempMemFloat[0];
+        out[1] = _tempMemFloat[1];
+        out[2] = _tempMemFloat[2];
+
+        return out;
+    }
+
+    /**
+     * Transform a point by this object's inverse world transform
+     *
+     * @param {number[]} out Out point
+     * @param {number[]} v Point to transform, default `out`
+     * @return {number[]} out
+     *
+     * @since 0.8.7
+     */
+    transformPointInverseWorld(out, p) {
+        p = p || out;
+        _tempMemFloat[0] = p[0];
+        _tempMemFloat[1] = p[1];
+        _tempMemFloat[2] = p[2];
+        _wl_object_transformPointInverseWorld(this.objectId, _tempMem);
+        out[0] = _tempMemFloat[0];
+        out[1] = _tempMemFloat[1];
+        out[2] = _tempMemFloat[2];
+
+        return out;
+    }
+
+    /**
+     * Transform a point by this object's inverse local transform
+     *
+     * @param {number[]} out Out point
+     * @param {number[]} p Point to transform, default `out`
+     * @return {number[]} out
+     *
+     * @since 0.8.7
+     */
+    transformPointInverseLocal(out, p) {
+        p = p || out;
+        _tempMemFloat.set(p);
+        _wl_object_transformPointInverseLocal(this.objectId, _tempMem);
+        out[0] = _tempMemFloat[0];
+        out[1] = _tempMemFloat[1];
+        out[2] = _tempMemFloat[2];
+
+        return out;
+    }
+
+    /**
+     * Transform a object space dual quaternion into world space
+     *
+     * @param {number[]} out Out transformation
+     * @param {number[]} q Local space transformation, default `out`
+     * @return {number[]} out
+     *
+     * @since 0.8.7
+     */
+    toWorldSpaceTransform(out, q) {
+        q = q || out;
+        _tempMemFloat.set(q);
+        _wl_object_toWorldSpaceTransform(this.objectId, _tempMem);
+        out[0] = _tempMemFloat[0];
+        out[1] = _tempMemFloat[1];
+        out[2] = _tempMemFloat[2];
+        out[3] = _tempMemFloat[3];
+
+        out[4] = _tempMemFloat[4];
+        out[5] = _tempMemFloat[5];
+        out[6] = _tempMemFloat[6];
+        out[7] = _tempMemFloat[7];
+
+        return out;
+    }
+
+    /**
+     * Transform a world space dual quaternion into local space
+     *
+     * @param {number[]} out Out transformation
+     * @param {number[]} q World space transformation, default `out`
+     * @return {number[]} out
+     *
+     * @since 0.8.7
+     */
+    toLocalSpaceTransform(out, q) {
+        const p = this.parent;
+        if(!p) {
+            out[0] = q[0]; out[1] = q[1]; out[2] = q[2]; out[3] = q[3];
+            out[4] = q[4]; out[5] = q[5]; out[6] = q[6]; out[7] = q[7];
+        } else {
+            p.toObjectSpaceTransform(q);
+        }
+        return out;
+    }
+
+    /**
+     * Transform a world space dual quaternion into object space
+     *
+     * @param {number[]} out Out transformation
+     * @param {number[]} q World space transformation, default `out`
+     * @return {number[]} out
+     *
+     * @since 0.8.7
+     */
+    toObjectSpaceTransform(out, q) {
+        q = q || out;
+        _tempMemFloat.set(q);
+        _wl_object_toObjectSpaceTransform(this.objectId, _tempMem);
+        out[0] = _tempMemFloat[0];
+        out[1] = _tempMemFloat[1];
+        out[2] = _tempMemFloat[2];
+        out[3] = _tempMemFloat[3];
+
+        out[4] = _tempMemFloat[4];
+        out[5] = _tempMemFloat[5];
+        out[6] = _tempMemFloat[6];
+        out[7] = _tempMemFloat[7];
+
         return out;
     }
 
@@ -2400,3 +2686,45 @@ class RayHit {
     }
 };
 export { RayHit };
+
+class math {
+    /** (Experimental!) Cubic Hermite spline interpolation for vector3 and quaternions.
+     *
+     * With `f == 0`, `out` will be `b`, if `f == 1`, `out` will be c.
+     *
+     * Whether a quaternion or vector3 interpolation is intended is determined by
+     * legth of `a`.
+     *
+     * @param {number[]} out Array to write result to
+     * @param {number[]} a First tangent/handle
+     * @param {number[]} b First point or quaternion
+     * @param {number[]} c Second point or quaternion
+     * @param {number[]} d Second handle
+     * @param {number} f Interpolation factor in [0; 1]
+     * @returns {number[]} out
+     * @since 0.8.6
+     */
+    static cubicHermite(out, a, b, c, d, f) {
+        _tempMemFloat.subarray(0).set(a);
+        _tempMemFloat.subarray(4).set(b);
+        _tempMemFloat.subarray(8).set(c);
+        _tempMemFloat.subarray(12).set(d);
+
+        const isQuat = a.length == 4;
+
+        _wl_math_cubicHermite(
+            _tempMem + 4*16,
+            _tempMem + 4*0,
+            _tempMem + 4*4,
+            _tempMem + 4*8,
+            _tempMem + 4*12,
+            f, isQuat);
+        out[0] = _tempMemFloat[16];
+        out[1] = _tempMemFloat[17];
+        out[2] = _tempMemFloat[18];
+        if(isQuat) out[3] = _tempMemFloat[19];
+        return out;
+    }
+}
+
+export { math }
