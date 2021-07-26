@@ -1581,6 +1581,10 @@ export { Material };
  * Wrapper around a native texture data
  */
 class Texture {
+
+    /**
+     * @param {HTMLImageElement|HTMLVideoElement|HTMLCanvasElement|number} param HTML media element to create texture from or texture id to wrap.
+     */
     constructor(param) {
         if(param instanceof HTMLImageElement || param instanceof HTMLVideoElement || param instanceof HTMLCanvasElement) {
             const index = _images.length;
@@ -1598,6 +1602,7 @@ class Texture {
         return this._id >= 0;
     }
 
+    /** Update the texture to match the HTML element (e.g. reflect the current frame of a video) */
     update() {
         if(!this.valid) return;
         _wl_renderer_updateTexture(this._id, this._imageIndex);
