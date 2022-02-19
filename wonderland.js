@@ -2653,7 +2653,9 @@ class $Object {
      * @returns {$Object} Wrapped object
      */
     static _wrapObject(objectId) {
-        return ObjectCache[objectId] || (ObjectCache[objectId] = new $Object(objectId));
+        const o = ObjectCache[objectId] || (ObjectCache[objectId] = new $Object(objectId));
+        o.objectId = objectId;
+        return o;
     }
 };
 
