@@ -1,6 +1,6 @@
 {
   "name": "@wonderlandengine/api",
-  "version": "0.8.9",
+  "version": "0.8.10",
   "description": "Wonderland Engine's JavaScript API.",
   "main": "wonderland.js",
   "files": [
