@@ -3,6 +3,8 @@ const MISALIGNED_MSG = "Misaligned pointer: please report a bug";
 let ComponentCache = {};
 /* Object class instances per type to avoid GC */
 let ObjectCache = [];
+/* Component properties to exclude when cloning, see addComponent() */
+const EXCLUDED_COMPONENT_PROPERTIES = ['_id', '_manager', 'type', '_type', 'active'];
 
 /**
  * Wonderland Engine API
@@ -2497,50 +2499,64 @@ class $Object {
     /**
      * Add component of given type to the object
      *
+     * You can use this function to clone components, see the example below.
+     *
+     * @example
+     *  // Clone existing component
+     *  let original = this.object.getComponent('mesh');
+     *  otherObject.addComponent('mesh', original);
+     *  // Create component from parameters
+     *  this.object.addComponent('mesh', {
+     *      mesh: someMesh,
+     *      material: someMaterial,
+     *  });
+     *
      * @param {string} type Typename to create a component of. Can be native or
      *      custom JavaScript component type.
-     * @param {object} [params] Parameters to initialize properties of the new component
+     * @param {object} [params] Parameters to initialize properties of the new component,
+     *      can be another component to copy properties from.
      *
-     * @note As this function is non-trivial, avoid using it in `update()` repeatidly, but rather
-     *  store its result in `init()` or `start()`
      * @returns {?(Component|CollisionComponent|TextComponent|ViewComponent|MeshComponent|InputComponent|LightComponent|AnimationComponent|PhysXComponent)} The component or {@link null} if the type was not found
      */
     addComponent(type, params) {
         const componentType = $Object._typeIndexFor(type);
+        let component = null;
+        let componentIndex = null;
         if(componentType < 0) {
+            /* JavaScript component */
             if(!(type in _WL._componentTypeIndices)) {
                 throw new TypeError("Unknown component type '" + type + "'");
             }
             const componentId = _wl_object_add_js_component(this.objectId, _WL._componentTypeIndices[type]);
-            const componentIndex = _wl_get_js_component_index_for_id(componentId);
-            let component = _WL._components[componentIndex];
-            if(params !== undefined) {
-                for(key in params) {
-                    /* active will be set later */
-                    if(key == 'active') continue;
-                    component[key] = params[key];
-                }
-            }
-            _wljs_component_init(componentIndex);
-            /* start() is called through onActivate() */
-
-            /* If it was not explicitly requested by the user to leave the component inactive,
-             * we activate it as a final step. This invalidates componentIndex! */
-            if(!params || !('active' in params && !params.active)) {
-                component.active = true;
-            }
-
-            return component;
+            componentIndex = _wl_get_js_component_index_for_id(componentId);
+            component = _WL._components[componentIndex];
+        } else {
+            /* native component */
+            const componentId = _wl_object_add_component(this.objectId, componentType);
+            component = $Object._wrapComponent(type, componentType, componentId);
         }
-        const componentId = _wl_object_add_component(this.objectId, componentType);
 
-        const component = $Object._wrapComponent(type, componentType, componentId);
         if(params !== undefined) {
-            for(key in params) {
+            for(const key in params) {
+                /* active will be set later, other properties should be skipped if
+                 * passing a component for cloning. */
+                if(!params.hasOwnProperty(key) || EXCLUDED_COMPONENT_PROPERTIES.includes(key)) continue;
                 component[key] = params[key];
             }
         }
-        component.active = true;
+
+        /* Explicitly initialize native components */
+        if(componentType < 0) {
+            _wljs_component_init(componentIndex);
+            /* start() is called through onActivate() */
+        }
+
+        /* If it was not explicitly requested by the user to leave the component inactive,
+         * we activate it as a final step. This invalidates componentIndex! */
+        if(!params || !('active' in params && !params.active)) {
+            component.active = true;
+        }
+
         return component;
     }
 
