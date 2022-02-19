@@ -283,6 +283,12 @@ const CollisionEventType = {
 
     /** Touch/contact lost, uncollide */
     TouchLost: 1,
+
+    /** Touch/contact with trigger detected */
+    TriggerTouch: 2,
+
+    /** Touch/contact with trigger lost */
+    TriggerTouchLost: 3,
 };
 export { CollisionEventType };
 
