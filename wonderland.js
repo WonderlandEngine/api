@@ -2118,6 +2118,24 @@ class $Object {
     }
 
     /**
+     * @returns {number[]} Local space rotation
+     *
+     * @since 0.8.7
+     */
+    get rotationLocal() {
+        return this.transformLocal.subarray(0, 4);
+    }
+
+    /**
+     * @returns {number[]} Global / world space rotation
+     *
+     * @since 0.8.7
+     */
+    get rotationWorld() {
+        return this.transformWorld.subarray(0, 4);
+    }
+
+    /**
      * Set rotation local
      *
      * @param {number} r Local space rotation
