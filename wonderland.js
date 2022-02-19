@@ -583,8 +583,8 @@ class Scene {
     /**
      * Load a scene file (.bin)
      *
-     * Will replace the currently active scene with the one loaded from
-     * given file. It is assumed that JavaScript components required by
+     * Will replace the currently active scene with the one loaded
+     * from given file. It is assumed that JavaScript components required by
      * the new scene were registered in advance.
      *
      * @param filename Path to the .bin file
@@ -1238,13 +1238,18 @@ class PhysXComponent extends Component {
      *
      * [PhysX Manual - "Velocity"](https://gameworksdocs.nvidia.com/PhysX/4.1/documentation/physxguide/Manual/RigidBodyDynamics.html#velocity)
      *
+     * Has no effect, if the component is not active.
+     *
      * @param {number[]} v New linear velocity
      */
     set linearVelocity(v) {
         _wl_physx_component_set_linearVelocity(this._id, v[0], v[1], v[2]);
     }
 
-    /** @returns {Float32Array} Linear velocity */
+    /**
+     * @returns {Float32Array} Linear velocity or `[0, 0, 0]`
+     *      if the component is not active.
+     */
     get linearVelocity() {
         _wl_physx_component_get_linearVelocity(this._id, _tempMem);
         return new Float32Array(HEAPF32.buffer, _tempMem, 3);
@@ -1255,13 +1260,18 @@ class PhysXComponent extends Component {
      *
      * [PhysX Manual - "Velocity"](https://gameworksdocs.nvidia.com/PhysX/4.1/documentation/physxguide/Manual/RigidBodyDynamics.html#velocity)
      *
+     * Has no effect, if the component is not active.
+     *
      * @param {number[]} v New angular velocity
      */
     set angularVelocity(v) {
         _wl_physx_component_set_angularVelocity(this._id, v[0], v[1], v[2]);
     }
 
-    /** @returns {Float32Array} Linear velocity */
+    /**
+     * @returns {Float32Array} Angular velocity or `[0, 0, 0]`
+     *      if the component is not active.
+     */
     get angularVelocity() {
         _wl_physx_component_get_angularVelocity(this._id, _tempMem);
         return new Float32Array(HEAPF32.buffer, _tempMem, 3);
@@ -1288,6 +1298,8 @@ class PhysXComponent extends Component {
      *
      * [PhysX Manual - "Mass Properties"](https://gameworksdocs.nvidia.com/PhysX/4.1/documentation/physxguide/Manual/RigidBodyDynamics.html#mass-properties)
      *
+     * Has no effect, if the component is not active.
+     *
      * @param {number[]} v New mass space interatia tensor
      */
     set massSpaceInteriaTensor(v) {
@@ -1298,6 +1310,8 @@ class PhysXComponent extends Component {
      * Apply a force
      *
      * [PhysX Manual - "Applying Forces and Torques"](https://gameworksdocs.nvidia.com/PhysX/4.1/documentation/physxguide/Manual/RigidBodyDynamics.html#applying-forces-and-torques)
+     *
+     * Has no effect, if the component is not active.
      *
      * @param {number[]} f Force vector
      * @param {number[]} m Force mode, see {@link ForceMode}, default `Force`.
@@ -1318,6 +1332,8 @@ class PhysXComponent extends Component {
      * Apply torque
      *
      * [PhysX Manual - "Applying Forces and Torques"](https://gameworksdocs.nvidia.com/PhysX/4.1/documentation/physxguide/Manual/RigidBodyDynamics.html#applying-forces-and-torques)
+     *
+     * Has no effect, if the component is not active.
      *
      * @param {number[]} f Force vector
      * @param {number[]} m Force mode, see {@link ForceMode}, default `Force`.
@@ -2016,7 +2032,7 @@ class $Object {
      * Compute local / object space translation from transformation
      *
      * May recompute transformations of the hierarchy of this object,
-     * if they were been by JavaScript components this frame.
+     * if they were changed by JavaScript components this frame.
      *
      * @param {number[]} out Destination array/vector, expected to have at
      *                       least 3 elements.
@@ -2058,7 +2074,7 @@ class $Object {
 
     /**
      * May recompute transformations of the hierarchy of this object,
-     * if they were been by JavaScript components this frame.
+     * if they were changed by JavaScript components this frame.
      *
      * @returns {Float32Array} Global / world space transformation
      */
@@ -2086,7 +2102,7 @@ class $Object {
     /**
      * Set scaling local
      *
-     * @param {number} t Global / world space transformation
+     * @param {number[]} t Global / world space transformation
      *
      * @since 0.8.7
      */
@@ -2099,7 +2115,7 @@ class $Object {
      * @returns {Float32Array} Global / world space scaling
      *
      * May recompute transformations of the hierarchy of this object,
-     * if they were been by JavaScript components this frame.
+     * if they were changed by JavaScript components this frame.
      */
     get scalingWorld() {
         return new Float32Array(HEAPF32.buffer, _wl_object_scaling_world(this.objectId), 3);
@@ -2108,7 +2124,7 @@ class $Object {
     /**
      * Set scaling world
      *
-     * @param {number} t Global / world space transformation
+     * @param {number[]} t Global / world space transformation
      *
      * @since 0.8.7
      */
@@ -2509,6 +2525,8 @@ class $Object {
      * @param {?string} type Type name, pass a falsey value (`undefined` or {@link null}) to retrieve all
      * @returns {Component[]} All components of given type attached to this object
      *
+     * @note As this function is non-trivial, avoid using it in `update()` repeatidly,
+     *      but rather store its result in `init()` or `start()`
      * @warning This method will currently return at most 341 components.
      */
     getComponents(type) {
