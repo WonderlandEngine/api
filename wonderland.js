@@ -1612,6 +1612,8 @@ class Material {
 };
 export { Material };
 
+let tempCanvas = null;
+
 /**
  * Wrapper around a native texture data
  */
@@ -1640,7 +1642,36 @@ class Texture {
     /** Update the texture to match the HTML element (e.g. reflect the current frame of a video) */
     update() {
         if(!this.valid) return;
-        _wl_renderer_updateTexture(this._id, this._imageIndex);
+        _wl_renderer_updateImage(this._id, this._imageIndex);
+    }
+
+    /**
+     * Update a subrange on the texture to match the HTML element (e.g. reflect the current frame of a video)
+     *
+     * @param {number} x x offset
+     * @param {number} y y offset
+     * @param {number} w width
+     * @param {number} h height
+     */
+    updateSubImage(x, y, w, h) {
+        if(!this.valid) return;
+
+        /* Lazy initialize temp canvas */
+        if(!tempCanvas) tempCanvas = document.createElement('canvas');
+
+        const img = _images[this._imageIndex];
+
+        tempCanvas.width = w;
+        tempCanvas.height = h;
+        tempCanvas.getContext('2d').drawImage(img, x, y, w, h, 0, 0, w, h);
+        _images[this._imageIndex] = tempCanvas;
+
+        try {
+            _wl_renderer_updateImage(this._id,
+                this._imageIndex, x, (img.videoHeight || img.height) - y - h);
+        } finally {
+            _images[this._imageIndex] = img;
+        }
     }
 };
 export { Texture };
