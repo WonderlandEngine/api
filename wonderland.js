@@ -336,12 +336,12 @@ let xrSession = null;
  */
 /**
  * List of functions to call if a WebXR session is started
- * @type {xrSessionStartCallback}
+ * @type {xrSessionStartCallback[]}
  */
 const onXRSessionStart = [ (s) => { xrSession = s; } ];
 /**
  * List of functions to call if a WebXR session ends
- * @type {xrSessionEndCallback}
+ * @type {xrSessionEndCallback[]}
  */
 const onXRSessionEnd = [ () => { xrSession = null; } ];
 
@@ -352,7 +352,7 @@ const onXRSessionEnd = [ () => { xrSession = null; } ];
  */
 /**
  * List of functions to call once VR/AR support has been determined.
- * @type {xrSupportCallback}
+ * @type {xrSupportCallback[]}
  *
  * Will be called once for AR and once for VR independent of support for each.
  * This allows you to notify the user of both cases: support and missing support of XR.
@@ -370,7 +370,7 @@ let onXRSupported = [
  */
 /**
  * List of functions to call once the main scene has been loaded
- * @type {sceneLoadedCallback}
+ * @type {sceneLoadedCallback[]}
  */
 let onSceneLoaded = [];
 
