@@ -404,6 +404,7 @@ let scene = undefined;
 let physics = undefined;
 
 let _images = [];
+let _sceneLoadedCallback = [];
 let _tempMem = null;
 let _tempMemSize = 0;
 let _tempMemFloat = null;
@@ -469,6 +470,7 @@ export {
     vrSupported,
     physics,
     _images,
+    _sceneLoadedCallback,
     textures,
 
     init,
@@ -591,6 +593,31 @@ class Scene {
         stringToUTF8(filename, ptr, strLen);
         _wl_load_scene(ptr);
         _free(ptr);
+    }
+
+    /**
+     * Load a external 3D file (.gltf, .glb)
+     *
+     * Loads and parses the gltf file and its images and appends the result
+     * to scene.
+     *
+     * @param filename Path to the .gltf or .glb file
+     * @returns {Promise<$Object>} Root of the loaded scene
+     */
+    append(filename) {
+        const strLen = lengthBytesUTF8(filename) + 1;
+        const ptr = _malloc(strLen);
+        stringToUTF8(filename, ptr, strLen);
+        const callback = _sceneLoadedCallback.length;
+        const promise = new Promise((resolve, reject) => {
+            _sceneLoadedCallback[callback] = {
+                success: (id) => resolve($Object._wrapObject(id)),
+                error: () => reject()
+            };
+        });
+        _wl_append_scene(ptr, callback);
+        _free(ptr);
+        return promise;
     }
 };
 export { Scene };
