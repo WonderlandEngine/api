@@ -34,6 +34,8 @@ const EXCLUDED_COMPONENT_PROPERTIES = ['_id', '_manager', 'type', '_type', 'acti
  *  update: function(dt) {},
  *  onActivate: function() {},
  *  onDeactivate: function() {},
+ *  // Since 0.9.0:
+ *  onDestroy: function() {},
  * });
  */
 function registerComponent(name, params, object) {
@@ -78,7 +80,7 @@ const Type = {
      *
      * Appears in the editor as dropdown with given values.
      * If parameters is enum, a `values` parameter needs to be
-     * specified for the parameter aswell.
+     * specified for the parameter as well.
      *
      * @example
      *     camera: {type: Type.Enum, values: ['auto', 'back', 'front'], default: 'auto'},
@@ -156,9 +158,9 @@ const Collider = {
      * **Aligned Bounding Box Collider**:
      *
      * Box that matches the object's rotation and translation correctly. This
-     * is the least efficient collider and should only chosen over
+     * is the least efficient collider and should only be chosen over
      * {@link Collider.Sphere} and {@link Collider.AxisAlignedBox} if really
-     * neccessary.
+     * necessary.
      */
     Box: 2
 };
@@ -192,9 +194,25 @@ const Justification = {
     Middle: 2,
 
     /** Text top is at object origin */
-    Top: 3
+    Top: 3,
+
+    /** Text bottom is at object origin */
+    Bottom: 4
 };
 export { Justification };
+
+/**
+ * Effect type enum for {@link TextComponent}
+ * @enum {number}
+ */
+ const TextEffect = {
+    /** Text is rendered normally */
+    None: 0,
+
+    /** Text is rendered with an outline */
+    Outline: 1
+};
+export { TextEffect };
 
 /**
  * Input type enum for {@link InputComponent}
@@ -232,8 +250,11 @@ const LightType = {
     /** Point light */
     Point: 1,
 
+    /** Spot light */
+    Spot: 2,
+
     /** Sun light / Directional light */
-    Sun: 2,
+    Sun: 3,
 };
 export { LightType };
 
@@ -396,12 +417,12 @@ let arSupported = undefined;
 let vrSupported = undefined;
 /**
  * Current main scene
- * @type{Scene}
+ * @type {Scene}
  */
 let scene = undefined;
 /**
  * Physics, only available when physx is enabled in the runtime
- * @type{Physics}
+ * @type {Physics}
  */
 let physics = undefined;
 
@@ -444,10 +465,9 @@ function allocateTempMemory(size) {
 }
 
 function requireTempMem(size) {
-    if(_tempMemSize < size) {
-        /* Grow in 1kb increments */
-        allocateTempMemory(Math.ceil(size/1024)*1024);
-    }
+    if(_tempMemSize >= size) return;
+    /* Grow in 1kb increments */
+    allocateTempMemory(Math.ceil(size/1024)*1024);
 }
 
 function updateTempMemory() {
@@ -547,7 +567,7 @@ class Scene {
      * Batch-add objects to the scene
      *
      * Will provide better performance for adding multiple objects (e.g. > 16)
-     * than calling {@link Scene#addObject} repeatidly in a loop.
+     * than calling {@link Scene#addObject} repeatedly in a loop.
      *
      * By providing upfront information of how many objects will be required,
      * the engine is able to batch-allocate the required memory rather than
@@ -568,6 +588,35 @@ class Scene {
         const ids = _tempMemUint16.subarray(0, actualCount);
         const objects = Array.from(ids, $Object._wrapObject);
         return objects;
+    }
+
+    /**
+     * Pre-allocate memory for a given amount of objects and components
+     *
+     * Will provide better performance for adding objects later with {@link Scene#addObject}
+     * and {@link Scene#addObjects}
+     *
+     * By providing upfront information of how many objects will be required,
+     * the engine is able to batch-allocate the required memory rather than
+     * convervatively grow the memory in small steps.
+     *
+     * **Experimental:** This API might change in upcoming versions.
+     *
+     * @param {number} objectCount Number of objects to add
+     * @param {Object.<string, number>} componentCountPerType Amount of components to
+     *      allocate for {@link $Object#addComponent}, e.g. `{mesh: 100, collision: 200, "my-comp": 100}`
+     * @since 0.8.10
+     */
+    reserveObjects(objectCount, componentCountPerType) {
+        componentCountPerType = componentCountPerType || {};
+        const jsManagerIndex = $Object._typeIndexFor('js');
+        let countsPerTypeIndex = _tempMemInt.subarray();
+        countsPerTypeIndex.fill(0);
+        for(const e of Object.entries(componentCountPerType)) {
+            const typeIndex = $Object._typeIndexFor(e[0]);
+            countsPerTypeIndex[(typeIndex < 0) ? jsManagerIndex : typeIndex] += e[1];
+        }
+        _wl_scene_reserve_objects(objectCount, _tempMem);
     }
 
     /**
@@ -670,6 +719,23 @@ class Component {
      */
     get active() {
         return _wl_component_isActive(this._manager, this._id) != 0;
+    }
+
+    /**
+     * Remove this component from its objects and destroy it.
+     *
+     * It is best practice to set the component to `null` after,
+     * to ensure it does not get used later.
+     *
+     * @example
+     *    c.destroy();
+     *    c = null;
+     * @since 0.9.0
+     */
+    destroy() {
+        _wl_component_remove(this._manager, this._id);
+        this._manager = undefined;
+        this._id = undefined;
     }
 
     /**
@@ -796,7 +862,7 @@ class TextComponent extends Component {
      * @returns {Alignment} Text component alignment
      */
     get alignment() {
-        return _wl_text_component_get_alignment(this._id) & 7;
+        return _wl_text_component_get_horizontal_alignment(this._id);
     }
 
     /**
@@ -805,14 +871,14 @@ class TextComponent extends Component {
      * @param {Alignment} alignment Alignment for the text component.
      */
     set alignment(alignment) {
-        _wl_text_component_set_alignment(this._id, this.justification << 3 | alignment);
+        _wl_text_component_set_horizontal_alignment(this._id, alignment);
     }
 
     /**
      * @returns {Justification} Text component justification
      */
     get justification() {
-        return _wl_text_component_get_alignment(this._id) >> 3;
+        return _wl_text_component_get_vertical_alignment(this._id);
     }
 
     /**
@@ -821,7 +887,55 @@ class TextComponent extends Component {
      * @param {Justification} justification Justification for the text component.
      */
     set justification(justification) {
-        _wl_text_component_set_alignment(this._id, justification << 3 | this.alignment);
+        _wl_text_component_set_vertical_alignment(this._id, justification);
+    }
+
+    /**
+     * @returns {number} Text component character spacing
+     */
+     get characterSpacing() {
+        return _wl_text_component_get_character_spacing(this._id);
+    }
+
+    /**
+     * Set text component character spacing
+     *
+     * @param {number} spacing Character spacing for the text component
+     */
+    set characterSpacing(spacing) {
+        _wl_text_component_set_character_spacing(this._id, spacing);
+    }
+
+    /**
+     * @returns {number} Text component line spacing
+     */
+     get lineSpacing() {
+        return _wl_text_component_get_line_spacing(this._id);
+    }
+
+    /**
+     * Set text component line spacing
+     *
+     * @param {number} spacing Line spacing for the text component
+     */
+    set lineSpacing(spacing) {
+        _wl_text_component_set_line_spacing(this._id, spacing);
+    }
+
+    /**
+     * @returns {TextEffect} Text component effect
+     */
+     get effect() {
+        return _wl_text_component_get_effect(this._id);
+    }
+
+    /**
+     * Set text component effect
+     *
+     * @param {TextEffect} effect Effect for the text component
+     */
+    set effect(effect) {
+        _wl_text_component_set_effect(this._id, effect);
     }
 
     /**
@@ -850,7 +964,7 @@ class TextComponent extends Component {
      * @param {Material} material New material
      */
     set material(material) {
-        _wl_text_component_set_material(this._id, material._index);
+        _wl_text_component_set_material(this._id, material ? material._index : 0);
     }
 
     /**
@@ -876,6 +990,44 @@ class ViewComponent extends Component {
     get projectionMatrix() {
         return new Float32Array(HEAPF32.buffer,
             _wl_view_component_get_projection_matrix(this._id), 16);
+    }
+
+    /**
+     * @returns {number} ViewComponent near clipping plane value
+     */
+    get near() {
+        return _wl_view_component_get_near(this._id);
+    }
+
+    /**
+     * Set near clipping plane distance for the view
+     *
+     * If an XR session is active, the change will apply in the
+     * following frame, otherwise the change is immediate.
+     *
+     * @param {number} near Near depth value
+     */
+    set near(near) {
+        _wl_view_component_set_near(this._id, near);
+    }
+
+    /**
+     * @returns {number} ViewComponent far clipping plane value
+     */
+    get far() {
+        return _wl_view_component_get_far(this._id);
+    }
+
+    /**
+     * Set far clipping plane distance for the view
+     *
+     * If an XR session is active, the change will apply in the
+     * following frame, otherwise the change is immediate.
+     *
+     * @param {number} far Near depth value
+     */
+    set far(far) {
+        _wl_view_component_set_far(this._id, far);
     }
 };
 export { ViewComponent };
@@ -1001,6 +1153,27 @@ class AnimationComponent extends Component {
         return _wl_animation_component_get_playCount(this._id);
     }
 
+    /**
+     * Set speed. Set to negative values to run the animation backwards.
+     *
+     * Setting speed has an immediate effect for the current frame's update
+     * and will continue with the speed from the current point in the animation.
+     *
+     * @param {number} speed New speed at which to play the animation.
+     * @since 0.8.10
+     */
+    set speed(speed) {
+        _wl_animation_component_set_speed(this._id, speed);
+    }
+
+    /**
+     * @returns {number} Speed factor at which the animation is played
+     * @since 0.8.10
+     */
+    get speed() {
+        return _wl_animation_component_get_speed(this._id);
+    }
+
     /** Play animation */
     play() {
         _wl_animation_component_play(this._id);
@@ -1036,7 +1209,7 @@ class MeshComponent extends Component {
      * @param {?Material} material Material to render the mesh with
      */
     set material(material) {
-        _wl_mesh_component_set_material(this._id, material._index);
+        _wl_mesh_component_set_material(this._id, material ? material._index : 0);
     }
 
     /** @returns {?Material} Material used to render the mesh */
@@ -1117,7 +1290,7 @@ class PhysXComponent extends Component {
     }
 
     /**
-     * Whether this rigid body is kinematic
+     * @returns {boolean} Whether this rigid body is kinematic
      */
     get kinematic() {
         return !!_wl_physx_component_get_kinematic(this._id);
@@ -1135,9 +1308,38 @@ class PhysXComponent extends Component {
 
     /**
      * The shape for collision detection
+     * @returns {Shape} Currently set shape
      */
     get shape() {
         return _wl_physx_component_get_shape(this._id);
+    }
+
+    /**
+     * Set additional data for the shape.
+     *
+     * Retrieved only from {@link PhysXComponent#shapeData}.
+     * @since 0.8.10
+     */
+    set shapeData(d) {
+        if(d == null || !([Shape.TriangleMesh, Shape.ConvexMesh].includes(this.shape)))
+            return;
+        _wl_physx_component_set_shape_data(this._id, d.index);
+    }
+
+    /**
+     * Additional data for the shape.
+     *
+     * `null` for {@link Shape} values: `None`, `Sphere`, `Capsule`, `Box`, `Plane`.
+     * `{index: n}` for `TriangleMesh` and `ConvexHull`.
+     *
+     * This data is currently only for passing onto or creating other
+     * {@link PhysXComponent}s.
+     * @since 0.8.10
+     */
+    get shapeData() {
+        if(!([Shape.TriangleMesh, Shape.ConvexMesh].includes(this.shape)))
+            return null;
+        return { index: _wl_physx_component_get_shape_data(this._id) };
     }
 
     /**
@@ -1189,18 +1391,20 @@ class PhysXComponent extends Component {
     }
 
     /**
-     * Get restitution
+     * Get bounciness
+     * @since 0.9.0
      */
-    get restitution() {
-        return _wl_physx_component_get_restitution(this._id);
+    get bounciness() {
+        return _wl_physx_component_get_bounciness(this._id);
     }
 
     /**
-     * Set restitution
-     * @param {number} v New restitution
+     * Set bounciness
+     * @param {number} v New bounciness
+     * @since 0.9.0
      */
-    set restitution(v) {
-        _wl_physx_component_set_restitution(this._id, v);
+    set bounciness(v) {
+        _wl_physx_component_set_bounciness(this._id, v);
     }
 
     /**
@@ -1367,7 +1571,7 @@ class PhysXComponent extends Component {
      *  }.bind(this));
      */
     onCollision(callback) {
-        this.onCollisionWith(this, callback);
+        return this.onCollisionWith(this, callback);
     }
 
     /**
@@ -1378,13 +1582,35 @@ class PhysXComponent extends Component {
      *        {@link PhysXComponent#onCollision}.
      * @param {collisionCallback} callback Function to call when this rigid body
      *        (un)collides with `otherComp`.
+     * @returns {number} Id of the new callback for use with {@link PhysXComponent#removeCollisionCallback}.
      */
     onCollisionWith(otherComp, callback) {
         physics._callbacks[this._id] = physics._callbacks[this._id] || [];
         physics._callbacks[this._id].push(callback);
-        _wl_physx_component_addCallback(this._id, otherComp._id || this._id);
+        return _wl_physx_component_addCallback(this._id, otherComp._id || this._id);
+    }
+
+    /**
+     * Remove a collision callback added with {@link PhysXComponent#onCollision} or {@link PhysXComponent#onCollisionWith}.
+     * @param {number} callbackId Callback id as returned by {@link PhysXComponent#onCollision} or {@link PhysXComponent#onCollisionWith}.
+     * @throws When the callback does not belong to the component
+     * @throws When the callback does not exist
+     */
+    removeCollisionCallback(callbackId) {
+        const r = _wl_physx_component_removeCallback(this._id, callbackId);
+        /* r is the amount of object to remove from the end of the
+         * callbacks array for this object */
+        if(r) physics._callbacks[this._id].splice(-r);
     }
 };
+
+for(const prop of [
+    'static', 'extents', 'staticFriction', 'dynamicFriction', 'bounciness',
+    'linearDamping', 'angularDamping', 'shape', 'shapeData', 'kinematic',
+    'linearVelocity', 'angularVelocity', 'mass'])
+{
+    Object.defineProperty(PhysXComponent.prototype, prop, {enumerable: true});
+}
 export { PhysXComponent };
 
 /**
@@ -1407,7 +1633,7 @@ class Physics {
      * @param {number[]} d Ray direction
      * @param {number} group Collision group to filter by: only objects that are
      *        part of given group are considered for raycast.
-     * @param {number} maxDistance Maxium ray distance, default `100.0`.
+     * @param {number} maxDistance Maximum ray distance, default `100.0`.
      *
      * @note The returned {@link RayHit} object is owned by the Physics instance and
      *       will be reused with the next {@link Physics#rayCast} call.
@@ -1432,80 +1658,286 @@ export { Physics };
  * Wrapper around a native mesh data
  */
 class Mesh {
-    /** Size of a vertex in float elements */
+
+    /**
+     * Size of a vertex in float elements
+     * @deprecated Replaced with {@link Mesh#attribute()} and {@link MeshAttributeAccessor}
+     */
     static get VERTEX_FLOAT_SIZE() { return 3 + 3 + 2; }
-    /** Size of a vertex in bytes */
+    /**
+     * Size of a vertex in bytes
+     * @deprecated Replaced with {@link Mesh#attribute()} and {@link MeshAttributeAccessor}
+     */
     static get VERTEX_SIZE() { return this.VERTEX_FLOAT_SIZE*4; }
 
-    /** Position attribute offsets in float elements */
+    /**
+     * Position attribute offsets in float elements
+     * @deprecated Replaced with {@link Mesh#attribute()} and {@link MeshAttribute#Position}
+     */
     static get POS() { return { X: 0, Y: 1, Z: 2 }; }
-    /** Texture coordinate attribute offsets in float elements */
+    /**
+     * Texture coordinate attribute offsets in float elements
+     * @deprecated Replaced with {@link Mesh#attribute()} and {@link MeshAttribute#TextureCoordinate}
+     */
     static get TEXCOORD() { return { U: 3, V: 4 }; }
-    /** Normal attribute offsets in float elements */
+    /**
+     * Normal attribute offsets in float elements
+     * @deprecated Replaced with {@link Mesh#attribute()} and {@link MeshAttribute#Normal}
+     */
     static get NORMAL() { return { X: 5, Y: 6, Z: 7 }; }
 
     /**
      * Constructor
      *
-     * @param params Either index to wrap or set of parameters to create a new mesh
-     * @param {number[]} params.indexData Index data values
-     * @param {MeshIndexType} params.indexType Index type
-     * @param {number[]} params.vertexData Interleaved vertex data values. A vertex is a set of 8 float values:
-     *          - 0-3 Position
-     *          - 4-7 Normal
-     *          - 7-8 Texture Coordinate
+     * @param {object} params Either a mesh index to wrap or set of parameters to create a new mesh
+     * @param {number} params.vertexCount Number of vertices to allocate
+     * @param {number[]} params.vertexData (deprecated, use `vertexCount` instead and set data
+     *      with {@link Mesh#attribute} instead.) Interleaved vertex data values. A vertex is a
+     *      set of 8 float values:
+     *          - 0-2 Position
+     *          - 3-5 Normal
+     *          - 6-8 Texture Coordinate
+     * @param {?number[]} params.indexData Index data values
+     * @param {?MeshIndexType} params.indexType Index type, `null` if not indexed
      */
     constructor(params) {
         if(typeof(params) === 'object') {
-            params.indexType = params.indexType || MeshIndexType.UnsignedShort;
-            let indexData = _malloc(params.indexData.length*params.indexType);
-            let vertexData = _malloc(params.vertexData.length*4 /* sizeof(float) */);
-
-            switch(params.indexType) {
-                case MeshIndexType.UnsignedByte:
-                    HEAPU8.set(params.indexData, indexData);
-                    break;
-                case MeshIndexType.UnsignedShort:
-                    HEAPU16.set(params.indexData, indexData >> 1);
-                    break;
-                case MeshIndexType.UnsignedInt:
-                    HEAPU32.set(params.indexData, indexData >> 2);
-                    break;
+            if(!params.vertexCount && params.vertexData) {
+                params.vertexCount = params.vertexData.length/WL.Mesh.VERTEX_FLOAT_SIZE;
             }
-            HEAPF32.set(params.vertexData, vertexData >> 2);
-            this._index = _wl_mesh_create(indexData,
-                params.indexData.length*params.indexType,
-                params.indexType,
-                vertexData,
-                params.vertexData.length*4 /* sizeof(float) */);
+            if(!params.vertexCount) throw new Error("Missing parameter 'vertexCount'");
 
+            let indexData = null;
+            let indexDataSize = 0;
+            if(params.indexData) {
+                const indexType = params.indexType || WL.MeshIndexType.UnsignedShort;
+                indexDataSize = params.indexData.length*indexType;
+                indexData = _malloc(indexDataSize);
+                /* Copy the index data into wasm memory */
+                switch(indexType) {
+                    case MeshIndexType.UnsignedByte:
+                        HEAPU8.set(params.indexData, indexData);
+                        break;
+                    case MeshIndexType.UnsignedShort:
+                        HEAPU16.set(params.indexData, indexData >> 1);
+                        break;
+                    case MeshIndexType.UnsignedInt:
+                        HEAPU32.set(params.indexData, indexData >> 2);
+                        break;
+                }
+            }
+            this._index = _wl_mesh_create(indexData, indexDataSize,
+                params.indexType, params.vertexCount);
+
+            if(params.vertexData) {
+                const positions = this.attribute(WL.MeshAttribute.Position);
+                const normals = this.attribute(WL.MeshAttribute.Normal);
+                const textureCoordinates = this.attribute(WL.MeshAttribute.TextureCoordinate);
+
+                for(let i = 0; i < params.vertexCount; ++i) {
+                    const start = i*WL.Mesh.VERTEX_FLOAT_SIZE;
+                    positions.set(i, params.vertexData.subarray(start, start + 3));
+                    textureCoordinates.set(i, params.vertexData.subarray(start + 3, start + 5));
+                    normals.set(i, params.vertexData.subarray(start + 5, start + 8));
+                }
+            }
         } else {
             this._index = params;
         }
     }
 
-    /** @returns {Float32Array} Vertex data */
+    /**
+     * @returns {Float32Array} Vertex data (read-only)
+     * @deprecated Replaced with {@link attribute()}
+     */
     get vertexData() {
         let ptr = _wl_mesh_get_vertexData(this._index, _tempMem);
         return new Float32Array(HEAPF32.buffer, ptr, WL.Mesh.VERTEX_FLOAT_SIZE*HEAPU32[_tempMem/4]);
     }
 
-    /** @returns {Uint8Array|Uint16Array|Uint32Array} Vertex data */
+    /**
+     * @returns {number} Number of vertices in this mesh
+     */
+    get vertexCount() {
+        return _wl_mesh_get_vertexCount(this._index);
+    }
+
+    /**
+     * @returns {Uint8Array|Uint16Array|Uint32Array} Index data (read-only) or
+     *          {@link null} if the mesh is not indexed
+     */
     get indexData() {
         let ptr = _wl_mesh_get_indexData(this._index, _tempMem, _tempMem + 4);
+        if(ptr === null) return null;
+
         const indexCount = HEAPU32[_tempMem/4];
         const indexSize = HEAPU32[_tempMem/4 + 1];
         switch(indexSize) {
-            case UnsignedByte:
+            case MeshIndexType.UnsignedByte:
                 return new Uint8Array(HEAPU8.buffer, ptr, indexCount);
-            case UnsignedShort:
+            case MeshIndexType.UnsignedShort:
                 return new Uint16Array(HEAPU16.buffer, ptr, indexCount);
-            case UnsignedInt:
+            case MeshIndexType.UnsignedInt:
                 return new Uint32Array(HEAPU32.buffer, ptr, indexCount);
         }
     }
+
+    /**
+     * Updates the bounding sphere to match new vertex positions.
+     */
+    update() {
+        _wl_mesh_update(this._index);
+    }
+
+    /**
+     * Mesh bounding sphere.
+     *
+     * @param {?Float32Array} out Preallocated array to write into,
+     *  to avoid garbage, otherwise will allocate a new {@link Float32Array}.
+     *
+     * @example
+     *  const sphere = new Float32Array(4);
+     *  for(...) {
+     *      mesh.getBoundingSphere(sphere);
+     *      ...
+     *  }
+     *
+     * @returns {Float32Array} Bounding sphere, 0-2 sphere origin, 3 radius.
+     *
+     * If the position data is changed, call {@link Mesh#update} to update the
+     * bounding sphere.
+     */
+    getBoundingSphere(out) {
+        out = out || new Float32Array(4);
+        _wl_mesh_get_boundingSphere(this._index, _tempMem);
+        out[0] = _tempMemFloat[0];
+        out[1] = _tempMemFloat[1];
+        out[2] = _tempMemFloat[2];
+        out[3] = _tempMemFloat[3];
+        return out;
+    }
+
+    /**
+     * Get an attribute accessor to retrieve or modify data of give attribute
+     * @param {MeshAttribute} attr Attribute to get access to
+     * @returns {?MeshAttributeAccessor} attr Attribute to get access to or `null`,
+     *      if mesh does not have this attribute.
+     *
+     * If there are no shaders in the scene that use `TextureCoordinate` for example,
+     * no meshes will have the `TextureCoordinate` attribute.
+     *
+     * For flexible reusable components, take this into account that only `Position`
+     * is guaranteed to be present at all time.
+     */
+    attribute(attr) {
+        if(typeof(attr) != 'number')
+            throw new TypeError("Expected number, but got " + typeof(attr));
+        _wl_mesh_get_attribute(this._index, attr, _tempMem);
+        if(_tempMemUint32[0] == 255) return null;
+
+        const a = new MeshAttributeAccessor();
+        a._attribute = _tempMemUint32[0];
+        a._offset = _tempMemUint32[1];
+        a._stride = _tempMemUint32[2];
+        a._formatSize = _tempMemUint32[3];
+        a._componentCount = _tempMemUint32[4];
+        a.length = this.vertexCount;
+        return a;
+    }
+
+    /**
+     * Destroy and free the meshes memory.
+     *
+     * It is best practice to set the mesh variable to `null` after calling
+     * destroy to prevent accidental use:
+     *
+     * @example
+     *   mesh.destroy();
+     *   mesh = null;
+     *
+     * Accessing the mesh after destruction behaves like accessing an empty
+     * mesh.
+     *
+     * @since 0.9.0
+     */
+    destroy() {
+        _wl_mesh_destroy(this._index);
+    }
 };
 export { Mesh };
+
+/**
+ * An iterator over a mesh vertex attribute
+ *
+ * @example
+ *   const mesh = this.object.getComponent('mesh').mesh;
+ *   const positions = mesh.attribute(WL.MeshAttribute.Position);
+ *
+ *   const temp = new Float32Array(3);
+ *   for(int i = 0; i < positions.length; ++i) {
+ *       // pos will reference temp and thereby not allocate additional
+ *       // JavaScript garbage, which would cause a perf spike when collected.
+ *       const pos = positions.get(i, temp);
+ *       // scale position by 2 on X axis only
+ *       pos[0] *= 2.0f;
+ *       positions.set(i, pos);
+ *   }
+ */
+class MeshAttributeAccessor {
+
+    /**
+     * Get attribute element
+     * @param {number} i Index
+     * @param {number[]|Float32Array} out Preallocated array to write into,
+     *      to avoid garbage, otherwise will allocate a new {@link Float32Array}.
+     *
+     * `out.length` needs to be a multiple of the attributes component count, see
+     * {@link MeshAttribute}. If `out.length` is more than one multiple, it will be
+     * filled with the next n attribute elements, which can reduce overhead
+     * of this call.
+     */
+    get(i, out) {
+        const comps = this._componentCount;
+        out = out || new Float32Array(comps);
+        // TODO UnsignedInt format
+        requireTempMem(4*out.length);
+        const dest = _tempMemFloat.subarray(0, out.length);
+
+        _wl_mesh_get_attribute_values(this._attribute, this._offset + i*this._stride,
+            this._stride, 1, this._formatSize, this._componentCount,
+            dest.byteOffset, dest.byteLength);
+        for(let i = 0; i < out.length; ++i) out[i] = dest[i];
+        return out;
+    }
+
+    /**
+     * Set attribute element
+     * @param {number} i Index
+     * @param {number[]} v Value to set the element to
+     *
+     * `v.length` needs to be a multiple of the attributes component count, see
+     * {@link MeshAttribute}. If `v.length` is more than one multiple, it will be
+     * filled with the next n attribute elements, which can reduce overhead
+     * of this call.
+     */
+    set(i, v) {
+        if(v.length % this._componentCount != 0)
+            throw new Error("v.length, " + v.length + ", is not a multiple of the attribute vector components, " + this._componentCount);
+
+        /* Unless we are already working with data from WASM heap, we
+         * need to copy into temporary memory. */
+        if(v.buffer != HEAPU8.buffer) {
+            requireTempMem(4*v.length);
+            const typedValue = _tempMemFloat.subarray(0, v.length);
+            typedValue.set(v);
+            v = typedValue;
+        }
+        _wl_mesh_set_attribute_values(this._attribute, this._offset + i*this._stride,
+            this._stride, v.length/this._componentCount, this._formatSize,
+            this._componentCount, v.byteOffset, v.byteLength);
+    }
+};
+export { MeshAttributeAccessor };
 
 /**
  * Mesh index type
@@ -1522,6 +1954,41 @@ const MeshIndexType = {
     UnsignedInt: 4,
 };
 export { MeshIndexType };
+
+/**
+ * Mesh attribute enum
+ * @enum{number}
+ * @since 0.9.0
+ */
+const MeshAttribute = {
+    /** Position attribute, 3 floats */
+    Position: 0,
+
+    /** Tangent attribute, 4 floats */
+    Tangent: 1,
+
+    /** Normal attribute, 3 floats */
+    Normal: 2,
+
+    /** Texture coordinate attribute, 2 floats */
+    TextureCoordinate: 3,
+
+    /** Color attribute, 4 floats, RGBA, range `0` to `1` */
+    Color: 4,
+
+    /** Joint id attribute, 4 unsigned ints */
+    JointId: 5,
+
+    /** Joint weights attribute, 4 floats */
+    JointWeight: 6,
+
+    /** Secondary joint id attribute, 4 unsigned ints */
+    SecondaryJointId: 7,
+
+    /** Secondary joint weights attribute, 4 floats */
+    SecondaryJointWeight: 8,
+};
+export { MeshAttribute };
 
 /**
  * Wrapper around a native material
@@ -1661,6 +2128,16 @@ class Texture {
         _wl_renderer_updateImage(this._id, this._imageIndex);
     }
 
+    /** @returns {int} width of the texture */
+    get width() {
+        return _wl_texture_width(this._id);
+    }
+
+    /** @returns {int} height of the texture */
+    get height() {
+        return _wl_texture_height(this._id);
+    }
+
     /**
      * Update a subrange on the texture to match the HTML element (e.g. reflect the current frame of a video)
      *
@@ -1689,11 +2166,31 @@ class Texture {
             _images[this._imageIndex] = img;
         }
     }
+
+    /**
+     * Destroy and free the texture's texture altas space and memory.
+     *
+     * It is best practice to set the texture variable to `null` after calling
+     * destroy to prevent accidental use of the invalid texture:
+     *
+     * @example
+     *   texture.destroy();
+     *   texture = null;
+     *
+     * @since 0.9.0
+     */
+    destroy() {
+        _wl_texture_destroy(this._id);
+        if(this._imageIndex) {
+            _images[this._imageIndex] = null;
+            this._imageIndex = undefined;
+        }
+    }
 };
 export { Texture };
 
 /**
- * Access to the texures managed by Wonderland Engine
+ * Access to the textures managed by Wonderland Engine
  */
 const textures = {
 
@@ -1783,8 +2280,8 @@ export { Animation };
  * to its parent object. Usually holds components and is accessible by components
  * through {@link Component#object}.
  *
- * Objects are stored in a data oriented mannor inside WebAssembly memory. This class
- * is a JavaScript API wrapper around this memory for more conventient use in
+ * Objects are stored in a data oriented manner inside WebAssembly memory. This class
+ * is a JavaScript API wrapper around this memory for more convenient use in
  * components.
  *
  * Objects can be created and added to a scene through
@@ -1845,7 +2342,7 @@ class $Object {
     /**
      * Reparent object to given object.
      * @param {$Object} newParent New parent or {@link null} to parent to root
-     * @note Reparenting is not trivial and might have a noticable performance impact
+     * @note Reparenting is not trivial and might have a noticeable performance impact
      */
     set parent(newParent) {
         _wl_object_set_parent(this.objectId, newParent == null ? 0 : newParent.objectId);
@@ -2465,7 +2962,7 @@ class $Object {
             v[0], v[1], v[2], up[0], up[1], up[2]);
     }
 
-    /** Destroy the object and remove it from the scene */
+    /** Destroy the object with all of its components and remove it from the scene */
     destroy() {
         _wl_scene_remove_object(this.objectId);
         this.objectId = null;
@@ -2569,7 +3066,7 @@ class $Object {
      * You can use this function to clone components, see the example below.
      *
      * @example
-     *  // Clone existing component
+     *  // Clone existing component (since 0.8.10)
      *  let original = this.object.getComponent('mesh');
      *  otherObject.addComponent('mesh', original);
      *  // Create component from parameters
@@ -2607,7 +3104,7 @@ class $Object {
             for(const key in params) {
                 /* active will be set later, other properties should be skipped if
                  * passing a component for cloning. */
-                if(!params.hasOwnProperty(key) || EXCLUDED_COMPONENT_PROPERTIES.includes(key)) continue;
+                if(EXCLUDED_COMPONENT_PROPERTIES.includes(key)) continue;
                 component[key] = params[key];
             }
         }
@@ -2811,7 +3308,7 @@ class math {
      * With `f == 0`, `out` will be `b`, if `f == 1`, `out` will be c.
      *
      * Whether a quaternion or vector3 interpolation is intended is determined by
-     * legth of `a`.
+     * length of `a`.
      *
      * @param {number[]} out Array to write result to
      * @param {number[]} a First tangent/handle

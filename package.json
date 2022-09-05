@@ -1,18 +1,21 @@
 {
   "name": "@wonderlandengine/api",
-  "version": "0.8.10",
+  "version": "0.9.0",
   "description": "Wonderland Engine's JavaScript API.",
   "main": "wonderland.js",
-  "files": [
-    "*.js"
-  ],
+  "files": ["*.js"],
   "devDependencies": {
+    "@esm-bundle/chai": "^4.3.4-fix.0",
+    "@web/test-runner": "^0.13.31",
     "esbuild": "^0.11.14"
   },
   "scripts": {
     "build": "esbuild index.js --minify --bundle --sourcemap --outfile=../wonderland.min.js --global-name=WL",
     "build-dev": "esbuild index.js --bundle --sourcemap --outfile=../wonderland.min.js --global-name=WL",
-    "watch": "esbuild index.js --minify --bundle --sourcemap --outfile=../wonderland.min.js --global-name=WL --watch"
+    "watch": "esbuild index.js --minify --bundle --sourcemap --outfile=../wonderland.min.js --global-name=WL --watch",
+    "test": "npm run copy-deploy && web-test-runner test/**/*.test.js --node-resolve",
+    "test:watch": "npm run test -- --watch",
+    "copy-deploy": "node ./scripts/copy-deploy.mjs"
   },
   "repository": {
     "type": "git",
