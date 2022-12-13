@@ -3308,7 +3308,6 @@ class $Object {
         if(componentType < 0) {
             /* Not a native component, try js: */
             const typeIndex = _WL._componentTypeIndices[type];
-            console.log("getComponent", typeOrClass, typeIndex, index)
             const jsIndex = _wl_get_js_component_index(this.objectId, typeIndex, index || 0);
             return jsIndex < 0 ? null : _WL._components[jsIndex];
         }
