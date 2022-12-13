@@ -1,3 +1,4 @@
+
 const MISALIGNED_MSG = "Misaligned pointer: please report a bug";
 /* Component class instances per type to avoid GC */
 let ComponentCache = {};
@@ -450,6 +451,20 @@ function init() {
     allocateTempMemory(1024);
 }
 
+/**
+ * Reset the runtime state, including:
+ *     - Component cache
+ *     - Images
+ *     - Callbacks
+ */
+function reset() {
+    ComponentCache = {};
+    ObjectCache.length = 0;
+    _images.length = 0;
+    _sceneLoadedCallback.length = 0;
+    _WL.reset();
+}
+
 /** Initialize API resources, called by the engine automatically, if
  * PhysX is enabled. */
 function _initPhysics() {
@@ -478,6 +493,76 @@ function updateTempMemory() {
     _tempMemUint8 = new Uint8Array(HEAP8.buffer,_tempMem,_tempMemSize);
 }
 
+/**
+ * Returns a uint8 buffer view on temporary WASM memory.
+ *
+ * **Note**: this method might allocate if the requested memory is bigger
+ * than the current temporary memory allocated.
+ *
+ * @param {number} count The number of **elements** required
+ * @returns {Uint8Array} A {@link TypedArray} over the WASM memory
+ */
+function getTempBufferU8(count) {
+    requireTempMem(count);
+    return _tempMemUint8;
+}
+
+/**
+ * Returns a uint16 buffer view on temporary WASM memory.
+ *
+ * **Note**: this method might allocate if the requested memory is bigger
+ * than the current temporary memory allocated.
+ *
+ * @param {number} count The number of **elements** required
+ * @returns {Uint16Array} A {@link TypedArray} over the WASM memory
+ */
+function getTempBufferU16(count) {
+    requireTempMem(count * 2);
+    return _tempMemUint16;
+}
+
+/**
+ * Returns a uint32 buffer view on temporary WASM memory.
+ *
+ * **Note**: this method might allocate if the requested memory is bigger
+ * than the current temporary memory allocated.
+ *
+ * @param {number} count The number of **elements** required.
+ * @returns {Uint32Array} A {@link TypedArray} over the WASM memory
+ */
+function getTempBufferU32(count) {
+    requireTempMem(count * 4);
+    return _tempMemUint32;
+}
+
+/**
+ * Returns a int32 buffer view on temporary WASM memory.
+ *
+ * **Note**: this method might allocate if the requested memory is bigger
+ * than the current temporary memory allocated.
+ *
+ * @param {number} count The number of **elements** required
+ * @returns {Int32Array} A {@link TypedArray} over the WASM memory
+ */
+function getTempBufferI32(count) {
+    requireTempMem(count * 4);
+    return _tempMemInt;
+}
+
+/**
+ * Returns a float32 buffer view on temporary WASM memory.
+ *
+ * **Note**: this method might allocate if the requested memory is bigger
+ * than the current temporary memory allocated.
+ *
+ * @param {number} count The number of **elements** required
+ * @returns {Float32Array} A {@link TypedArray} over the WASM memory
+ */
+function getTempBufferF32(count) {
+    requireTempMem(count * 4);
+    return _tempMemFloat;
+}
+
 export {
     registerComponent,
 
@@ -496,6 +581,7 @@ export {
     textures,
 
     init,
+    reset,
     _initPhysics,
     updateTempMemory,
 };
@@ -630,6 +716,20 @@ class Scene {
     }
 
     /**
+     * Set whether to clear the color framebuffer before drawing.
+     *
+     * This function is useful if an external framework (e.g. an AR tracking
+     * framework) is responsible for drawing a camera frame before Wonderland
+     * Engine draws the scene on top of it.
+     *
+     * @param {boolean} b Whether to enable color clear.
+     * @since 0.9.4
+     */
+    set colorClearEnabled(b) {
+        _wl_scene_enableColorClear(b);
+    }
+
+    /**
      * Load a scene file (.bin)
      *
      * Will replace the currently active scene with the one loaded
@@ -647,28 +747,115 @@ class Scene {
     }
 
     /**
-     * Load a external 3D file (.gltf, .glb)
+     * Load an external 3D file (.gltf, .glb)
      *
      * Loads and parses the gltf file and its images and appends the result
      * to scene.
      *
+     * @example
+     *    WL.scene.append(filename).then(root => {
+     *        // root contains the loaded scene
+     *    });
+     *
+     * In case the `loadGltfExtensions` option is set to true, the response
+     * will be an object containing both the root of the loaded scene and
+     * any glTF extensions found on nodes, meshes and the root of the file.
+     *
+     * @example
+     *    WL.scene.append(filename, { loadGltfExtensions: true }).then(({root, extensions}) => {
+     *        // root contains the loaded scene
+     *
+     *        // extensions.root contains any extensions at the root of glTF document
+     *        const rootExtensions = extensions.root;
+     *
+     *        // extensions.mesh and extensions.node contain extensions indexed by Object id
+     *        const childObject = root.children[0];
+     *        const meshExtensions = root.meshExtensions[childObject.objectId];
+     *        const nodeExtensions = root.nodeExtensions[childObject.objectId];
+     *
+     *        // extensions.idMapping contains a mapping from glTF node index to Object id
+     *    });
+     *
      * @param filename Path to the .gltf or .glb file
-     * @returns {Promise<$Object>} Root of the loaded scene
+     * @param options Additional options for loading
+     * @returns {Promise<$Object>|Promise<Object>} Root of the loaded scene
      */
-    append(filename) {
+    append(filename, options) {
+        options = options || {};
+        const loadGltfExtensions = !!options.loadGltfExtensions;
+
         const strLen = lengthBytesUTF8(filename) + 1;
         const ptr = _malloc(strLen);
         stringToUTF8(filename, ptr, strLen);
         const callback = _sceneLoadedCallback.length;
         const promise = new Promise((resolve, reject) => {
             _sceneLoadedCallback[callback] = {
-                success: (id) => resolve($Object._wrapObject(id)),
+                success: (id, extensions) => {
+                    const root = $Object._wrapObject(id);
+                    resolve(extensions ? { root, extensions } : root);
+                },
                 error: () => reject()
             };
         });
-        _wl_append_scene(ptr, callback);
+
+        _wl_append_scene(ptr, loadGltfExtensions, callback);
         _free(ptr);
         return promise;
+    }
+
+    /**
+     * Unmarshalls the GltfExtensions from an Uint32Array
+     *
+     * @param {Uint32Array} data Array containing the gltf extension data
+     * @returns {Object}
+     */
+    _unmarshallGltfExtensions(data) {
+        const extensions = {
+            root: {},
+            mesh: {},
+            node: {},
+            idMapping: {},
+        };
+
+        let index = 0;
+        const readString = () => {
+            const strPtr = data[index++];
+            const strLen = data[index++];
+            return _WL.UTF8ViewToString(strPtr, strPtr + strLen);
+        }
+
+        const idMappingSize = data[index++];
+        const idMapping = new Array(idMappingSize);
+        for(let i = 0; i < idMappingSize; ++i) {
+            idMapping[i] = data[index++];
+        }
+        extensions.idMapping = idMapping;
+
+        const meshExtensionsSize = data[index++];
+        for(let i = 0; i < meshExtensionsSize; ++i) {
+            const objectId = data[index++];
+            extensions.mesh[idMapping[objectId]] = JSON.parse(readString());
+        }
+        const nodeExtensionsSize = data[index++];
+        for(let i = 0; i < nodeExtensionsSize; ++i) {
+            const objectId = data[index++];
+            extensions.node[idMapping[objectId]] = JSON.parse(readString());
+        }
+        const rootExtensionsStr = readString();
+        if(rootExtensionsStr) {
+            extensions.root = JSON.parse(rootExtensionsStr);
+        }
+
+        return extensions;
+    }
+
+    /**
+     * Reset the scene
+     *
+     * This method deletes all used and allocated objects, and components.
+     */
+    reset() {
+        _wl_scene_reset();
     }
 };
 export { Scene };
@@ -679,9 +866,11 @@ export { Scene };
  * Provides access to a native component instance of a specified component type
  */
 class Component {
-    constructor(managerIndex, id) {
-        this._id = id;
+    constructor(managerIndex = -1, id = -1) {
         this._manager = managerIndex;
+        this._id = id;
+        this._object = null;
+        this._type = null;
     }
 
     /**
@@ -695,8 +884,11 @@ class Component {
      * @returns {$Object} The object this component is attached to
      */
     get object() {
-        const objectId = _wl_component_get_object(this._manager, this._id);
-        return $Object._wrapObject(objectId);
+        if(!this._object) {
+            const objectId = _wl_component_get_object(this._manager, this._id);
+            this._object = $Object._wrapObject(objectId);
+        }
+        return this._object;
     }
 
     /**
@@ -1028,6 +1220,31 @@ class ViewComponent extends Component {
      */
     set far(far) {
         _wl_view_component_set_far(this._id, far);
+    }
+
+    /**
+     * Get field of view for the view
+     *
+     * If an XR session is active, this returns the field of view reported by
+     * the device, regardless of the fov that was set.
+     *
+     * @returns {number} ViewComponent horizontal field of view in degrees
+     */
+     get fov() {
+        return _wl_view_component_get_fov(this._id);
+    }
+
+    /**
+     * Set field of view for the view
+     *
+     * If an XR session is active, the field of view reported by the device is
+     * used and this value is ignored. After the XR session ends, the new value
+     * is applied.
+     *
+     * @param {number} fov Horizontal field of view in degrees
+     */
+    set fov(fov) {
+        _wl_view_component_set_fov(this._id, fov);
     }
 };
 export { ViewComponent };
@@ -1691,6 +1908,7 @@ class Mesh {
      *
      * @param {object} params Either a mesh index to wrap or set of parameters to create a new mesh
      * @param {number} params.vertexCount Number of vertices to allocate
+     * @param {boolean} params.skinned `true` if the mesh should be skinned. Defaults to false.
      * @param {number[]} params.vertexData (deprecated, use `vertexCount` instead and set data
      *      with {@link Mesh#attribute} instead.) Interleaved vertex data values. A vertex is a
      *      set of 8 float values:
@@ -1726,8 +1944,11 @@ class Mesh {
                         break;
                 }
             }
+
+            const { skinned = false } = params;
+
             this._index = _wl_mesh_create(indexData, indexDataSize,
-                params.indexType, params.vertexCount);
+                params.indexType, params.vertexCount, skinned);
 
             if(params.vertexData) {
                 const positions = this.attribute(WL.MeshAttribute.Position);
@@ -1835,7 +2056,7 @@ class Mesh {
         _wl_mesh_get_attribute(this._index, attr, _tempMem);
         if(_tempMemUint32[0] == 255) return null;
 
-        const a = new MeshAttributeAccessor();
+        const a = new MeshAttributeAccessor(attr);
         a._attribute = _tempMemUint32[0];
         a._offset = _tempMemUint32[1];
         a._stride = _tempMemUint32[2];
@@ -1885,27 +2106,94 @@ export { Mesh };
  */
 class MeshAttributeAccessor {
 
+    constructor(type = MeshAttribute.Position) {
+        this._attribute = -1;
+        this._offset = 0;
+        this._stride = 0;
+        this._formatSize = 0;
+        this._componentCount = 0;
+        this.length = 0;
+
+        /**
+         * Function to allocate temporary WASM memory. This is cached to avoid
+         * any conditional during get/set.
+         * @type {Function}
+         * @private
+         */
+        this._tempBufferGetter = undefined;
+        /**
+         * Class to instantiate an ArrayBuffer to get/set values.
+         * @type {Function}
+         * @private
+         */
+        this._bufferType = undefined; /* ArrayBuffer class tight to the data format */
+
+        switch(type) {
+            case MeshAttribute.Position: case MeshAttribute.Normal:
+            case MeshAttribute.TextureCoordinate: case MeshAttribute.Tangent:
+            case MeshAttribute.Color: case MeshAttribute.JointWeight:
+            case MeshAttribute.SecondaryJointWeight:
+                this._bufferType = Float32Array;
+                this._tempBufferGetter = getTempBufferF32;
+                break;
+            case MeshAttribute.JointId: case MeshAttribute.SecondaryJointId:
+                this._bufferType = Uint16Array;
+                this._tempBufferGetter = getTempBufferU16;
+                break;
+            default:
+                throw new Error(`Invalid attribute accessor type: ${type}`);
+        }
+    }
+
+    /**
+     * Create a new TypedArray to hold this attribute values.
+     *
+     * This method is useful to create a view to hold the data to
+     * pass to {@link MeshAttributeAccessor.get} and {@link MeshAttributeAccessor.set}
+     *
+     * Example:
+     *
+     * ```js
+     * const vertexCount = 4;
+     * const positionAttribute = mesh.attribute(MeshAttributes.Position);
+     *
+     * // A position has 3 floats per vertex. Thus, positions has length 3 * 4.
+     * const positions = positionAttribute.createArray(vertexCount);
+     * ```
+     *
+     * @param {number} count The number of **vertices** expected.
+     * @returns {Uint8Array|Uint16Array|Uint32Array|Int32Array|Float32Array} A TypedArray
+     *    with the appropriate format to access the data
+     */
+    createArray(count = 1) {
+        count = count > this.length ? this.length : count;
+        return new this._bufferType(count * this._componentCount);
+    }
+
     /**
      * Get attribute element
      * @param {number} i Index
-     * @param {number[]|Float32Array} out Preallocated array to write into,
-     *      to avoid garbage, otherwise will allocate a new {@link Float32Array}.
+     * @param {number[]|Float32Array|Uint32Array} out Preallocated array to write into,
+     *      to avoid garbage, otherwise will allocate a new TypedArray.
      *
      * `out.length` needs to be a multiple of the attributes component count, see
      * {@link MeshAttribute}. If `out.length` is more than one multiple, it will be
      * filled with the next n attribute elements, which can reduce overhead
      * of this call.
      */
-    get(i, out) {
-        const comps = this._componentCount;
-        out = out || new Float32Array(comps);
-        // TODO UnsignedInt format
-        requireTempMem(4*out.length);
-        const dest = _tempMemFloat.subarray(0, out.length);
+    get(index, out) {
+        out = out || this.createArray();
+        if(out.length % this._componentCount !== 0)
+            throw new Error(`out.length, ${v.length} is not a multiple of the attribute vector components, ${this._componentCount}`);
 
-        _wl_mesh_get_attribute_values(this._attribute, this._offset + i*this._stride,
-            this._stride, 1, this._formatSize, this._componentCount,
-            dest.byteOffset, dest.byteLength);
+        const dest = this._tempBufferGetter(out.length);
+        const bytesPerElt = this._bufferType.BYTES_PER_ELEMENT;
+        const bytes = bytesPerElt*out.length;
+        const destFormatSize = this._componentCount*bytesPerElt;
+
+        _wl_mesh_get_attribute_values(this._attribute, this._formatSize, this._offset + index*this._stride,
+            this._stride, destFormatSize, dest.byteOffset, bytes);
+
         for(let i = 0; i < out.length; ++i) out[i] = dest[i];
         return out;
     }
@@ -1913,28 +2201,35 @@ class MeshAttributeAccessor {
     /**
      * Set attribute element
      * @param {number} i Index
-     * @param {number[]} v Value to set the element to
+     * @param {number[]|Float32Array|Uint32Array} v Value to set the element to
      *
      * `v.length` needs to be a multiple of the attributes component count, see
      * {@link MeshAttribute}. If `v.length` is more than one multiple, it will be
      * filled with the next n attribute elements, which can reduce overhead
      * of this call.
+     *
+     * @returns {MeshAttributeAccessor} Reference to self (for method chaining)
      */
     set(i, v) {
-        if(v.length % this._componentCount != 0)
-            throw new Error("v.length, " + v.length + ", is not a multiple of the attribute vector components, " + this._componentCount);
+        if(v.length % this._componentCount !== 0)
+            throw new Error(`out.length, ${v.length} is not a multiple of the attribute vector components, ${this._componentCount}`);
+
+        const bytesPerElt = this._bufferType.BYTES_PER_ELEMENT;
+        const bytes = bytesPerElt*v.length;
+        const srcFormatSize = this._componentCount*bytesPerElt;
 
         /* Unless we are already working with data from WASM heap, we
          * need to copy into temporary memory. */
         if(v.buffer != HEAPU8.buffer) {
-            requireTempMem(4*v.length);
-            const typedValue = _tempMemFloat.subarray(0, v.length);
-            typedValue.set(v);
-            v = typedValue;
+            const dest = this._tempBufferGetter(v.length);
+            dest.set(v);
+            v = dest;
         }
-        _wl_mesh_set_attribute_values(this._attribute, this._offset + i*this._stride,
-            this._stride, v.length/this._componentCount, this._formatSize,
-            this._componentCount, v.byteOffset, v.byteLength);
+
+        _wl_mesh_set_attribute_values(this._attribute, srcFormatSize, v.byteOffset, bytes,
+            this._formatSize, this._offset + i*this._stride, this._stride);
+
+        return this;
     }
 };
 export { MeshAttributeAccessor };
@@ -2049,10 +2344,10 @@ class Material {
                     const paramType = target._paramType(paramIndex);
                     if(_wl_material_get_param_value(target._index, paramIndex, _tempMem)) {
                         if(paramType.type == 0) {
-                            return paramType.componentCount == 1 ? _tempMemUint32[0] : new Uint32Array(HEAPF32.buffer, _tempMem, paramType.componentCount);
+                            return paramType.componentCount == 1 ? _tempMemUint32[0] : new Uint32Array(HEAPU32.buffer, _tempMem, paramType.componentCount);
                         }
                         if(paramType.type == 1) {
-                            return paramType.componentCount == 1 ? _tempMemInt[0] : new Int32Array(HEAPF32.buffer, _tempMem, paramType.componentCount);
+                            return paramType.componentCount == 1 ? _tempMemInt[0] : new Int32Array(HEAP32.buffer, _tempMem, paramType.componentCount);
                         }
                         if(paramType.type == 2) {
                             return paramType.componentCount == 1 ? _tempMemFloat[0] : new Float32Array(HEAPF32.buffer, _tempMem, paramType.componentCount);
@@ -2325,12 +2620,14 @@ class $Object {
 
     /**
      * @returns {$Object[]} Children of this object
-     *
-     * @warning This method will currently return at most 512 child objects.
      */
     get children() {
-        const childrenCount = _wl_object_get_children(this.objectId, _tempMem, _tempMemSize >> 1);
-        if(childrenCount == 0) return [];
+        const childrenCount = _wl_object_get_children_count(this.objectId);
+        if(childrenCount === 0) return [];
+
+        requireTempMem(childrenCount*2);
+
+        _wl_object_get_children(this.objectId, _tempMem, _tempMemSize >> 1);
 
         const children = new Array(childrenCount);
         for(let i = 0; i < childrenCount; ++i) {
@@ -2493,14 +2790,13 @@ class $Object {
         _wl_object_scale(this.objectId, v[0], v[1], v[2]);
     }
 
-
     /** @returns {Float32Array} Local / object space transformation */
     get transformLocal() {
         return new Float32Array(HEAPF32.buffer, _wl_object_trans_local(this.objectId), 8);
     }
 
     /**
-     * Set world transform.
+     * Set local transform.
      *
      * @param {number} t Local space transformation
      *
@@ -2995,40 +3291,49 @@ class $Object {
 
     /**
      * Get a component attached to this object
-     * @param {string} type Type name
+     * @param {string|Function} typeOrClass Type name. It's also possible to give a class definition.
+     *     In this case, the method will use the `class.TypeName` field to find the component.
      * @param {number} index=0 Index for component of given type. This can be used to access specific
      *      components if the object has multiple components of the same type.
      * @returns {?(Component|CollisionComponent|TextComponent|ViewComponent|MeshComponent|InputComponent|LightComponent|AnimationComponent|PhysXComponent)} The component or {@link null} if there is no such component on this object
      */
-    getComponent(type, index) {
+    getComponent(typeOrClass, index) {
+        const type = isString(typeOrClass) ? typeOrClass : typeOrClass.TypeName;
         const lengthBytes = lengthBytesUTF8(type) + 1;
         const mem = _malloc(lengthBytes);
         stringToUTF8(type, mem, lengthBytes);
         const componentType = _wl_get_component_manager_index(mem);
+        _free(mem);
 
         if(componentType < 0) {
             /* Not a native component, try js: */
-            const jsIndex = _wl_get_js_component_index(this.objectId, mem, index || 0);
-            _free(mem);
+            const typeIndex = _WL._componentTypeIndices[type];
+            console.log("getComponent", typeOrClass, typeIndex, index)
+            const jsIndex = _wl_get_js_component_index(this.objectId, typeIndex, index || 0);
             return jsIndex < 0 ? null : _WL._components[jsIndex];
         }
-        _free(mem);
 
         const componentId = _wl_get_component_id(this.objectId, componentType, index || 0);
-        return $Object._wrapComponent(type, componentType, componentId);
+        return _wrapComponent(type, componentType, componentId);
     }
 
     /**
-     * @param {?string} type Type name, pass a falsey value (`undefined` or {@link null}) to retrieve all
+     * @param {?string|Function} typeOrClass Type name, pass a falsey value (`undefined` or {@link null}) to retrieve all.
+     *     It's also possible to give a class definition. In this case, the method will use the `class.TypeName` field to
+     *     find the components.
      * @returns {Component[]} All components of given type attached to this object
      *
-     * @note As this function is non-trivial, avoid using it in `update()` repeatidly,
+     * @note As this function is non-trivial, avoid using it in `update()` repeatedly,
      *      but rather store its result in `init()` or `start()`
      * @warning This method will currently return at most 341 components.
      */
-    getComponents(type) {
-        const componentType = type ? $Object._typeIndexFor(type) : null;
-
+    getComponents(typeOrClass) {
+        let componentType = null;
+        let type = null;
+        if(typeOrClass) {
+            type = isString(typeOrClass) ? typeOrClass : typeOrClass.TypeName;
+            componentType = $Object._typeIndexFor(type);
+        }
         const components = [];
         const maxComps = Math.floor(_tempMemSize/3*2);
         const componentsCount =
@@ -3049,12 +3354,10 @@ class $Object {
 
             if(componentType === null) {
                 const managerName = $Object._typeNameFor(t);
-                components.push($Object._wrapComponent(
-                    managerName, t, componentId));
+                components.push(_wrapComponent(managerName, t, componentId));
             } else if(t == componentType) {
                 /* Optimized manager name retrieval, already have type */
-                components.push($Object._wrapComponent(
-                    type, componentType, componentId));
+                components.push(_wrapComponent(type, componentType, componentId));
             }
         }
         return components;
@@ -3075,14 +3378,16 @@ class $Object {
      *      material: someMaterial,
      *  });
      *
-     * @param {string} type Typename to create a component of. Can be native or
-     *      custom JavaScript component type.
+     * @param {string|Function} typeOrClass Typename to create a component of. Can be native or
+     *     custom JavaScript component type. It's also possible to give a class definition.
+     *     In this case, the method will use the `class.TypeName` field.
      * @param {object} [params] Parameters to initialize properties of the new component,
      *      can be another component to copy properties from.
      *
      * @returns {?(Component|CollisionComponent|TextComponent|ViewComponent|MeshComponent|InputComponent|LightComponent|AnimationComponent|PhysXComponent)} The component or {@link null} if the type was not found
      */
-    addComponent(type, params) {
+    addComponent(typeOrClass, params) {
+        const type = isString(typeOrClass) ? typeOrClass : typeOrClass.TypeName;
         const componentType = $Object._typeIndexFor(type);
         let component = null;
         let componentIndex = null;
@@ -3097,7 +3402,7 @@ class $Object {
         } else {
             /* native component */
             const componentId = _wl_object_add_component(this.objectId, componentType);
-            component = $Object._wrapComponent(type, componentType, componentId);
+            component = _wrapComponent(type, componentType, componentId);
         }
 
         if(params !== undefined) {
@@ -3125,6 +3430,13 @@ class $Object {
     }
 
     /**
+     * @returns {boolean} Whether given object's transformation has changed.
+     */
+    get changed() {
+        return !!_wl_object_is_changed(this.objectId);
+    }
+
+    /**
      * Checks equality by comparing whether the wrapped native component ids
      * and component manager types are equal.
      *
@@ -3148,37 +3460,6 @@ class $Object {
 
     static _typeNameFor(typeIndex) {
         return UTF8ToString(_wl_component_manager_name(typeIndex));
-    }
-
-    /*
-     * @param {string} type component type name
-     * @param {number} componentType Component manager index
-     * @param {number} componentId Component id in the manager
-     * @returns {(CollisionComponent|TextComponent|ViewComponent|MeshComponent|InputComponent|LightComponent|AnimationComponent|PhysXComponent)} JavaScript instance wrapping the native component
-     */
-    static _wrapComponent(type, componentType, componentId) {
-        if(componentId < 0) return null;
-
-        const c = ComponentCache[componentType] || (ComponentCache[componentType] = []);
-        if(type == 'collision') {
-            return (c[componentId] || (c[componentId] = new CollisionComponent(componentType, componentId)));
-        } else if(type == 'text') {
-            return (c[componentId] || (c[componentId] = new TextComponent(componentType, componentId)));
-        } else if(type == 'view') {
-            return (c[componentId] || (c[componentId] = new ViewComponent(componentType, componentId)));
-        } else if(type == 'mesh') {
-            return (c[componentId] || (c[componentId] = new MeshComponent(componentType, componentId)));
-        } else if(type == 'input') {
-            return (c[componentId] || (c[componentId] = new InputComponent(componentType, componentId)));
-        } else if(type == 'light') {
-            return (c[componentId] || (c[componentId] = new LightComponent(componentType, componentId)));
-        } else if(type == 'animation') {
-            return (c[componentId] || (c[componentId] = new AnimationComponent(componentType, componentId)));
-        } else if(type == 'physx') {
-            return (c[componentId] || (c[componentId] = new PhysXComponent(componentType, componentId)));
-        } else {
-            return (c[componentId] || (c[componentId] = new Component(componentType, componentId)));
-        }
     }
 
     /*
@@ -3343,3 +3624,60 @@ class math {
 }
 
 export { math }
+
+/**
+ * Check if a given value is a native string or a `String` instance
+ *
+ * @param {Object} value The value to check
+ * @returns `true` if the `value` has type string literal or `String`, `false` otherwise
+ */
+export function isString(value) {
+    return value && (typeof value === 'string' || value.constructor === String);
+}
+
+/**
+ * Retrieves a component instance if it exists, or create and cache
+ * a new one
+ *
+ * @param {string} type component type name
+ * @param {number} componentType Component manager index
+ * @param {number} componentId Component id in the manager
+ *
+ * @returns {(CollisionComponent|TextComponent|ViewComponent|MeshComponent|InputComponent|LightComponent|AnimationComponent|PhysXComponent|Component)} JavaScript instance wrapping the native component
+ */
+export function _wrapComponent(type, componentType, componentId) {
+    if(componentId < 0) return null;
+
+    /* TODO: extremely slow in JS to do that... Better to use a Map or allocate the array. */
+    const c = ComponentCache[componentType] || (ComponentCache[componentType] = []);
+    if(c[componentId]) { return c[componentId]; }
+
+    let component;
+    if(type == 'collision') {
+        component = new CollisionComponent();
+    } else if(type == 'text') {
+        component = new TextComponent();
+    } else if(type == 'view') {
+        component = new ViewComponent();
+    } else if(type == 'mesh') {
+        component = new MeshComponent();
+    } else if(type == 'input') {
+        component = new InputComponent();
+    } else if(type == 'light') {
+        component = new LightComponent();
+    } else if(type == 'animation') {
+        component = new AnimationComponent();
+    } else if(type == 'physx') {
+        component = new PhysXComponent();
+    } else {
+        const typeIndex = _WL._componentTypeIndices[type];
+        const constructor =  _WL._componentTypes[typeIndex];
+        component = new constructor();
+    }
+    /* Sets the manager and identifier from the outside, to
+     * simplify the user's constructor. */
+    component._manager = componentType;
+    component._id = componentId;
+    c[componentId] = component;
+    return component;
+}
