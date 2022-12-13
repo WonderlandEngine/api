@@ -1,9 +1,11 @@
 {
   "name": "@wonderlandengine/api",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Wonderland Engine's JavaScript API.",
   "main": "wonderland.js",
-  "files": ["*.js"],
+  "files": [
+    "*.js"
+  ],
   "devDependencies": {
     "@esm-bundle/chai": "^4.3.4-fix.0",
     "@web/test-runner": "^0.13.31",
