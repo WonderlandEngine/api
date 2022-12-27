@@ -1,3 +1,11 @@
+# As a transition step, the wonderland files are produced at the root.
+# @todo: Remove at 1.0.0
+index.js
+index.d.ts
+wonderland.js
+wonderland.d.ts
+doc.json
+
 # Logs
 logs
 *.log
