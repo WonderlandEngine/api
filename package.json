@@ -22,7 +22,8 @@
   },
   "homepage": "https://github.com/WonderlandEngine/api#readme",
   "files": [
-    "*.js"
+    "*.js",
+    "*.d.ts"
   ],
   "scripts": {
     "build:ts": "tsc",
