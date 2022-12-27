@@ -250,6 +250,7 @@ export interface CustomParameter {
  * ```js
  * import { Component, Type } from '@wonderlandengine/api';
  * registerComponent(class MyComponent extends Component {
+ *     static TypeName = 'my-component';
  *     static Properties = {
  *         myParam: {type: Type.Float, default: 42.0},
  *     };
