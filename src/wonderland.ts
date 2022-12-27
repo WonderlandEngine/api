@@ -237,9 +237,9 @@ export interface CustomParameter {
     /** Parameter type. */
     type: Type;
     /** Default value, depending on type. */
-    default: any;
+    default?: any;
     /** Values for {@link Type} */
-    values: string[];
+    values?: string[];
 }
 
 /**
