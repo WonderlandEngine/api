@@ -3940,6 +3940,29 @@ class $Object {
         }
     }
 
+    /* `getComponent` overloads for native components. */
+
+    /** @overload */
+    getComponent(type: 'collision', index?: number): CollisionComponent | null;
+    /** @overload */
+    getComponent(type: 'text', index?: number): TextComponent | null;
+    /** @overload */
+    getComponent(type: 'view', index?: number): ViewComponent | null;
+    /** @overload */
+    getComponent(type: 'mesh', index?: number): MeshComponent | null;
+    /** @overload */
+    getComponent(type: 'input', index?: number): InputComponent | null;
+    /** @overload */
+    getComponent(type: 'light', index?: number): LightComponent | null;
+    /** @overload */
+    getComponent(type: 'animation', index?: number): AnimationComponent | null;
+    /** @overload */
+    getComponent(type: 'physx', index?: number): PhysXComponent | null;
+    /** @overload */
+    getComponent(typeOrClass: string, index?: number): Component | null;
+    /** @overload */
+    getComponent<T extends Component>(typeOrClass: ComponentConstructor<T>, index?: number): T | null;
+
     /**
      * Get a component attached to this object.
      *
@@ -3951,7 +3974,7 @@ class $Object {
      */
     getComponent<T extends Component>(
         typeOrClass: string | ComponentConstructor<T>,
-        index: number
+        index?: number
     ): T | null {
         const type = isString(typeOrClass)
             ? (typeOrClass as string)
