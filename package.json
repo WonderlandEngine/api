@@ -1,6 +1,6 @@
 {
   "name": "@wonderlandengine/api",
-  "version": "0.9.4",
+  "version": "0.9.5",
   "description": "Wonderland Engine's JavaScript API.",
   "main": "./index.js",
   "module": "./index.js",
@@ -36,7 +36,7 @@
     "test:watch": "npm run test -- --watch",
     "copy-deploy": "node ./scripts/copy-deploy.mjs",
     "pretty": "prettier --config ./prettierrc.json --write ./src",
-    "doc": "typedoc --entryPoints ./src/index.ts --tsconfig tsconfig.json --json ./doc.json"
+    "doc": "typedoc --entryPoints ./src/index.ts --tsconfig tsconfig.json --json ./doc.json --treatWarningsAsErrors"
   },
   "dependencies": {
     "@types/webxr": "^0.5.0",
@@ -45,7 +45,7 @@
   "devDependencies": {
     "@esm-bundle/chai": "^4.3.4-fix.0",
     "@types/node": "^18.11.9",
-    "@web/test-runner": "^0.13.31",
+    "@web/test-runner": "^0.15.0",
     "esbuild": "^0.11.14",
     "prettier": "^2.8.0",
     "typedoc": "^0.23.21",
