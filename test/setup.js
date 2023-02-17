@@ -1,7 +1,5 @@
 import { loadRuntime } from '../index.js';
 
-import * as WL from '../wonderland.js';
-
 /**
  * Creates a new engine:
  *     - Load emscripten code + wasm
@@ -11,9 +9,7 @@ import * as WL from '../wonderland.js';
  * thus call this function before and test, in order to clean any
  * previous engine instance running and create a new one.
  */
-export async function init() {
-    window.WL = WL;
-
+export async function init({ physx = false } = {}) {
     /*
      * Clear previous data.
      *
@@ -23,7 +19,7 @@ export async function init() {
     /* Needed to avoid race condition with previous engine that
      * would already be running a requestAnimationFrame.
      *
-     * TODO: remove this code when engine is built as a module. */
+     * @todo Remove this code when engine is built as a module. */
     if(window._wl_application_stop) { window._wl_application_stop(); }
 
     document.body.innerHTML = '';
@@ -35,11 +31,24 @@ export async function init() {
     canvas.style.height = '100%';
     document.body.append(canvas);
 
-    await loadRuntime('deploy/WonderlandRuntime', {simd: false, threads: false});
-
+    const engine = await loadRuntime('deploy/WonderlandRuntime', {simd: false, threads: false, loader: true, physx});
+    window.WL = engine;
     /* Needed to avoid race condition with previous engine that
      * would already be running a requestAnimationFrame.
      *
-     * TODO: remove this code when engine is built as a module. */
-    window._wl_application_start();
+     * @todo Remove this code when engine is built as a module. */
+    engine.start();
+}
+
+/**
+ * Resets the runtime, i.e.,
+ *     - Removes all loaded textures
+ *     - Clears the scene
+ *     - Clears component cache
+ *
+ * Should be called before running a test to prevent side effects.
+ */
+ export function reset() {
+    if(!WL) return;
+    WL._reset();
 }

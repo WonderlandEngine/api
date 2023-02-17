@@ -1,42 +1,4 @@
 /**
- * WL WebAssembly interface.
- */
-interface WebAssemblyWL {
-    /* Contains instantiated components.
-     * Stored as `any` until the wasm is fully decentralized from WL.
-     */
-    _components: any[];
-    _componentTypes: {new (...args: any[]): any}[];
-    _componentTypeIndices: Record<string, number>;
-    _materialDefinitions: Map<
-        string | symbol,
-        {
-            index: number;
-            type: {
-                type: number;
-                componentCount: number;
-                metaType: number;
-            };
-        }
-    >[];
-
-    UTF8ViewToString(beginPtr: number, endPtr: number): string;
-
-    reset(): void;
-    registerComponent(
-        name: string | {new: () => any},
-        params?: {[key: string]: any},
-        object?: any
-    ): number;
-}
-
-/**
- * WL WebAssembly exports.
- */
-
-declare const _WL: WebAssemblyWL;
-
-/**
  * Emsripten exports.
  */
 
@@ -44,7 +6,6 @@ interface Window {
     Module: {
         worker?: string;
         wasm: ArrayBuffer;
-        ready?: () => void;
     };
 }
 
@@ -55,12 +16,17 @@ declare const HEAPU32: Uint32Array;
 declare const HEAP32: Int32Array;
 declare const HEAPF32: Float32Array;
 
+declare function updateGlobalBufferAndViews(buffer: ArrayBuffer): void;
+
 declare function assert(condition: boolean, msg?: string): void;
 declare function _free(ptr: number): void;
 declare function _malloc(size: number): number;
 declare function lengthBytesUTF8(str: string): number;
 declare function stringToUTF8(str: string, outPtr: number, len: number): void;
 declare function UTF8ToString(ptr: number): string;
+declare function addFunction(func: Function, sig: string): number;
+
+declare function _wl_set_error_callback(cbPtr: number): void;
 
 declare function _wl_application_start(): void;
 declare function _wl_scene_get_active_views(ptr: number, count: number): number;
@@ -165,6 +131,19 @@ declare function _wl_physx_component_get_static(id: number): number;
 declare function _wl_physx_component_set_static(id: number, static: boolean): void;
 declare function _wl_physx_component_get_kinematic(id: number): number;
 declare function _wl_physx_component_set_kinematic(id: number, kinematic: boolean): void;
+declare function _wl_physx_component_get_gravity(id: number): number;
+declare function _wl_physx_component_set_gravity(id: number, gravity: boolean): void;
+declare function _wl_physx_component_get_simulate(id: number): number;
+declare function _wl_physx_component_set_simulate(id: number, simulation: boolean): void;
+declare function _wl_physx_component_get_allowSimulation(id: number): number;
+declare function _wl_physx_component_set_allowSimulation(
+    id: number,
+    allowSimulation: boolean
+): void;
+declare function _wl_physx_component_get_allowQuery(id: number): number;
+declare function _wl_physx_component_set_allowQuery(id: number, allowQuery: boolean): void;
+declare function _wl_physx_component_get_trigger(id: number): number;
+declare function _wl_physx_component_set_trigger(id: number, trigger: boolean): void;
 declare function _wl_physx_component_get_shape(id: number): number;
 declare function _wl_physx_component_set_shape(id: number, shape: number): void;
 declare function _wl_physx_component_get_shape_data(id: number): number;
@@ -231,6 +210,8 @@ declare function _wl_physx_component_addTorque(
 ): void;
 declare function _wl_physx_component_addCallback(id: number, otherId: number): number;
 declare function _wl_physx_component_removeCallback(id: number, callbackId: number): number;
+declare function _wl_physx_update(delta: number): void;
+declare function _wl_physx_update_global_pose(object: number, component: number): void;
 declare function _wl_physx_ray_cast(
     x: number,
     y: number,
@@ -242,6 +223,7 @@ declare function _wl_physx_ray_cast(
     maxDistance: number,
     outPtr: number
 ): void;
+declare function _wl_physx_set_collision_callback(callback: number): void;
 declare function _wl_mesh_create(
     indicesPtr: number,
     indicesSize: number,
@@ -280,6 +262,9 @@ declare function _wl_mesh_set_attribute_values(
 ): void;
 declare function _wl_material_create(ptr: number): number;
 declare function _wl_material_get_definition(id: number): number;
+declare function _wl_material_definition_get_count(id: number): number;
+declare function _wl_material_definition_get_param_name(id: number, index: number): number;
+declare function _wl_material_definition_get_param_type(id: number, index: number): number;
 declare function _wl_material_get_shader(id: number): number;
 declare function _wl_material_clone(id: number): number;
 declare function _wl_material_get_param_index(id: number, namePtr: number): number;

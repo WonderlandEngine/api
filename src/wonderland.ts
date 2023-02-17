@@ -2,6 +2,9 @@
  * Types
  */
 
+import {WonderlandEngine} from './engine';
+import {isString} from './utils/object.js';
+
 /**
  * Represents any object that can be used as an array for read / write.
  */
@@ -13,14 +16,14 @@ export interface NumberArray {
 /**
  * Type to describe a constructor.
  */
-export type Constructor<T> = {
-    new (...args: any): T;
+export type Constructor<T = any> = {
+    new (...args: any[]): T;
 };
 
 /**
  * Component constructor type.
  */
-export type ComponentConstructor<T extends Component> = Constructor<T> & {
+export type ComponentConstructor<T extends Component = Component> = Constructor<T> & {
     TypeName: string;
     Properties: Record<string, CustomParameter>;
 };
@@ -59,31 +62,13 @@ export interface ComponentProto {
      */
     onDeactivate?: () => void;
     /**
-     * Triggered when the component goes from activated to deactivated.
+     * Triggered when the component is removed from its object.
      * For more information, please have a look at {@link Component.onDestroy}.
+     *
+     * @since 0.9.0
      */
     onDestroy?: () => void;
 }
-
-/**
- * Callback triggered when the session starts.
- *
- * @param session The session that started
- */
-export type XrSessionStartCallback = (session: XRSession) => void;
-
-/**
- * Callback triggered for supported / unsupported session.
- *
- * @param type Type of session which is supported/not supported. Either `"vr"` or `"ar"`.
- * @param supported Whether given session type is supported.
- */
-export type XrSupportCallback = (type: string, supported: boolean) => void;
-
-/**
- * Callback triggered when the scene is loaded.
- */
-export type SceneLoadedCallback = () => void;
 
 export interface GLTFExtensions {
     root: Record<string, any>;
@@ -110,11 +95,10 @@ export type SceneAppendResult =
  */
 export type CollisionCallback = (type: CollisionEventType, other: PhysXComponent) => void;
 
+/** @todo Remove at 1.0.0 */
+declare const WL: WonderlandEngine;
+
 const MISALIGNED_MSG = 'Misaligned pointer: please report a bug';
-/* Component class instances per type to avoid GC */
-let ComponentCache: Record<string, Component[]> = {};
-/* Object class instances per type to avoid GC */
-let ObjectCache: $Object[] = [];
 /* Component properties to exclude when cloning, see addComponent() */
 const EXCLUDED_COMPONENT_PROPERTIES = ['_id', '_manager', 'type', '_type', 'active'];
 
@@ -212,22 +196,6 @@ export enum Type {
 }
 
 /**
- * Default component parameter value per type.
- */
-const _componentDefaults = new Array(6);
-_componentDefaults[Type.Bool] = false;
-_componentDefaults[Type.Int] = 0;
-_componentDefaults[Type.Float] = 0.0;
-_componentDefaults[Type.String] = '';
-_componentDefaults[Type.Enum] = 0;
-_componentDefaults[Type.Object] = null;
-_componentDefaults[Type.Mesh] = null;
-_componentDefaults[Type.Texture] = null;
-_componentDefaults[Type.Material] = null;
-_componentDefaults[Type.Animation] = null;
-_componentDefaults[Type.Skin] = null;
-
-/**
  * Custom component parameter.
  *
  * For more information about component properties, have a look
@@ -240,61 +208,6 @@ export interface CustomParameter {
     default?: any;
     /** Values for {@link Type} */
     values?: string[];
-}
-
-/**
- * Register a custom JavaScript component type.
- *
- * You can register a component directly using a class inheriting from {@link Component}:
- *
- * ```js
- * import { Component, Type } from '@wonderlandengine/api';
- * registerComponent(class MyComponent extends Component {
- *     static TypeName = 'my-component';
- *     static Properties = {
- *         myParam: {type: Type.Float, default: 42.0},
- *     };
- *     init: function() {},
- *     start: function() {},
- *     update: function(dt) {},
- *     onActivate: function() {},
- *     onDeactivate: function() {},
- *     onDestroy: function() {}
- * });
- * ```
- *
- * Or directly use an object literal as a prototype:
- *
- * ```js
- * registerComponent('my-new-type', {
- *    myParam: {type: Type.Float, default: 42.0},
- * }, {
- *    init: function() {},
- *    start: function() {},
- *    update: function(dt) {},
- *    onActivate: function() {},
- *    onDeactivate: function() {},
- *    onDestroy: function() {},
- * });
- * ```
- *
- * @param name Name of the component or a class extending {@link Component}.
- * @param params Dict of param names to {@link CustomParameter}.
- * @param object Object containing functions for the component type.
- */
-function registerComponent<T extends Component>(
-    name: string | ComponentConstructor<T>,
-    params?: {[key: string]: CustomParameter},
-    object?: ComponentProto
-) {
-    const typeIndex = _WL.registerComponent(name as string, params, object);
-    const ctor = _WL._componentTypes[typeIndex] as ComponentConstructor<Component>;
-    /* Set properties to the default value if needed. */
-    for(const name in ctor.Properties) {
-        const p = ctor.Properties[name];
-        p.default = p.default || _componentDefaults[p.type];
-        ctor.prototype[name] = p.default;
-    }
 }
 
 /**
@@ -510,16 +423,16 @@ export enum MeshAttribute {
     /** Color attribute, 4 floats, RGBA, range `0` to `1` */
     Color = 4,
 
-    /** Joint id attribute, 4 unsigned ints */
+    /** Joint id attribute, 8 unsigned ints */
     JointId = 5,
 
-    /** Joint weights attribute, 4 floats */
+    /** Joint weights attribute, 8 floats */
     JointWeight = 6,
 
-    /** Secondary joint id attribute, 4 unsigned ints */
+    /** @deprecated Deprecated, Secondary joint id attribute, should use JointId which has all 8 values instead */
     SecondaryJointId = 7,
 
-    /** Secondary joint weights attribute, 4 floats */
+    /** @deprecated Deprecated, Secondary joint weights attribute, should use JointWeight which has all 8 values instead */
     SecondaryJointWeight = 8,
 }
 
@@ -544,260 +457,6 @@ export enum MaterialParamType {
 }
 
 /**
- * Canvas element that Wonderland Engine renders to.
- */
-let canvas: HTMLCanvasElement | null = null;
-
-/**
- * Current WebXR session or {@link null} if no session active
- * @type {XRSession}
- */
-let xrSession: XRSession | null = null;
-/**
- * List of functions to call if a WebXR session is started
- */
-const onXRSessionStart: XrSessionStartCallback[] = [
-    (s) => {
-        xrSession = s;
-    },
-];
-/**
- * List of functions to call if a WebXR session ends
- */
-const onXRSessionEnd: (() => void)[] = [
-    () => {
-        xrSession = null;
-    },
-];
-
-/**
- * Whether AR is supported by the browser
- *
- * `undefined` until support could be determined
- */
-let arSupported: boolean | undefined = undefined;
-/**
- * Whether VR is supported by the browser
- *
- * `undefined` until support could be determined
- */
-let vrSupported: boolean | undefined = undefined;
-
-/**
- * List of functions to call once VR/AR support has been determined.
- *
- * Will be called once for AR and once for VR independent of support for each.
- * This allows you to notify the user of both cases: support and missing support of XR.
- * See the `supported` parameter of the callback, which indicates support.
- */
-let onXRSupported: XrSupportCallback[] = [
-    (type, supported) => {
-        if (type == 'ar') arSupported = supported;
-        if (type == 'vr') vrSupported = supported;
-    },
-];
-
-/**
- * List of functions to call once the main scene has been loaded.
- */
-let onSceneLoaded: SceneLoadedCallback[] = [];
-
-/**
- * Current main scene
- * @type {Scene}
- */
-let scene: Scene | undefined = undefined;
-/**
- * Physics, only available when physx is enabled in the runtime
- * @type {Physics}
- */
-let physics: Physics | undefined = undefined;
-
-/**
- * Image cache.
- *
- * @hidden
- */
-let _images: (HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | null)[] = [];
-
-/**
- * List of callbacks triggered when the scene is loaded.
- *
- * @hidden
- */
-let _sceneLoadedCallback: any[] = [];
-
-let _tempMem: number = null!;
-let _tempMemSize = 0;
-let _tempMemFloat: Float32Array = null!;
-let _tempMemInt: Int32Array = null!;
-let _tempMemUint32: Uint32Array = null!;
-let _tempMemUint16: Uint16Array = null!;
-let _tempMemUint8: Uint8Array = null!;
-
-/**
- * Initialize API resources, called by the engine automatically.
- *
- * @hidden
- */
-function init() {
-    scene = new Scene();
-    /* For internal testing, we provide compatibility with DOM-less execution */
-    canvas =
-        typeof document === 'undefined'
-            ? null
-            : (document.getElementById('canvas') as HTMLCanvasElement);
-
-    ComponentCache = {};
-    /* Object class instances per type to avoid GC */
-    ObjectCache = [];
-
-    /* Target memory for JS API functions that return arrays */
-    allocateTempMemory(1024);
-}
-
-/**
- * Reset the runtime state, including:
- *     - Component cache
- *     - Images
- *     - Callbacks
- *
- * **Note**: This is used internally.
- *
- * @hidden
- */
-function reset() {
-    ComponentCache = {};
-    ObjectCache.length = 0;
-    _images.length = 0;
-    _sceneLoadedCallback.length = 0;
-    _WL.reset();
-}
-
-/**
- * Initialize API resources, called by the engine automatically, if
- * PhysX is enabled.
- *
- * @hidden
- */
-function _initPhysics() {
-    physics = new Physics();
-}
-
-function allocateTempMemory(size: number) {
-    console.log('Allocating temp mem:', size);
-    _tempMemSize = size;
-    if (_tempMem) _free(_tempMem);
-    _tempMem = _malloc(_tempMemSize);
-    updateTempMemory();
-}
-
-function requireTempMem(size: number) {
-    if (_tempMemSize >= size) return;
-    /* Grow in 1kb increments */
-    allocateTempMemory(Math.ceil(size / 1024) * 1024);
-}
-
-function updateTempMemory() {
-    _tempMemFloat = new Float32Array(HEAP8.buffer, _tempMem, _tempMemSize >> 2);
-    _tempMemInt = new Int32Array(HEAP8.buffer, _tempMem, _tempMemSize >> 2);
-    _tempMemUint32 = new Uint32Array(HEAP8.buffer, _tempMem, _tempMemSize >> 2);
-    _tempMemUint16 = new Uint16Array(HEAP8.buffer, _tempMem, _tempMemSize >> 1);
-    _tempMemUint8 = new Uint8Array(HEAP8.buffer, _tempMem, _tempMemSize);
-}
-
-/**
- * Returns a uint8 buffer view on temporary WASM memory.
- *
- * **Note**: this method might allocate if the requested memory is bigger
- * than the current temporary memory allocated.
- *
- * @param count The number of **elements** required
- * @returns A {@link TypedArray} over the WASM memory
- */
-function getTempBufferU8(count: number): Uint8Array {
-    requireTempMem(count);
-    return _tempMemUint8;
-}
-
-/**
- * Returns a uint16 buffer view on temporary WASM memory.
- *
- * **Note**: this method might allocate if the requested memory is bigger
- * than the current temporary memory allocated.
- *
- * @param count The number of **elements** required
- * @returns A {@link TypedArray} over the WASM memory
- */
-function getTempBufferU16(count: number): Uint16Array {
-    requireTempMem(count * 2);
-    return _tempMemUint16;
-}
-
-/**
- * Returns a uint32 buffer view on temporary WASM memory.
- *
- * **Note**: this method might allocate if the requested memory is bigger
- * than the current temporary memory allocated.
- *
- * @param count The number of **elements** required.
- * @returns A {@link TypedArray} over the WASM memory.
- */
-function getTempBufferU32(count: number): Uint32Array {
-    requireTempMem(count * 4);
-    return _tempMemUint32;
-}
-
-/**
- * Returns a int32 buffer view on temporary WASM memory.
- *
- * **Note**: this method might allocate if the requested memory is bigger
- * than the current temporary memory allocated.
- *
- * @param count The number of **elements** required.
- * @returns A {@link TypedArray} over the WASM memory.
- */
-function getTempBufferI32(count: number): Int32Array {
-    requireTempMem(count * 4);
-    return _tempMemInt;
-}
-
-/**
- * Returns a float32 buffer view on temporary WASM memory.
- *
- * **Note**: this method might allocate if the requested memory is bigger
- * than the current temporary memory allocated.
- *
- * @param {number} count The number of **elements** required.
- * @returns A {@link TypedArray} over the WASM memory.
- */
-function getTempBufferF32(count: number): Float32Array {
-    requireTempMem(count * 4);
-    return _tempMemFloat;
-}
-
-export {
-    registerComponent,
-    canvas,
-    scene,
-    xrSession,
-    onXRSessionStart,
-    onXRSessionEnd,
-    onXRSupported,
-    onSceneLoaded,
-    arSupported,
-    vrSupported,
-    physics,
-    _images,
-    _sceneLoadedCallback,
-    textures,
-    init,
-    reset,
-    _initPhysics,
-    updateTempMemory,
-};
-
-/**
  * Constants.
  */
 
@@ -811,18 +470,22 @@ const UP_VECTOR = [0, 1, 0];
  */
 export class Scene {
     /** Called before rendering the scene */
-    public onPreRender: (() => void)[];
+    onPreRender: (() => void)[];
     /** Called after the scene has been rendered */
-    public onPostRender: (() => void)[];
+    onPostRender: (() => void)[];
+
+    /** Wonderland Engine instance. @hidden */
+    protected _engine: WonderlandEngine;
 
     /** Ray hit pointer in WASM heap. @hidden */
     private _rayHit: number;
     /** Ray hit. @hidden */
     private _hit: RayHit;
 
-    constructor() {
+    constructor(engine: WonderlandEngine) {
+        this._engine = engine;
         this._rayHit = _malloc(4 * (3 * 4 + 3 * 4 + 4 + 2) + 4);
-        this._hit = new RayHit(this._rayHit);
+        this._hit = new RayHit(this._engine, this._rayHit);
 
         /* Hidden property, list of functions to call after a
          * frame has been rendered */
@@ -834,12 +497,18 @@ export class Scene {
      * Currently active view components.
      */
     get activeViews(): ViewComponent[] {
-        const count = _wl_scene_get_active_views(_tempMem, 16);
+        const count = _wl_scene_get_active_views(this._engine.wasm._tempMem, 16);
 
         const views: ViewComponent[] = [];
         const viewTypeIndex = $Object._typeIndexFor('view');
         for (let i = 0; i < count; ++i) {
-            views.push(new ViewComponent(viewTypeIndex, _tempMemInt[i]));
+            views.push(
+                new ViewComponent(
+                    this._engine,
+                    viewTypeIndex,
+                    this._engine.wasm._tempMemInt[i]
+                )
+            );
         }
 
         return views;
@@ -868,13 +537,13 @@ export class Scene {
     /**
      * Add an object to the scene.
      *
-     * @param parent Parent object or {@link null}.
+     * @param parent Parent object or `null`.
      * @returns A newly created object.
      */
     addObject(parent: $Object | null): $Object {
         const parentId = parent ? parent.objectId : 0;
         const objectId = _wl_scene_add_object(parentId);
-        return _wrapObject(objectId);
+        return this._engine.wrapObject(objectId);
     }
 
     /**
@@ -890,10 +559,10 @@ export class Scene {
      * **Experimental:** This API might change in upcoming versions.
      *
      * @param count Number of objects to add.
-     * @param parent Parent object or {@link null}, default {@link null}.
+     * @param parent Parent object or `null`, default `null`.
      * @param componentCountHint Hint for how many components in total will
      *      be added to the created objects afterwards, default `0`.
-     * @returns {$Object[]} newly created objects
+     * @returns Newly created objects
      */
     addObjects(
         count: number,
@@ -901,16 +570,17 @@ export class Scene {
         componentCountHint: number
     ): $Object[] {
         const parentId = parent ? parent.objectId : 0;
-        requireTempMem(count * 2);
+        this._engine.wasm.requireTempMem(count * 2);
         const actualCount = _wl_scene_add_objects(
             parentId,
             count,
             componentCountHint || 0,
-            _tempMem,
-            _tempMemSize >> 1
+            this._engine.wasm._tempMem,
+            this._engine.wasm._tempMemSize >> 1
         );
-        const ids = _tempMemUint16.subarray(0, actualCount);
-        const objects = Array.from(ids, _wrapObject);
+        const ids = this._engine.wasm._tempMemUint16.subarray(0, actualCount);
+        const wrapper = this._engine.wrapObject.bind(this._engine);
+        const objects = Array.from(ids, wrapper);
         return objects;
     }
 
@@ -928,19 +598,19 @@ export class Scene {
      *
      * @param objectCount Number of objects to add.
      * @param componentCountPerType Amount of components to
-     *      allocate for {@link $Object.addComponent}, e.g. `{mesh: 100, collision: 200, "my-comp": 100}`.
+     *      allocate for {@link Object.addComponent}, e.g. `{mesh: 100, collision: 200, "my-comp": 100}`.
      * @since 0.8.10
      */
     reserveObjects(objectCount: number, componentCountPerType: {[key: string]: number}) {
         componentCountPerType = componentCountPerType || {};
         const jsManagerIndex = $Object._typeIndexFor('js');
-        let countsPerTypeIndex = _tempMemInt.subarray();
+        let countsPerTypeIndex = this._engine.wasm._tempMemInt.subarray();
         countsPerTypeIndex.fill(0);
         for (const e of Object.entries(componentCountPerType)) {
             const typeIndex = $Object._typeIndexFor(e[0]);
             countsPerTypeIndex[typeIndex < 0 ? jsManagerIndex : typeIndex] += e[1];
         }
-        _wl_scene_reserve_objects(objectCount, _tempMem);
+        _wl_scene_reserve_objects(objectCount, this._engine.wasm._tempMem);
     }
 
     /**
@@ -1024,11 +694,11 @@ export class Scene {
         const strLen = lengthBytesUTF8(filename) + 1;
         const ptr = _malloc(strLen);
         stringToUTF8(filename, ptr, strLen);
-        const callback = _sceneLoadedCallback.length;
+        const callback = this._engine.wasm._sceneLoadedCallback.length;
         const promise = new Promise((resolve: (r: SceneAppendResult) => void, reject) => {
-            _sceneLoadedCallback[callback] = {
+            this._engine.wasm._sceneLoadedCallback[callback] = {
                 success: (id: number, extensions: Record<string, any>) => {
-                    const root = _wrapObject(id);
+                    const root = this._engine.wrapObject(id);
                     resolve(extensions ? {root, extensions} : root);
                 },
                 error: () => reject(),
@@ -1061,7 +731,7 @@ export class Scene {
         const readString = () => {
             const strPtr = data[index++];
             const strLen = data[index++];
-            return _WL.UTF8ViewToString(strPtr, strPtr + strLen);
+            return this._engine.wasm.UTF8ViewToString(strPtr, strPtr + strLen);
         };
 
         const idMappingSize = data[index++];
@@ -1127,7 +797,7 @@ export class Component {
      *
      * This is used to register, add, and retrieve component of a given type.
      */
-    public static TypeName: string;
+    static TypeName: string;
 
     /**
      * Properties of this component class.
@@ -1165,20 +835,20 @@ export class Component {
      * myComponent.myFloat = -42.0;
      * ```
      */
-    public static Properties: Record<string, CustomParameter>;
+    static Properties: Record<string, CustomParameter>;
 
     /**
      * Triggered when the component is initialized by the runtime. This method
      * will only be triggered **once** after instantiation.
      */
-    public init?(): void;
+    init?(): void;
 
     /**
      * Triggered when the component is started by the runtime, or activated.
      *
      * You can use that to re-initialize the state of the component.
      */
-    public start?(): void;
+    start?(): void;
 
     /**
      * Triggered  **every frame** by the runtime.
@@ -1208,26 +878,35 @@ export class Component {
      *
      * @param delta Elapsed time between this frame and the previous one, in **seconds**.
      */
-    public update?(delta: number): void;
+    update?(delta: number): void;
 
     /**
      * Triggered when the component goes from an inactive state to an active state.
      *
-     * @note You can manually activate or deactivate a component using: {@link Component.activate}.
+     * @note You can manually activate or deactivate a component using: {@link Component.active:setter}.
      */
-    public onActivate?(): void;
+    onActivate?(): void;
 
     /**
      * Triggered when the component goes from an activated state to an inactive state.
      *
-     * @note You can manually activate or deactivate a component using: {@link Component.activate}.
+     * @note You can manually activate or deactivate a component using: {@link Component.active:setter}.
      */
-    public onDeactivate?(): void;
+    onDeactivate?(): void;
+
+    /**
+     * Triggered when the component is removed from its object.
+     *
+     * @note You can remove a component using: {@link Component.destroy}.
+     *
+     * @since 0.9.0
+     */
+    onDestroy?(): void;
 
     /** Manager index. @hidden */
-    protected readonly _manager: number;
+    readonly _manager: number;
     /** Instance index. @hidden */
-    protected readonly _id: number;
+    readonly _id: number;
 
     /**
      * Object containing this object.
@@ -1236,7 +915,7 @@ export class Component {
      *
      * @hidden
      */
-    private _object: $Object | null;
+    _object: $Object | null;
 
     /**
      * Component's typename, e.g., 'my-component'.
@@ -1245,21 +924,31 @@ export class Component {
      *
      * @hidden
      */
-    private _type: string | null;
+    _type: string | null;
+
+    /** Wonderland Engine instance */
+    protected readonly _engine: WonderlandEngine;
 
     /**
      * Create a new instance
      *
-     * @param managerIndex Index of the manager.
+     * @param engine The engine instance.
+     * @param manager Index of the manager.
      * @param id WASM component instance index.
      *
      * @hidden
      */
-    constructor(managerIndex: number = -1, id: number = -1) {
-        this._manager = managerIndex;
+    constructor(engine: WonderlandEngine, manager: number = -1, id: number = -1) {
+        this._engine = engine;
+        this._manager = manager;
         this._id = id;
         this._object = null;
         this._type = null;
+    }
+
+    /** Engine's instance. */
+    get engine(): WonderlandEngine {
+        return this._engine;
     }
 
     /** The name of this component's type */
@@ -1271,7 +960,7 @@ export class Component {
     get object(): $Object {
         if (!this._object) {
             const objectId = _wl_component_get_object(this._manager, this._id);
-            this._object = _wrapObject(objectId);
+            this._object = this._engine.wrapObject(objectId);
         }
         return this._object;
     }
@@ -1339,6 +1028,9 @@ export class Component {
  * Provides access to a native collision component instance.
  */
 export class CollisionComponent extends Component {
+    /** @override */
+    static TypeName = 'collision';
+
     /** Collision component collider */
     get collider(): Collider {
         return _wl_collision_component_get_collider(this._id);
@@ -1444,12 +1136,16 @@ export class CollisionComponent extends Component {
     queryOverlaps(): CollisionComponent[] {
         const count = _wl_collision_component_query_overlaps(
             this._id,
-            _tempMem,
-            _tempMemSize >> 1
+            this._engine.wasm._tempMem,
+            this._engine.wasm._tempMemSize >> 1
         );
         let overlaps = new Array(count);
         for (let i = 0; i < count; ++i) {
-            overlaps[i] = new CollisionComponent(this._manager, _tempMemUint16[i]);
+            overlaps[i] = new CollisionComponent(
+                this._engine,
+                this._manager,
+                this._engine.wasm._tempMemUint16[i]
+            );
         }
         return overlaps;
     }
@@ -1461,6 +1157,9 @@ export class CollisionComponent extends Component {
  * Provides access to a native text component instance
  */
 export class TextComponent extends Component {
+    /** @override */
+    static TypeName = 'text';
+
     /** Text component alignment. */
     get alignment(): Alignment {
         return _wl_text_component_get_horizontal_alignment(this._id);
@@ -1562,7 +1261,7 @@ export class TextComponent extends Component {
     /** Material used to render the text. */
     get material(): Material | null {
         const id = _wl_text_component_get_material(this._id);
-        return id > 0 ? new Material(id) : null;
+        return id > 0 ? new Material(this._engine, id) : null;
     }
 }
 
@@ -1572,6 +1271,9 @@ export class TextComponent extends Component {
  * Provides access to a native view component instance.
  */
 export class ViewComponent extends Component {
+    /** @override */
+    static TypeName = 'view';
+
     /** Projection matrix. */
     get projectionMatrix(): Float32Array {
         return new Float32Array(
@@ -1645,6 +1347,9 @@ export class ViewComponent extends Component {
  * Provides access to a native input component instance.
  */
 export class InputComponent extends Component {
+    /** @override */
+    static TypeName = 'input';
+
     /** Input component type */
     get inputType(): InputType {
         return _wl_input_component_get_type(this._id);
@@ -1664,6 +1369,7 @@ export class InputComponent extends Component {
      * if type {@link InputType.ControllerLeft} or {@link InputType.ControllerRight}.
      */
     get xrInputSource(): XRInputSource | null {
+        const xrSession = this._engine.xrSession;
         if (xrSession) {
             for (let inputSource of xrSession.inputSources) {
                 if (inputSource.handedness == this.handedness) {
@@ -1676,7 +1382,7 @@ export class InputComponent extends Component {
     }
 
     /**
-     * 'left', 'right' or {@link null} depending on the {@link InputComponent#inputType}.
+     * 'left', 'right' or `null` depending on the {@link InputComponent#inputType}.
      */
     get handedness(): 'left' | 'right' | null {
         const inputType = this.inputType;
@@ -1703,6 +1409,9 @@ export class InputComponent extends Component {
  * Provides access to a native light component instance.
  */
 export class LightComponent extends Component {
+    /** @override */
+    static TypeName = 'light';
+
     /** View on the light color */
     get color(): Float32Array {
         return new Float32Array(HEAPF32.buffer, _wl_light_component_get_color(this._id), 4);
@@ -1729,6 +1438,9 @@ export class LightComponent extends Component {
  * Provides access to a native animation component instance.
  */
 export class AnimationComponent extends Component {
+    /** @override */
+    static TypeName = 'animation';
+
     /**
      * Set animation to play.
      *
@@ -1787,7 +1499,14 @@ export class AnimationComponent extends Component {
         return _wl_animation_component_state(this._id);
     }
 
-    /** Play animation. */
+    /**
+     * Play animation.
+     *
+     * If the animation is currently paused, resumes from that position. If the
+     * animation is already playing, does nothing.
+     *
+     * To restart the animation, {@link AnimationComponent#stop} it first.
+     */
     play(): void {
         _wl_animation_component_play(this._id);
     }
@@ -1809,6 +1528,9 @@ export class AnimationComponent extends Component {
  * Provides access to a native mesh component instance.
  */
 export class MeshComponent extends Component {
+    /** @override */
+    static TypeName = 'mesh';
+
     /**
      * Set material to render the mesh with.
      *
@@ -1821,12 +1543,13 @@ export class MeshComponent extends Component {
     /** Material used to render the mesh. */
     get material(): Material | null {
         const id = _wl_mesh_component_get_material(this._id);
-        return id > 0 ? new Material(id) : null;
+        return id > 0 ? new Material(this._engine, id) : null;
     }
 
     /** Mesh rendered by this component. */
-    get mesh(): Mesh {
-        return new Mesh(_wl_mesh_component_get_mesh(this._id));
+    get mesh(): Mesh | null {
+        const id = _wl_mesh_component_get_mesh(this._id);
+        return id > 0 ? new Mesh(id) : null;
     }
 
     /**
@@ -1839,17 +1562,18 @@ export class MeshComponent extends Component {
     }
 
     /** Skin for this mesh component. */
-    get skin(): Skin {
-        return new Skin(_wl_mesh_component_get_skin(this._id));
+    get skin(): Skin | null {
+        const id = _wl_mesh_component_get_skin(this._id);
+        return id > 0 ? new Skin(id) : null;
     }
 
     /**
      * Set skin to transform this mesh component.
      *
-     * @param {?Skin} skin Skin to use for rendering skinned meshes.
+     * @param skin Skin to use for rendering skinned meshes.
      */
-    set skin(skin) {
-        _wl_mesh_component_set_skin(this._id, skin._index);
+    set skin(skin: Skin | null | undefined) {
+        _wl_mesh_component_set_skin(this._id, skin ? skin._index : 0);
     }
 }
 
@@ -1860,6 +1584,9 @@ export class MeshComponent extends Component {
  * Only available when using physx enabled runtime, see "Project Settings > Runtime".
  */
 class PhysXComponent extends Component {
+    /** @override */
+    static TypeName = 'physx';
+
     /**
      * Set whether this rigid body is static.
      *
@@ -1879,7 +1606,7 @@ class PhysXComponent extends Component {
      * static. If static property was set while the rigid body was
      * active, it will not take effect until the rigid body is set
      * inactive and active again. Until the component is set inactive,
-     * this getter will return whether the rigidbody is actually
+     * this getter will return whether the rigid body is actually
      * static.
      */
     get static(): boolean {
@@ -1900,6 +1627,92 @@ class PhysXComponent extends Component {
      */
     get kinematic(): boolean {
         return !!_wl_physx_component_get_kinematic(this._id);
+    }
+
+    /**
+     * Set whether this rigid body's gravity is enabled.
+     *
+     * @param b Whether the rigid body's gravity should be enabled.
+     */
+    set gravity(b: boolean) {
+        _wl_physx_component_set_gravity(this._id, b);
+    }
+
+    /**
+     * Whether this rigid body's gravity flag is enabled.
+     */
+    get gravity(): boolean {
+        return !!_wl_physx_component_get_gravity(this._id);
+    }
+
+    /**
+     * Set whether this rigid body's simulate flag is enabled.
+     *
+     * @param b Whether the rigid body's simulate flag should be enabled.
+     */
+    set simulate(b: boolean) {
+        _wl_physx_component_set_simulate(this._id, b);
+    }
+
+    /**
+     * Whether this rigid body's simulate flag is enabled.
+     */
+    get simulate(): boolean {
+        return !!_wl_physx_component_get_simulate(this._id);
+    }
+
+    /**
+     * Set whether this rigid body's allowSimulation flag is enabled.
+     * AllowSimulation and trigger can not be enabled at the same time.
+     * Enabling allowSimulation while trigger is enabled,
+     * will disable trigger.
+     *
+     * @param b Whether the rigid body's allowSimulation flag should be enabled.
+     */
+    set allowSimulation(b: boolean) {
+        _wl_physx_component_set_allowSimulation(this._id, b);
+    }
+
+    /**
+     * Whether this rigid body's allowSimulation flag is enabled.
+     */
+    get allowSimulation(): boolean {
+        return !!_wl_physx_component_get_allowSimulation(this._id);
+    }
+
+    /**
+     * Set whether this rigid body's allowQuery flag is enabled.
+     *
+     * @param b Whether the rigid body's allowQuery flag should be enabled.
+     */
+    set allowQuery(b: boolean) {
+        _wl_physx_component_set_allowQuery(this._id, b);
+    }
+
+    /**
+     * Whether this rigid body's allowQuery flag is enabled.
+     */
+    get allowQuery(): boolean {
+        return !!_wl_physx_component_get_allowQuery(this._id);
+    }
+
+    /**
+     * Set whether this rigid body's trigger flag is enabled.
+     * AllowSimulation and trigger can not be enabled at the same time.
+     * Enabling trigger while allowSimulation is enabled,
+     * will disable allowSimulation.
+     *
+     * @param b Whether the rigid body's trigger flag should be enabled.
+     */
+    set trigger(b: boolean) {
+        _wl_physx_component_set_trigger(this._id, b);
+    }
+
+    /**
+     * Whether this rigid body's trigger flag is enabled.
+     */
+    get trigger(): boolean {
+        return !!_wl_physx_component_get_trigger(this._id);
     }
 
     /**
@@ -2052,8 +1865,8 @@ class PhysXComponent extends Component {
 
     /** Linear velocity or `[0, 0, 0]` if the component is not active. */
     get linearVelocity(): Float32Array {
-        _wl_physx_component_get_linearVelocity(this._id, _tempMem);
-        return new Float32Array(HEAPF32.buffer, _tempMem, 3);
+        _wl_physx_component_get_linearVelocity(this._id, this._engine.wasm._tempMem);
+        return new Float32Array(HEAPF32.buffer, this._engine.wasm._tempMem, 3);
     }
 
     /**
@@ -2071,8 +1884,8 @@ class PhysXComponent extends Component {
 
     /** Angular velocity or `[0, 0, 0]` if the component is not active. */
     get angularVelocity(): Float32Array {
-        _wl_physx_component_get_angularVelocity(this._id, _tempMem);
-        return new Float32Array(HEAPF32.buffer, _tempMem, 3);
+        _wl_physx_component_get_angularVelocity(this._id, this._engine.wasm._tempMem);
+        return new Float32Array(HEAPF32.buffer, this._engine.wasm._tempMem, 3);
     }
 
     /**
@@ -2193,6 +2006,7 @@ class PhysXComponent extends Component {
      * @returns Id of the new callback for use with {@link PhysXComponent#removeCollisionCallback}.
      */
     onCollisionWith(otherComp: this, callback: CollisionCallback): number {
+        const physics = this._engine.physics;
         physics!._callbacks[this._id] = physics!._callbacks[this._id] || [];
         physics!._callbacks[this._id].push(callback);
         return _wl_physx_component_addCallback(this._id, otherComp._id || this._id);
@@ -2206,6 +2020,7 @@ class PhysXComponent extends Component {
      * @throws When the callback does not exist.
      */
     removeCollisionCallback(callbackId: number): void {
+        const physics = this._engine.physics;
         const r = _wl_physx_component_removeCallback(this._id, callbackId);
         /* r is the amount of object to remove from the end of the
          * callbacks array for this object */
@@ -2243,16 +2058,20 @@ export class Physics {
      *
      * **Note**: This is public to emulate a `friend` accessor.
      */
-    public _callbacks: Record<string, CollisionCallback[]>;
+    _callbacks: Record<string, CollisionCallback[]>;
+
+    /** Wonderland Engine instance */
+    protected readonly _engine: WonderlandEngine;
 
     /** Ray Hit */
     private _rayHit: number;
     /** Hit. */
     private _hit: RayHit;
 
-    constructor() {
+    constructor(engine: WonderlandEngine) {
+        this._engine = engine;
         this._rayHit = _malloc(4 * (3 * 4 + 3 * 4 + 4 + 2) + 4);
-        this._hit = new RayHit(this._rayHit);
+        this._hit = new RayHit(this._engine, this._rayHit);
         this._callbacks = {};
     }
 
@@ -2273,7 +2092,12 @@ export class Physics {
      * @note The returned {@link RayHit} object is owned by the Physics instance and
      *       will be reused with the next {@link Physics#rayCast} call.
      */
-    rayCast(o: Readonly<NumberArray>, d: Readonly<NumberArray>, group: number, maxDistance?: number): RayHit {
+    rayCast(
+        o: Readonly<NumberArray>,
+        d: Readonly<NumberArray>,
+        group: number,
+        maxDistance?: number
+    ): RayHit {
         if (typeof maxDistance === 'undefined') maxDistance = 100.0;
         _wl_physx_ray_cast(
             o[0],
@@ -2287,23 +2111,6 @@ export class Physics {
             this._rayHit
         );
         return this._hit;
-    }
-
-    /**
-     * Triggered by the WASM runtime.
-     *
-     * @hidden
-     */
-    private _callCollisionCallback(
-        a: number,
-        index: number,
-        type: number,
-        b: number
-    ): void {
-        physics!._callbacks[a][index](
-            type,
-            new PhysXComponent($Object._typeIndexFor('physx'), b)
-        );
     }
 }
 
@@ -2410,7 +2217,10 @@ export class Mesh {
      *
      * @hidden
      */
-    public _index: number;
+    _index: number;
+
+    /** Wonderland Engine instance. @hidden */
+    protected _engine: WonderlandEngine;
 
     /**
      * Create a new instance.
@@ -2418,7 +2228,8 @@ export class Mesh {
      * @param params Either a mesh index to wrap or set of parameters to create a new mesh.
      *    For more information, please have a look at the {@link MeshParameters} interface.
      */
-    constructor(params: Partial<MeshParameters> | number) {
+    constructor(params: Partial<MeshParameters> | number, engine: WonderlandEngine = WL) {
+        this._engine = engine;
         if (typeof params === 'object') {
             if (!params.vertexCount && params.vertexData) {
                 params.vertexCount = params.vertexData.length / Mesh.VERTEX_FLOAT_SIZE;
@@ -2482,11 +2293,11 @@ export class Mesh {
      * @deprecated Replaced with {@link attribute}
      */
     get vertexData(): Float32Array {
-        const ptr = _wl_mesh_get_vertexData(this._index, _tempMem);
+        const ptr = _wl_mesh_get_vertexData(this._index, this._engine.wasm._tempMem);
         return new Float32Array(
             HEAPF32.buffer,
             ptr,
-            Mesh.VERTEX_FLOAT_SIZE * HEAPU32[_tempMem / 4]
+            Mesh.VERTEX_FLOAT_SIZE * HEAPU32[this._engine.wasm._tempMem / 4]
         );
     }
 
@@ -2495,13 +2306,14 @@ export class Mesh {
         return _wl_mesh_get_vertexCount(this._index);
     }
 
-    /** Index data (read-only) or {@link null} if the mesh is not indexed. */
+    /** Index data (read-only) or `null` if the mesh is not indexed. */
     get indexData(): Uint8Array | Uint16Array | Uint32Array | null {
-        const ptr = _wl_mesh_get_indexData(this._index, _tempMem, _tempMem + 4);
+        const tempMem = this._engine.wasm._tempMem;
+        const ptr = _wl_mesh_get_indexData(this._index, tempMem, tempMem + 4);
         if (ptr === null) return null;
 
-        const indexCount = HEAPU32[_tempMem / 4];
-        const indexSize = HEAPU32[_tempMem / 4 + 1];
+        const indexCount = HEAPU32[tempMem / 4];
+        const indexSize = HEAPU32[tempMem / 4 + 1];
         switch (indexSize) {
             case MeshIndexType.UnsignedByte:
                 return new Uint8Array(HEAPU8.buffer, ptr, indexCount);
@@ -2513,7 +2325,16 @@ export class Mesh {
         return null;
     }
 
-    /** Updates the bounding sphere to match new vertex positions. */
+    /**
+     * Apply changes to {@link attribute | vertex attributes}.
+     *
+     * Uploads the updated vertex attributes to the GPU and updates the bounding
+     * sphere to match the new vertex positions.
+     *
+     * Since this is an expensive operation, call it only once you have performed
+     * all modifications on a mesh and avoid calling if you did not perform any
+     * modifications at all.
+     */
     update() {
         _wl_mesh_update(this._index);
     }
@@ -2541,12 +2362,15 @@ export class Mesh {
      *
      * @returns Bounding sphere, 0-2 sphere origin, 3 radius.
      */
-    getBoundingSphere<T extends NumberArray>(out: T | Float32Array = new Float32Array(4)): T | Float32Array {
-        _wl_mesh_get_boundingSphere(this._index, _tempMem);
-        out[0] = _tempMemFloat[0];
-        out[1] = _tempMemFloat[1];
-        out[2] = _tempMemFloat[2];
-        out[3] = _tempMemFloat[3];
+    getBoundingSphere<T extends NumberArray>(
+        out: T | Float32Array = new Float32Array(4)
+    ): T | Float32Array {
+        const tempMemFloat = this._engine.wasm._tempMemFloat;
+        _wl_mesh_get_boundingSphere(this._index, this._engine.wasm._tempMem);
+        out[0] = tempMemFloat[0];
+        out[1] = tempMemFloat[1];
+        out[2] = tempMemFloat[2];
+        out[3] = tempMemFloat[3];
         return out as T;
     }
 
@@ -2554,8 +2378,9 @@ export class Mesh {
      * Get an attribute accessor to retrieve or modify data of give attribute.
      *
      * @param attr Attribute to get access to
-     * @returns {?MeshAttributeAccessor} attr Attribute to get access to or `null`,
-     *      if mesh does not have this attribute.
+     * @returns Attribute to get access to or `null`, if mesh does not have this attribute.
+     *
+     * Call {@link update} for changes to vertex attributes to take effect.
      *
      * If there are no shaders in the scene that use `TextureCoordinate` for example,
      * no meshes will have the `TextureCoordinate` attribute.
@@ -2566,15 +2391,20 @@ export class Mesh {
     attribute(attr: MeshAttribute): MeshAttributeAccessor | null {
         if (typeof attr != 'number')
             throw new TypeError('Expected number, but got ' + typeof attr);
-        _wl_mesh_get_attribute(this._index, attr, _tempMem);
-        if (_tempMemUint32[0] == 255) return null;
 
-        const a = new MeshAttributeAccessor(attr);
-        a._attribute = _tempMemUint32[0];
-        a._offset = _tempMemUint32[1];
-        a._stride = _tempMemUint32[2];
-        a._formatSize = _tempMemUint32[3];
-        a._componentCount = _tempMemUint32[4];
+        const tempMemUint32 = this._engine.wasm._tempMemUint32;
+        _wl_mesh_get_attribute(this._index, attr, this._engine.wasm._tempMem);
+        if (tempMemUint32[0] == 255) return null;
+
+        const a = new MeshAttributeAccessor(this._engine, attr);
+        a._attribute = tempMemUint32[0];
+        a._offset = tempMemUint32[1];
+        a._stride = tempMemUint32[2];
+        a._formatSize = tempMemUint32[3];
+        a._componentCount = tempMemUint32[4];
+        const arraySize = tempMemUint32[5];
+        /* The WASM api returns `0` for a scalar value. We clamp it to 1 as we strictly use it as a multiplier for get/set operations */
+        a._arraySize = arraySize ? arraySize : 1;
         (a.length as number) = this.vertexCount;
         return a;
     }
@@ -2618,22 +2448,29 @@ export class Mesh {
  *       pos[0] *= 2.0f;
  *       positions.set(i, pos);
  *   }
+ *   // we're done modifying, tell the engine to move vertex data to the GPU
+ *   mesh.update();
  * ```
  */
 export class MeshAttributeAccessor {
     /** Attribute index. @hidden */
-    public _attribute: number = -1;
+    _attribute: number = -1;
     /** Attribute offset. @hidden */
-    public _offset: number = 0;
+    _offset: number = 0;
     /** Attribute stride. @hidden */
-    public _stride: number = 0;
+    _stride: number = 0;
     /** Format size native enum. @hidden */
-    public _formatSize: number = 0;
+    _formatSize: number = 0;
     /** Number of components per vertex. @hidden */
-    public _componentCount: number = 0;
+    _componentCount: number = 0;
+    /** Number of values per vertex. @hidden */
+    _arraySize: number = 1;
 
     /** Max number of elements. */
-    public readonly length: number = 0;
+    readonly length: number = 0;
+
+    /** Wonderland Engine instance. @hidden */
+    protected _engine: WonderlandEngine;
 
     /**
      * Class to instantiate an ArrayBuffer to get/set values.
@@ -2653,7 +2490,9 @@ export class MeshAttributeAccessor {
      *
      * @hidden
      */
-    constructor(type = MeshAttribute.Position) {
+    constructor(engine: WonderlandEngine, type = MeshAttribute.Position) {
+        this._engine = engine;
+        const wasm = this._engine.wasm;
         switch (type) {
             case MeshAttribute.Position:
             case MeshAttribute.Normal:
@@ -2661,15 +2500,17 @@ export class MeshAttributeAccessor {
             case MeshAttribute.Tangent:
             case MeshAttribute.Color:
             case MeshAttribute.JointWeight:
-            case MeshAttribute.SecondaryJointWeight:
                 this._bufferType = Float32Array;
-                this._tempBufferGetter = getTempBufferF32;
+                this._tempBufferGetter = wasm.getTempBufferF32.bind(wasm);
                 break;
             case MeshAttribute.JointId:
-            case MeshAttribute.SecondaryJointId:
                 this._bufferType = Uint16Array;
-                this._tempBufferGetter = getTempBufferU16;
+                this._tempBufferGetter = wasm.getTempBufferU16.bind(wasm);
                 break;
+            case MeshAttribute.SecondaryJointWeight:
+            case MeshAttribute.SecondaryJointId:
+                /* @todo: Completely remove occurrences of SecondaryJointId for 1.0 */
+                console.error(`Deprecated attribute accessor type: ${type}`);
             default:
                 throw new Error(`Invalid attribute accessor type: ${type}`);
         }
@@ -2696,7 +2537,7 @@ export class MeshAttributeAccessor {
      */
     createArray(count = 1): Float32Array | Uint16Array {
         count = count > this.length ? this.length : count;
-        return new this._bufferType(count * this._componentCount);
+        return new this._bufferType(count * this._componentCount * this._arraySize);
     }
 
     /** @overload */
@@ -2704,7 +2545,7 @@ export class MeshAttributeAccessor {
     /**
      * Get attribute element.
      *
-     * @param {number} index Index
+     * @param index Index
      * @param out Preallocated array to write into,
      *      to avoid garbage, otherwise will allocate a new TypedArray.
      *
@@ -2715,25 +2556,29 @@ export class MeshAttributeAccessor {
      *
      * @returns The `out` parameter
      */
-    get<T extends NumberArray>(index: number, out: T | Float32Array | Uint16Array = this.createArray()) {
+    get<T extends NumberArray>(
+        index: number,
+        out: T | Float32Array | Uint16Array = this.createArray()
+    ) {
         if (out.length % this._componentCount !== 0)
             throw new Error(
                 `out.length, ${out.length} is not a multiple of the attribute vector components, ${this._componentCount}`
             );
 
         const dest = this._tempBufferGetter(out.length);
-        const bytesPerElt = this._bufferType.BYTES_PER_ELEMENT;
-        const bytes = bytesPerElt * out.length;
-        const destFormatSize = this._componentCount * bytesPerElt;
+        const elementSize = this._bufferType.BYTES_PER_ELEMENT;
+        const destSize = elementSize * out.length;
+        const srcFormatSize = this._formatSize * this._arraySize;
+        const destFormatSize = this._componentCount * elementSize * this._arraySize;
 
         _wl_mesh_get_attribute_values(
             this._attribute,
-            this._formatSize,
+            srcFormatSize,
             this._offset + index * this._stride,
             this._stride,
             destFormatSize,
             dest.byteOffset,
-            bytes
+            destSize
         );
 
         for (let i = 0; i < out.length; ++i) out[i] = dest[i];
@@ -2759,9 +2604,10 @@ export class MeshAttributeAccessor {
                 `out.length, ${v.length} is not a multiple of the attribute vector components, ${this._componentCount}`
             );
 
-        const bytesPerElt = this._bufferType.BYTES_PER_ELEMENT;
-        const bytes = bytesPerElt * v.length;
-        const srcFormatSize = this._componentCount * bytesPerElt;
+        const elementSize = this._bufferType.BYTES_PER_ELEMENT;
+        const srcSize = elementSize * v.length;
+        const srcFormatSize = this._componentCount * elementSize * this._arraySize;
+        const destFormatSize = this._formatSize * this._arraySize;
 
         /* Unless we are already working with data from WASM heap, we
          * need to copy into temporary memory. */
@@ -2775,8 +2621,8 @@ export class MeshAttributeAccessor {
             this._attribute,
             srcFormatSize,
             (v as Float32Array).byteOffset,
-            bytes,
-            this._formatSize,
+            srcSize,
+            destFormatSize,
             this._offset + i * this._stride,
             this._stride
         );
@@ -2812,7 +2658,7 @@ export class Material {
      *
      * @hidden
      */
-    public _index: number;
+    _index: number;
 
     /**
      * Material definition index in the scene.
@@ -2821,64 +2667,72 @@ export class Material {
      */
     private _definition: number;
 
+    /** Wonderland Engine instance. @hidden */
+    protected _engine: WonderlandEngine;
+
     /**
      * Create a new Material.
      *
      * @note Creating material is expensive. Please use {@link Material#clone} to clone a material.
      * @note Do not use this constructor directly with an index, this is reserved for internal purposes.
      */
-    constructor(params: number | MaterialParameters) {
+    constructor(engine: WonderlandEngine, params: number | MaterialParameters) {
+        this._engine = engine;
+
         if (typeof params !== 'number') {
             if (!params?.pipeline) throw new Error("Missing parameter 'pipeline'");
             const pipeline = params.pipeline;
             const lengthBytes = lengthBytesUTF8(pipeline) + 1;
-            stringToUTF8(pipeline, _tempMem, lengthBytes);
-            this._index = _wl_material_create(_tempMem);
+            stringToUTF8(pipeline, this._engine.wasm._tempMem, lengthBytes);
+            this._index = _wl_material_create(this._engine.wasm._tempMem);
             if (this._index < 0) throw new Error(`No such pipeline '${pipeline}'`);
         } else {
             this._index = params;
         }
 
         this._definition = _wl_material_get_definition(this._index);
-        if (!_WL._materialDefinitions[this._definition])
+        if (!this._engine.wasm._materialDefinitions[this._definition])
             throw new Error(
                 `Material Definition ${this._definition} not found for material with index ${this._index}`
             );
 
         return new Proxy(this, {
             get(target, prop) {
-                const definition = _WL._materialDefinitions[target._definition];
+                const wasm = engine.wasm;
+                const definition = wasm._materialDefinitions[target._definition];
                 const param = definition.get(prop);
                 if (!param) return (target as {[key: string | symbol]: any})[prop];
-                if (_wl_material_get_param_value(target._index, param.index, _tempMem)) {
+                if (
+                    _wl_material_get_param_value(target._index, param.index, wasm._tempMem)
+                ) {
                     const type = param.type;
                     switch (type.type) {
                         case MaterialParamType.UnsignedInt:
                             return type.componentCount == 1
-                                ? _tempMemUint32[0]
+                                ? wasm._tempMemUint32[0]
                                 : new Uint32Array(
                                       HEAPU32.buffer,
-                                      _tempMem,
+                                      wasm._tempMem,
                                       type.componentCount
                                   );
                         case MaterialParamType.Int:
                             return type.componentCount == 1
-                                ? _tempMemInt[0]
+                                ? wasm._tempMemInt[0]
                                 : new Int32Array(
                                       HEAP32.buffer,
-                                      _tempMem,
+                                      wasm._tempMem,
                                       type.componentCount
                                   );
                         case MaterialParamType.Float:
                             return type.componentCount == 1
-                                ? _tempMemFloat[0]
+                                ? wasm._tempMemFloat[0]
                                 : new Float32Array(
                                       HEAPF32.buffer,
-                                      _tempMem,
+                                      wasm._tempMem,
                                       type.componentCount
                                   );
                         case MaterialParamType.Sampler:
-                            return new Texture(_tempMemInt[0]);
+                            return new Texture(wasm._tempMemInt[0]);
                         default:
                             throw new Error(
                                 `Invalid type ${type} on parameter ${param.index} for material ${target._index}`
@@ -2888,7 +2742,8 @@ export class Material {
             },
 
             set(target, prop, value) {
-                const definition = _WL._materialDefinitions[target._definition];
+                const wasm = engine.wasm;
+                const definition = wasm._materialDefinitions[target._definition];
                 const param = definition.get(prop);
                 if (!param) {
                     (target as {[key: string | symbol]: any})[prop] = value;
@@ -2905,15 +2760,16 @@ export class Material {
                     case MaterialParamType.Float:
                         let count = 1;
                         if (typeof value === 'number') {
-                            _tempMemFloat[0] = value;
+                            wasm._tempMemFloat[0] = value;
                         } else {
                             count = value.length;
-                            for (let i = 0; i < count; ++i) _tempMemFloat[i] = value[i];
+                            for (let i = 0; i < count; ++i)
+                                wasm._tempMemFloat[i] = value[i];
                         }
                         _wl_material_set_param_value_float(
                             target._index,
                             param.index,
-                            _tempMem,
+                            wasm._tempMem,
                             count
                         );
                         break;
@@ -2939,20 +2795,21 @@ export class Material {
      */
     clone(): Material | null {
         const id = _wl_material_clone(this._index);
-        return id > 0 ? new Material(id) : null;
+        return id > 0 ? new Material(this._engine, id) : null;
     }
 
     /**
      * Wrap a native material index.
      *
+     * @param engine Engine instance.
      * @param index The index.
-     * @returns Material instance or {@link null} if index <= 0.
+     * @returns Material instance or `null` if index <= 0.
      *
      * @deprecated Please use `new Material()` instead.
      */
-    static wrap(index: number): Material | null {
+    static wrap(engine: WonderlandEngine, index: number): Material | null {
         /** @todo: this propagate nullable in the entire codebase. Remove. */
-        return index > 0 ? new Material(index) : null;
+        return index > 0 ? new Material(engine, index) : null;
     }
 }
 
@@ -2963,6 +2820,9 @@ let tempCanvas: HTMLCanvasElement | null = null;
  * Wrapper around a native texture data.
  */
 export class Texture {
+    /** Wonderland Engine instance. @hidden */
+    protected _engine: WonderlandEngine;
+
     /** Index in the manager. @hidden */
     private _id: number = 0;
     /** HTML image index. @hidden */
@@ -2971,20 +2831,25 @@ export class Texture {
     /**
      * @param param HTML media element to create texture from or texture id to wrap.
      */
-    constructor(param: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | number) {
+    constructor(
+        param: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | number,
+        engine: WonderlandEngine = WL
+    ) {
+        this._engine = engine;
+        const wasm = engine.wasm;
         if (
             param instanceof HTMLImageElement ||
             param instanceof HTMLVideoElement ||
             param instanceof HTMLCanvasElement
         ) {
-            const index = _images.length;
-            _images.push(param);
+            const index = wasm._images.length;
+            wasm._images.push(param);
             this._imageIndex = index;
             this._id = _wl_renderer_addImage(index);
         } else {
             this._id = param;
         }
-        textures[this._id] = this;
+        this._engine.textures[this._id] = this;
     }
 
     /** Whether this texture is valid. */
@@ -3034,7 +2899,8 @@ export class Texture {
         /* Lazy initialize temp canvas */
         if (!tempCanvas) tempCanvas = document.createElement('canvas');
 
-        const img = _images[this._imageIndex];
+        const wasm = this._engine.wasm;
+        const img = wasm._images[this._imageIndex];
         if (!img) return;
 
         tempCanvas.width = w;
@@ -3042,7 +2908,7 @@ export class Texture {
         /* @todo: Would be smarted to cache context. */
         tempCanvas.getContext('2d')?.drawImage(img, x, y, w, h, 0, 0, w, h);
         /* @todo: Do not store temporary canvas. */
-        _images[this._imageIndex] = tempCanvas;
+        wasm._images[this._imageIndex] = tempCanvas;
 
         try {
             _wl_renderer_updateImage(
@@ -3052,7 +2918,7 @@ export class Texture {
                 ((img as HTMLVideoElement).videoHeight || img.height) - y - h
             );
         } finally {
-            _images[this._imageIndex] = img;
+            wasm._images[this._imageIndex] = img;
         }
     }
 
@@ -3072,56 +2938,18 @@ export class Texture {
     destroy(): void {
         _wl_texture_destroy(this._id);
         if (this._imageIndex) {
-            _images[this._imageIndex] = null;
+            this._engine.wasm._images[this._imageIndex] = null;
             this._imageIndex = undefined!;
         }
     }
 }
-
-/* @todo: the `textures` literal should have a better shape/api. */
-export type TextureCache = {
-    [key: string]: Texture | ((filename: string, crossOrigin?: string) => Promise<Texture>);
-    load: (filename: string, crossOrigin?: string) => Promise<Texture>;
-};
-
-/**
- * Access to the textures managed by Wonderland Engine.
- */
-const textures: TextureCache = {
-    /**
-     * Load an image from URL as {@link Texture}
-     * @param {string} filename URL to load from
-     * @param {string} crossOrigin Cross origin flag for the {@link Image} object
-     * @returns {Promise<Texture>} Loaded texture
-     */
-    load: function (filename: string, crossOrigin?: string): Promise<Texture> {
-        let image = new Image();
-        if (crossOrigin !== undefined) {
-            image.crossOrigin = crossOrigin;
-        }
-        image.src = filename;
-        return new Promise((resolve, reject) => {
-            image.onload = function () {
-                let texture = new Texture(image);
-                if (!texture.valid) {
-                    reject(
-                        'Failed to add image ' +
-                            image.src +
-                            ' to texture atlas. Probably incompatible format.'
-                    );
-                }
-                resolve(texture);
-            };
-        });
-    },
-};
 
 /**
  * Wrapper around a native animation.
  */
 export class Animation {
     /** Index of the mesh in the manager. @hidden */
-    public _index: number;
+    _index: number;
 
     /**
      * @param index Index in the manager
@@ -3193,19 +3021,25 @@ export class Animation {
  * components.
  *
  * Objects can be created and added to a scene through
- * {@link Scene#addObject} on the {@link scene|main scene}.
+ * {@link Scene#addObject} on the {@link WonderlandEngine.scene}.
  */
 class $Object {
     /**
      * Object index in the manager.
      */
-    public objectId: number; /* @todo: Make private */
+    objectId: number; /* @todo: Make private */
+
+    /** Wonderland Engine instance. @hidden */
+    protected _engine: WonderlandEngine;
 
     /**
      * @param o Object id to wrap
+     *
+     * For performance reasons, please use {@link WonderlandEngine.wrapObject}
      */
-    constructor(o: number) {
+    constructor(engine: WonderlandEngine, o: number) {
         this.objectId = o;
+        this._engine = engine;
     }
 
     /**
@@ -3231,11 +3065,11 @@ class $Object {
     }
 
     /**
-     * Parent of this object or {@link null} if parented to root.
+     * Parent of this object or `null` if parented to root.
      */
     get parent(): $Object | null {
         const p = _wl_object_parent(this.objectId);
-        return p == 0 ? null : _wrapObject(p);
+        return p === 0 ? null : this._engine.wrapObject(p);
     }
 
     /**
@@ -3245,13 +3079,14 @@ class $Object {
         const childrenCount = _wl_object_get_children_count(this.objectId);
         if (childrenCount === 0) return [];
 
-        requireTempMem(childrenCount * 2);
+        const wasm = this._engine.wasm;
+        wasm.requireTempMem(childrenCount * 2);
 
-        _wl_object_get_children(this.objectId, _tempMem, _tempMemSize >> 1);
+        _wl_object_get_children(this.objectId, wasm._tempMem, wasm._tempMemSize >> 1);
 
         const children = new Array(childrenCount);
         for (let i = 0; i < childrenCount; ++i) {
-            children[i] = _wrapObject(_tempMemUint16[i]);
+            children[i] = this._engine.wrapObject(wasm._tempMemUint16[i]);
         }
         return children;
     }
@@ -3261,7 +3096,7 @@ class $Object {
      *
      * @note Reparenting is not trivial and might have a noticeable performance impact.
      *
-     * @param newParent New parent or {@link null} to parent to root
+     * @param newParent New parent or `null` to parent to root
      */
     set parent(newParent: $Object | undefined | null) {
         _wl_object_set_parent(this.objectId, newParent == null ? 0 : newParent.objectId);
@@ -3344,8 +3179,8 @@ class $Object {
     /**
      * Rotate around given axis by given angle (radians) in local space.
      *
-     * @param {number[]} a Vector representing the rotation axis.
-     * @param {number} d Angle in radians.
+     * @param a Vector representing the rotation axis.
+     * @param d Angle in radians.
      *
      * @note If the object is translated the rotation will be around
      *     the parent. To rotate around the object origin, use
@@ -3440,10 +3275,11 @@ class $Object {
      * @return The `out` parameter.
      */
     getTranslationLocal<T extends NumberArray>(out: T): T {
-        _wl_object_get_translation_local(this.objectId, _tempMem);
-        out[0] = _tempMemFloat[0];
-        out[1] = _tempMemFloat[1];
-        out[2] = _tempMemFloat[2];
+        const wasm = this._engine.wasm;
+        _wl_object_get_translation_local(this.objectId, wasm._tempMem);
+        out[0] = wasm._tempMemFloat[0];
+        out[1] = wasm._tempMemFloat[1];
+        out[2] = wasm._tempMemFloat[2];
         return out;
     }
 
@@ -3457,10 +3293,11 @@ class $Object {
      * @return The `out` parameter.
      */
     getTranslationWorld<T extends NumberArray>(out: T): T {
-        _wl_object_get_translation_world(this.objectId, _tempMem);
-        out[0] = _tempMemFloat[0];
-        out[1] = _tempMemFloat[1];
-        out[2] = _tempMemFloat[2];
+        const wasm = this._engine.wasm;
+        _wl_object_get_translation_world(this.objectId, wasm._tempMem);
+        out[0] = wasm._tempMemFloat[0];
+        out[1] = wasm._tempMemFloat[1];
+        out[2] = wasm._tempMemFloat[2];
         return out;
     }
 
@@ -3515,7 +3352,7 @@ class $Object {
     }
 
     /**
-     * Set scaling local.
+     * Set local space scaling.
      *
      * @param s Global / world space transformation.
      *
@@ -3537,7 +3374,7 @@ class $Object {
     }
 
     /**
-     * Set scaling world.
+     * Set world space scaling.
      *
      * @param t Global / world space transformation.
      *
@@ -3567,7 +3404,7 @@ class $Object {
     }
 
     /**
-     * Set rotation local
+     * Set local space rotation.
      *
      * @param r Local space rotation
      *
@@ -3578,9 +3415,9 @@ class $Object {
     }
 
     /**
-     * Set rotation world.
+     * Set world space rotation.
      *
-     * @param {number} r Global / world space rotation.
+     * @param r Global / world space rotation.
      *
      * @since 0.8.7
      */
@@ -3590,6 +3427,9 @@ class $Object {
 
     /**
      * Compute the object's forward facing world space vector.
+     *
+     * The forward vector in object space is along the negative z-axis, i.e.,
+     * `[0, 0, -1]`.
      *
      * @param out Destination array/vector, expected to have at least 3 elements.
      * @return The `out` parameter.
@@ -3617,7 +3457,7 @@ class $Object {
     }
 
     /**
-     * Compute the object's right facing world space vector/
+     * Compute the object's right facing world space vector.
      *
      * @param out Destination array/vector, expected to have at least 3 elements.
      * @return The `out` parameter.
@@ -3633,43 +3473,44 @@ class $Object {
     /**
      * Transform a vector by this object's world transform.
      *
-     * @param out Out point
-     * @param v Point to transform, default `out`
+     * @param out Out vector
+     * @param v Vector to transform, default `out`
      * @return The `out` parameter.
      *
      * @since 0.8.7
      */
     transformVectorWorld<T extends NumberArray>(out: T, v?: NumberArray): T {
         v = v || out;
-        _tempMemFloat[0] = v[0];
-        _tempMemFloat[1] = v[1];
-        _tempMemFloat[2] = v[2];
-        _wl_object_transformVectorWorld(this.objectId, _tempMem);
-        out[0] = _tempMemFloat[0];
-        out[1] = _tempMemFloat[1];
-        out[2] = _tempMemFloat[2];
+        const wasm = this._engine.wasm;
+        wasm._tempMemFloat[0] = v[0];
+        wasm._tempMemFloat[1] = v[1];
+        wasm._tempMemFloat[2] = v[2];
+        _wl_object_transformVectorWorld(this.objectId, wasm._tempMem);
+        out[0] = wasm._tempMemFloat[0];
+        out[1] = wasm._tempMemFloat[1];
+        out[2] = wasm._tempMemFloat[2];
         return out;
     }
 
     /**
-     * Transform a vector by this object's local transform
+     * Transform a vector by this object's local transform.
      *
-     * @param out Out point
-     * @param v Point to transform, default `out`
+     * @param out Out vector
+     * @param v Vector to transform, default `out`
      * @return The `out` parameter.
      *
      * @since 0.8.7
      */
     transformVectorLocal<T extends NumberArray>(out: T, v?: NumberArray): T {
         v = v || out;
-        _tempMemFloat[0] = v[0];
-        _tempMemFloat[1] = v[1];
-        _tempMemFloat[2] = v[2];
-        _wl_object_transformVectorLocal(this.objectId, _tempMem);
-        out[0] = _tempMemFloat[0];
-        out[1] = _tempMemFloat[1];
-        out[2] = _tempMemFloat[2];
-
+        const wasm = this._engine.wasm;
+        wasm._tempMemFloat[0] = v[0];
+        wasm._tempMemFloat[1] = v[1];
+        wasm._tempMemFloat[2] = v[2];
+        _wl_object_transformVectorLocal(this.objectId, wasm._tempMem);
+        out[0] = wasm._tempMemFloat[0];
+        out[1] = wasm._tempMemFloat[1];
+        out[2] = wasm._tempMemFloat[2];
         return out;
     }
 
@@ -3684,13 +3525,14 @@ class $Object {
      */
     transformPointWorld<T extends NumberArray>(out: T, p?: NumberArray): T {
         p = p || out;
-        _tempMemFloat[0] = p[0];
-        _tempMemFloat[1] = p[1];
-        _tempMemFloat[2] = p[2];
-        _wl_object_transformPointWorld(this.objectId, _tempMem);
-        out[0] = _tempMemFloat[0];
-        out[1] = _tempMemFloat[1];
-        out[2] = _tempMemFloat[2];
+        const wasm = this._engine.wasm;
+        wasm._tempMemFloat[0] = p[0];
+        wasm._tempMemFloat[1] = p[1];
+        wasm._tempMemFloat[2] = p[2];
+        _wl_object_transformPointWorld(this.objectId, wasm._tempMem);
+        out[0] = wasm._tempMemFloat[0];
+        out[1] = wasm._tempMemFloat[1];
+        out[2] = wasm._tempMemFloat[2];
 
         return out;
     }
@@ -3706,13 +3548,14 @@ class $Object {
      */
     transformPointLocal<T extends NumberArray>(out: T, p?: NumberArray): T {
         p = p || out;
-        _tempMemFloat[0] = p[0];
-        _tempMemFloat[1] = p[1];
-        _tempMemFloat[2] = p[2];
-        _wl_object_transformPointLocal(this.objectId, _tempMem);
-        out[0] = _tempMemFloat[0];
-        out[1] = _tempMemFloat[1];
-        out[2] = _tempMemFloat[2];
+        const wasm = this._engine.wasm;
+        wasm._tempMemFloat[0] = p[0];
+        wasm._tempMemFloat[1] = p[1];
+        wasm._tempMemFloat[2] = p[2];
+        _wl_object_transformPointLocal(this.objectId, wasm._tempMem);
+        out[0] = wasm._tempMemFloat[0];
+        out[1] = wasm._tempMemFloat[1];
+        out[2] = wasm._tempMemFloat[2];
 
         return out;
     }
@@ -3720,49 +3563,45 @@ class $Object {
     /**
      * Transform a vector by this object's inverse world transform.
      *
-     * @param {number[]} out Out point.
-     * @param {number[]} v Vector to transform, default `out`.
+     * @param out Out vector.
+     * @param v Vector to transform, default `out`.
      * @return The `out` parameter.
      *
      * @since 0.8.7
      */
-    transformVectorInverseWorld<T extends NumberArray>(
-        out: T,
-        v?: NumberArray
-    ): T {
+    transformVectorInverseWorld<T extends NumberArray>(out: T, v?: NumberArray): T {
         v = v || out;
-        _tempMemFloat[0] = v[0];
-        _tempMemFloat[1] = v[1];
-        _tempMemFloat[2] = v[2];
-        _wl_object_transformVectorInverseWorld(this.objectId, _tempMem);
-        out[0] = _tempMemFloat[0];
-        out[1] = _tempMemFloat[1];
-        out[2] = _tempMemFloat[2];
+        const wasm = this._engine.wasm;
+        wasm._tempMemFloat[0] = v[0];
+        wasm._tempMemFloat[1] = v[1];
+        wasm._tempMemFloat[2] = v[2];
+        _wl_object_transformVectorInverseWorld(this.objectId, wasm._tempMem);
+        out[0] = wasm._tempMemFloat[0];
+        out[1] = wasm._tempMemFloat[1];
+        out[2] = wasm._tempMemFloat[2];
 
         return out;
     }
 
     /**
-     * Transform a point by this object's inverse local transform.
+     * Transform a vector by this object's inverse local transform.
      *
-     * @param out Out point
+     * @param out Out vector
      * @param v Vector to transform, default `out`
      * @return The `out` parameter.
      *
      * @since 0.8.7
      */
-    transformVectorInverseLocal<T extends NumberArray>(
-        out: T,
-        v?: NumberArray
-    ): T {
+    transformVectorInverseLocal<T extends NumberArray>(out: T, v?: NumberArray): T {
         v = v || out;
-        _tempMemFloat[0] = v[0];
-        _tempMemFloat[1] = v[1];
-        _tempMemFloat[2] = v[2];
-        _wl_object_transformVectorInverseLocal(this.objectId, _tempMem);
-        out[0] = _tempMemFloat[0];
-        out[1] = _tempMemFloat[1];
-        out[2] = _tempMemFloat[2];
+        const wasm = this._engine.wasm;
+        wasm._tempMemFloat[0] = v[0];
+        wasm._tempMemFloat[1] = v[1];
+        wasm._tempMemFloat[2] = v[2];
+        _wl_object_transformVectorInverseLocal(this.objectId, wasm._tempMem);
+        out[0] = wasm._tempMemFloat[0];
+        out[1] = wasm._tempMemFloat[1];
+        out[2] = wasm._tempMemFloat[2];
 
         return out;
     }
@@ -3771,23 +3610,21 @@ class $Object {
      * Transform a point by this object's inverse world transform.
      *
      * @param out Out point.
-     * @param v Point to transform, default `out`.
+     * @param p Point to transform, default `out`.
      * @return The `out` parameter.
      *
      * @since 0.8.7
      */
-    transformPointInverseWorld<T extends NumberArray>(
-        out: T,
-        p?: NumberArray
-    ): T {
+    transformPointInverseWorld<T extends NumberArray>(out: T, p?: NumberArray): T {
         p = p || out;
-        _tempMemFloat[0] = p[0];
-        _tempMemFloat[1] = p[1];
-        _tempMemFloat[2] = p[2];
-        _wl_object_transformPointInverseWorld(this.objectId, _tempMem);
-        out[0] = _tempMemFloat[0];
-        out[1] = _tempMemFloat[1];
-        out[2] = _tempMemFloat[2];
+        const wasm = this._engine.wasm;
+        wasm._tempMemFloat[0] = p[0];
+        wasm._tempMemFloat[1] = p[1];
+        wasm._tempMemFloat[2] = p[2];
+        _wl_object_transformPointInverseWorld(this.objectId, wasm._tempMem);
+        out[0] = wasm._tempMemFloat[0];
+        out[1] = wasm._tempMemFloat[1];
+        out[2] = wasm._tempMemFloat[2];
 
         return out;
     }
@@ -3801,16 +3638,15 @@ class $Object {
      *
      * @since 0.8.7
      */
-    transformPointInverseLocal<T extends NumberArray>(
-        out: T,
-        p?: NumberArray
-    ): T {
+    transformPointInverseLocal<T extends NumberArray>(out: T, p?: NumberArray): T {
         p = p || out;
-        _tempMemFloat.set(p);
-        _wl_object_transformPointInverseLocal(this.objectId, _tempMem);
-        out[0] = _tempMemFloat[0];
-        out[1] = _tempMemFloat[1];
-        out[2] = _tempMemFloat[2];
+
+        const wasm = this._engine.wasm;
+        wasm._tempMemFloat.set(p);
+        _wl_object_transformPointInverseLocal(this.objectId, wasm._tempMem);
+        out[0] = wasm._tempMemFloat[0];
+        out[1] = wasm._tempMemFloat[1];
+        out[2] = wasm._tempMemFloat[2];
 
         return out;
     }
@@ -3826,26 +3662,28 @@ class $Object {
      */
     toWorldSpaceTransform<T extends NumberArray>(out: T, q?: NumberArray): T {
         q = q || out;
-        _tempMemFloat.set(q);
-        _wl_object_toWorldSpaceTransform(this.objectId, _tempMem);
-        out[0] = _tempMemFloat[0];
-        out[1] = _tempMemFloat[1];
-        out[2] = _tempMemFloat[2];
-        out[3] = _tempMemFloat[3];
 
-        out[4] = _tempMemFloat[4];
-        out[5] = _tempMemFloat[5];
-        out[6] = _tempMemFloat[6];
-        out[7] = _tempMemFloat[7];
+        const wasm = this._engine.wasm;
+        wasm._tempMemFloat.set(q);
+        _wl_object_toWorldSpaceTransform(this.objectId, wasm._tempMem);
+        out[0] = wasm._tempMemFloat[0];
+        out[1] = wasm._tempMemFloat[1];
+        out[2] = wasm._tempMemFloat[2];
+        out[3] = wasm._tempMemFloat[3];
+
+        out[4] = wasm._tempMemFloat[4];
+        out[5] = wasm._tempMemFloat[5];
+        out[6] = wasm._tempMemFloat[6];
+        out[7] = wasm._tempMemFloat[7];
 
         return out;
     }
 
     /**
-     * Transform a world space dual quaternion into local space
+     * Transform a world space dual quaternion into local space.
      *
-     * @param {number[]} out Out transformation
-     * @param {number[]} q World space transformation, default `out`
+     * @param out Out transformation
+     * @param q World space transformation, default `out`
      * @return The `out` parameter.
      *
      * @since 0.8.7
@@ -3872,7 +3710,7 @@ class $Object {
     }
 
     /**
-     * Transform a world space dual quaternion into object space
+     * Transform a world space dual quaternion into object space.
      *
      * @param out Out transformation.
      * @param q World space transformation, default `out`
@@ -3882,17 +3720,19 @@ class $Object {
      */
     toObjectSpaceTransform<T extends NumberArray>(out: T, q?: NumberArray): T {
         q = q || out;
-        _tempMemFloat.set(q);
-        _wl_object_toObjectSpaceTransform(this.objectId, _tempMem);
-        out[0] = _tempMemFloat[0];
-        out[1] = _tempMemFloat[1];
-        out[2] = _tempMemFloat[2];
-        out[3] = _tempMemFloat[3];
 
-        out[4] = _tempMemFloat[4];
-        out[5] = _tempMemFloat[5];
-        out[6] = _tempMemFloat[6];
-        out[7] = _tempMemFloat[7];
+        const wasm = this._engine.wasm;
+        wasm._tempMemFloat.set(q);
+        _wl_object_toObjectSpaceTransform(this.objectId, wasm._tempMem);
+        out[0] = wasm._tempMemFloat[0];
+        out[1] = wasm._tempMemFloat[1];
+        out[2] = wasm._tempMemFloat[2];
+        out[3] = wasm._tempMemFloat[3];
+
+        out[4] = wasm._tempMemFloat[4];
+        out[5] = wasm._tempMemFloat[5];
+        out[6] = wasm._tempMemFloat[6];
+        out[7] = wasm._tempMemFloat[7];
 
         return out;
     }
@@ -3900,11 +3740,16 @@ class $Object {
     /**
      * Turn towards / look at target.
      *
-     * @param v Target vector to turn towards.
-     * @param up Up vector of this object, default `[0, 1, 0]`.
+     * Rotates the object so that its forward vector faces towards the target
+     * position. The `up` vector acts as a hint to uniquely orient the object's
+     * up direction. When orienting a view component, the projected `up` vector
+     * faces upwards on the viewing plane.
+     *
+     * @param p Target position to turn towards, in world space.
+     * @param up Up vector to align object with, in world space. Default is `[0, 1, 0]`.
      */
-    lookAt(v: NumberArray, up: NumberArray = UP_VECTOR): void {
-        _wl_object_lookAt(this.objectId, v[0], v[1], v[2], up[0], up[1], up[2]);
+    lookAt(p: NumberArray, up: NumberArray = UP_VECTOR): void {
+        _wl_object_lookAt(this.objectId, p[0], p[1], p[2], up[0], up[1], up[2]);
     }
 
     /** Destroy the object with all of its components and remove it from the scene */
@@ -3961,7 +3806,10 @@ class $Object {
     /** @overload */
     getComponent(typeOrClass: string, index?: number): Component | null;
     /** @overload */
-    getComponent<T extends Component>(typeOrClass: ComponentConstructor<T>, index?: number): T | null;
+    getComponent<T extends Component>(
+        typeOrClass: ComponentConstructor<T>,
+        index?: number
+    ): T | null;
 
     /**
      * Get a component attached to this object.
@@ -3970,15 +3818,15 @@ class $Object {
      *     In this case, the method will use the `class.TypeName` field to find the component.
      * @param index=0 Index for component of given type. This can be used to access specific
      *      components if the object has multiple components of the same type.
-     * @returns The component or {@link null} if there is no such component on this object
+     * @returns The component or `null` if there is no such component on this object
      */
-    getComponent<T extends Component>(
-        typeOrClass: string | ComponentConstructor<T>,
+    getComponent(
+        typeOrClass: string | ComponentConstructor,
         index?: number
-    ): T | null {
+    ): Component | null {
         const type = isString(typeOrClass)
             ? (typeOrClass as string)
-            : (typeOrClass as ComponentConstructor<T>).TypeName;
+            : (typeOrClass as ComponentConstructor).TypeName;
         const lengthBytes = lengthBytesUTF8(type) + 1;
         const mem = _malloc(lengthBytes);
         stringToUTF8(type, mem, lengthBytes);
@@ -3987,21 +3835,21 @@ class $Object {
 
         if (componentType < 0) {
             /* Not a native component, try js: */
-            const typeIndex = _WL._componentTypeIndices[type];
+            const typeIndex = this._engine.wasm._componentTypeIndices[type];
             const jsIndex = _wl_get_js_component_index(
                 this.objectId,
                 typeIndex,
                 index || 0
             );
-            return jsIndex < 0 ? null : _WL._components[jsIndex];
+            return jsIndex < 0 ? null : this._engine.wasm._components[jsIndex];
         }
 
         const componentId = _wl_get_component_id(this.objectId, componentType, index || 0);
-        return _wrapComponent(type, componentType, componentId);
+        return this._engine._wrapComponent(type, componentType, componentId);
     }
 
     /**
-     * @param typeOrClass Type name, pass a falsey value (`undefined` or {@link null}) to retrieve all.
+     * @param typeOrClass Type name, pass a falsey value (`undefined` or `null`) to retrieve all.
      *     It's also possible to give a class definition. In this case, the method will use the `class.TypeName` field to
      *     find the components.
      * @returns All components of given type attached to this object.
@@ -4021,39 +3869,73 @@ class $Object {
                 : (typeOrClass as ComponentConstructor<T>).TypeName;
             componentType = $Object._typeIndexFor(type);
         }
-        const components = [];
-        const maxComps = Math.floor((_tempMemSize / 3) * 2);
+
+        const wasm = this._engine.wasm;
+
+        const components: Component[] = [];
+        const maxComps = Math.floor((wasm._tempMemSize / 3) * 2);
         const componentsCount = _wl_object_get_components(
             this.objectId,
-            _tempMem,
+            wasm._tempMem,
             maxComps
         );
         const offset = 2 * componentsCount;
-        _wl_object_get_component_types(this.objectId, _tempMem + offset, maxComps);
+        _wl_object_get_component_types(this.objectId, wasm._tempMem + offset, maxComps);
 
         const jsManagerIndex = $Object._typeIndexFor('js');
         for (let i = 0; i < componentsCount; ++i) {
-            const t = _tempMemUint8[i + offset];
-            const componentId = _tempMemUint16[i];
+            const t = wasm._tempMemUint8[i + offset];
+            const componentId = wasm._tempMemUint16[i];
             /* Handle JS types separately */
             if (t == jsManagerIndex) {
-                const comp =
-                    _WL._components[_wl_get_js_component_index_for_id(componentId)];
+                const typeIndex = _wl_get_js_component_index_for_id(componentId);
+                const comp = wasm._components[typeIndex];
                 if (componentType === null || comp.type == type) components.push(comp);
                 continue;
             }
 
             if (componentType === null) {
                 const managerName = $Object._typeNameFor(t);
-                components.push(_wrapComponent(managerName, t, componentId));
+                components.push(this._engine._wrapComponent(managerName, t, componentId)!);
             } else if (t == componentType) {
                 /* Optimized manager name retrieval, already have type */
-                components.push(_wrapComponent(type as string, componentType, componentId));
+                components.push(
+                    this._engine._wrapComponent(type as string, componentType, componentId)!
+                );
             }
         }
-        return components;
+        return components as T[];
     }
 
+    /* `addComponent` overloads for native components. */
+
+    /** @overload */
+    addComponent(
+        type: 'collision',
+        params?: Record<string, any>
+    ): CollisionComponent | null;
+    /** @overload */
+    addComponent(type: 'text', params?: Record<string, any>): TextComponent | null;
+    /** @overload */
+    addComponent(type: 'view', params?: Record<string, any>): ViewComponent | null;
+    /** @overload */
+    addComponent(type: 'mesh', params?: Record<string, any>): MeshComponent | null;
+    /** @overload */
+    addComponent(type: 'input', params?: Record<string, any>): InputComponent | null;
+    /** @overload */
+    addComponent(type: 'light', params?: Record<string, any>): LightComponent | null;
+    /** @overload */
+    addComponent(
+        type: 'animation',
+        params?: Record<string, any>
+    ): AnimationComponent | null;
+    /** @overload */
+    addComponent(type: 'physx', params?: Record<string, any>): PhysXComponent | null;
+    /** @overload */
+    addComponent<T extends Component>(
+        typeClass: ComponentConstructor<T>,
+        params?: Record<string, any>
+    ): T | null;
     /**
      * Add component of given type to the object.
      *
@@ -4076,33 +3958,35 @@ class $Object {
      * @param params Parameters to initialize properties of the new component,
      *      can be another component to copy properties from.
      *
-     * @returns {?(Component|CollisionComponent|TextComponent|ViewComponent|MeshComponent|InputComponent|LightComponent|AnimationComponent|PhysXComponent)} The component or {@link null} if the type was not found
+     * @returns The component or `null` if the type was not found
      */
-    addComponent<T extends Component>(
-        typeOrClass: ComponentConstructor<T> | string,
-        params: Record<string, any>
-    ) {
+    addComponent(
+        typeOrClass: ComponentConstructor | string,
+        params?: Record<string, any>
+    ): Component | null {
+        const wasm = this._engine.wasm;
+
         const type = isString(typeOrClass)
             ? (typeOrClass as string)
-            : (typeOrClass as ComponentConstructor<T>).TypeName;
+            : (typeOrClass as ComponentConstructor).TypeName;
         const componentType = $Object._typeIndexFor(type);
-        let component = null;
+        let component: Component = null!;
         let componentIndex = null;
         if (componentType < 0) {
             /* JavaScript component */
-            if (!(type in _WL._componentTypeIndices)) {
+            if (!(type in wasm._componentTypeIndices)) {
                 throw new TypeError("Unknown component type '" + type + "'");
             }
             const componentId = _wl_object_add_js_component(
                 this.objectId,
-                _WL._componentTypeIndices[type]
+                wasm._componentTypeIndices[type]
             );
             componentIndex = _wl_get_js_component_index_for_id(componentId);
-            component = _WL._components[componentIndex];
+            component = wasm._components[componentIndex];
         } else {
             /* native component */
             const componentId = _wl_object_add_component(this.objectId, componentType);
-            component = _wrapComponent(type, componentType, componentId);
+            component = this._engine._wrapComponent(type, componentType, componentId)!;
         }
 
         if (params !== undefined) {
@@ -4110,7 +3994,7 @@ class $Object {
                 /* active will be set later, other properties should be skipped if
                  * passing a component for cloning. */
                 if (EXCLUDED_COMPONENT_PROPERTIES.includes(key)) continue;
-                component[key] = params[key];
+                (component as Record<string, any>)[key] = params[key];
             }
         }
 
@@ -4184,7 +4068,7 @@ export class Skin {
      * Index of the skin in the manager.
      * @hidden
      */
-    public _index: number;
+    _index: number;
 
     constructor(index: number) {
         this._index = index;
@@ -4243,14 +4127,18 @@ export {$Object as Object};
  * @note this class wraps internal engine data and should only be created internally.
  */
 export class RayHit {
+    /** Wonderland Engine instance. @hidden */
+    protected _engine: WonderlandEngine;
+
     /** Pointer to the memory heap. */
     private _ptr: number;
 
     /**
      * @param ptr Pointer to the ray hits memory.
      */
-    constructor(ptr: number) {
+    constructor(engine: WonderlandEngine, ptr: number) {
         assert((ptr & 3) == 0, MISALIGNED_MSG);
+        this._engine = engine;
         this._ptr = ptr;
     }
 
@@ -4289,10 +4177,10 @@ export class RayHit {
         let p = this._ptr + (48 * 2 + 16);
         let objIds = new Uint16Array(HEAPU16.buffer, p, this.hitCount);
         return [
-            objIds[0] <= 0 ? null : _wrapObject(objIds[0]),
-            objIds[1] <= 0 ? null : _wrapObject(objIds[1]),
-            objIds[2] <= 0 ? null : _wrapObject(objIds[2]),
-            objIds[3] <= 0 ? null : _wrapObject(objIds[3]),
+            objIds[0] <= 0 ? null : this._engine.wrapObject(objIds[0]),
+            objIds[1] <= 0 ? null : this._engine.wrapObject(objIds[1]),
+            objIds[2] <= 0 ? null : this._engine.wrapObject(objIds[2]),
+            objIds[3] <= 0 ? null : this._engine.wrapObject(objIds[3]),
         ];
     }
 
@@ -4326,105 +4214,32 @@ class math {
         b: Readonly<NumberArray>,
         c: Readonly<NumberArray>,
         d: Readonly<NumberArray>,
-        f: number
+        f: number,
+        engine: WonderlandEngine = WL
     ) {
-        _tempMemFloat.subarray(0).set(a);
-        _tempMemFloat.subarray(4).set(b);
-        _tempMemFloat.subarray(8).set(c);
-        _tempMemFloat.subarray(12).set(d);
+        const wasm = engine.wasm;
+        wasm._tempMemFloat.subarray(0).set(a);
+        wasm._tempMemFloat.subarray(4).set(b);
+        wasm._tempMemFloat.subarray(8).set(c);
+        wasm._tempMemFloat.subarray(12).set(d);
 
         const isQuat = a.length == 4;
 
         _wl_math_cubicHermite(
-            _tempMem + 4 * 16,
-            _tempMem + 4 * 0,
-            _tempMem + 4 * 4,
-            _tempMem + 4 * 8,
-            _tempMem + 4 * 12,
+            wasm._tempMem + 4 * 16,
+            wasm._tempMem + 4 * 0,
+            wasm._tempMem + 4 * 4,
+            wasm._tempMem + 4 * 8,
+            wasm._tempMem + 4 * 12,
             f,
             isQuat
         );
-        out[0] = _tempMemFloat[16];
-        out[1] = _tempMemFloat[17];
-        out[2] = _tempMemFloat[18];
-        if (isQuat) out[3] = _tempMemFloat[19];
+        out[0] = wasm._tempMemFloat[16];
+        out[1] = wasm._tempMemFloat[17];
+        out[2] = wasm._tempMemFloat[18];
+        if (isQuat) out[3] = wasm._tempMemFloat[19];
         return out;
     }
 }
 
 export {math};
-
-/**
- * Check if a given value is a native string or a `String` instance.
- *
- * @param value The value to check.
- * @returns `true` if the `value` has type string literal or `String`, `false` otherwise.
- */
-export function isString(value: unknown) {
-    return value && (typeof value === 'string' || value.constructor === String);
-}
-
-/**
- * @param objectId Object ID to wrap
- *
- * @returns Wrapped object
- * @note This is used for internal purposes
- *
- * @hidden
- */
-export function _wrapObject(objectId: number): $Object {
-    const o = ObjectCache[objectId] || (ObjectCache[objectId] = new $Object(objectId));
-    o.objectId = objectId;
-    return o;
-}
-
-/**
- * Retrieves a component instance if it exists, or create and cache
- * a new one.
- *
- * @param type component type name
- * @param {number} componentType Component manager index
- * @param {number} componentId Component id in the manager
- *
- * @returns JavaScript instance wrapping the native component
- *
- * @hidden
- */
-export function _wrapComponent(type: string, componentType: number, componentId: number) {
-    if (componentId < 0) return null;
-
-    /* @todo: extremely slow in JS to do that... Better to use a Map or allocate the array. */
-    const c = ComponentCache[componentType] || (ComponentCache[componentType] = []);
-    if (c[componentId]) {
-        return c[componentId];
-    }
-
-    let component;
-    if (type == 'collision') {
-        component = new CollisionComponent(componentType, componentId);
-    } else if (type == 'text') {
-        component = new TextComponent(componentType, componentId);
-    } else if (type == 'view') {
-        component = new ViewComponent(componentType, componentId);
-    } else if (type == 'mesh') {
-        component = new MeshComponent(componentType, componentId);
-    } else if (type == 'input') {
-        component = new InputComponent(componentType, componentId);
-    } else if (type == 'light') {
-        component = new LightComponent(componentType, componentId);
-    } else if (type == 'animation') {
-        component = new AnimationComponent(componentType, componentId);
-    } else if (type == 'physx') {
-        component = new PhysXComponent(componentType, componentId);
-    } else {
-        const typeIndex = _WL._componentTypeIndices[type];
-        const constructor = _WL._componentTypes[typeIndex];
-        component = new constructor();
-    }
-    /* Sets the manager and identifier from the outside, to
-     * simplify the user's constructor. */
-    component._manager = componentType;
-    component._id = componentId;
-    c[componentId] = component;
-    return component;
-}
