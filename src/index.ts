@@ -1,6 +1,12 @@
 import {simd, threads} from 'wasm-feature-detect';
+import {WonderlandEngine} from './engine.js';
+import {WASM} from './wasm.js';
+
+import * as API from './wonderland.js';
 
 export * from './wonderland.js';
+export * from './engine.js';
+export * from './wasm.js';
 
 /**
  * Finds whether simd & threading are supported or not.
@@ -50,6 +56,18 @@ export interface LoadRuntimeOptions {
      * If `undefined`, performs browser feature detection to check whether threads are supported or not.
      */
     threads: boolean;
+    /**
+     * If `true`, forces the runtime to load a physx-compatible version.
+     *
+     * **Note**: If your scene uses physx, you **must** enable this option.
+     */
+    physx: boolean;
+    /**
+     * If `true`, forces the runtime to load a loader-compatible version.
+     *
+     * This option allows to load gltf data at runtime.
+     */
+    loader: boolean;
 }
 
 /**
@@ -63,25 +81,44 @@ export interface LoadRuntimeOptions {
 export async function loadRuntime(
     runtime: string,
     options: Partial<LoadRuntimeOptions> = {}
-): Promise<void> {
+): Promise<WonderlandEngine> {
     const {simdSupported, threadsSupported} = await detectFeatures();
-    const {simd = simdSupported, threads = threadsSupported} = options;
+    const {
+        simd = simdSupported,
+        threads = threadsSupported,
+        physx = false,
+        loader = false,
+    } = options;
 
-    const filename = `${runtime}${simd ? '-simd' : ''}${threads ? '-threads' : ''}`;
+    const filename = `${runtime}${loader ? '-loader' : ''}${physx ? '-physx' : ''}${
+        simd ? '-simd' : ''
+    }${threads ? '-threads' : ''}`;
     const r = await fetch(filename + '.wasm');
-    const wasm = await r.arrayBuffer();
-    return new Promise((res: () => void) => {
-        window.Module = {
-            worker: `${filename}.worker.js`,
-            wasm,
-        };
-        window.Module.ready = function () {
-            window._wl_application_start();
-            res();
-        };
+    if (!r.ok) {
+        return Promise.reject('Failed to fetch runtime .wasm file');
+    }
+
+    const wasm = new WASM(threads);
+    wasm.worker = `${filename}.worker.js`;
+    wasm.wasm = await r.arrayBuffer();
+
+    await new Promise<void>((res: () => void, rej: (reason: string) => void) => {
+        wasm.onReady = res;
+        window.Module = wasm;
         const s = document.createElement('script');
         s.type = 'text/javascript';
         s.src = `${filename}.js`;
+        s.onerror = function () {
+            rej('Failed to fetch runtime .js file');
+        };
         document.body.append(s);
     });
+
+    const engine = new WonderlandEngine(wasm);
+    engine.start();
+    /* Backward compatibility. @todo Remove at 1.0.0 */
+    Object.assign(engine, API);
+    /* @ts-ignore */
+    window.WL = engine;
+    return engine;
 }

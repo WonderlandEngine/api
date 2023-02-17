@@ -1,3 +1,7 @@
+# O.S
+
+.DS_Store
+
 # As a transition step, the wonderland files are produced at the root.
 # @todo: Remove at 1.0.0
 index.js
