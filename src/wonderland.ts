@@ -2588,13 +2588,11 @@ export class MeshAttributeAccessor<C extends TypedArrayCtor> {
         return new this._bufferType(count * this._componentCount * this._arraySize) as TypedArray<C>;
     }
 
-    /** @overload */
-    get(index: number): TypedArray<C>;
     /**
      * Get attribute element.
      *
      * @param index Index
-     * @param out Preallocated array to write into,
+     * @param [out] Preallocated array to write into,
      *      to avoid garbage, otherwise will allocate a new TypedArray.
      *
      * `out.length` needs to be a multiple of the attributes component count, see
@@ -2604,9 +2602,11 @@ export class MeshAttributeAccessor<C extends TypedArrayCtor> {
      *
      * @returns The `out` parameter
      */
-    get<T extends NumberArray>(
+    get(index: number): TypedArray<C>;
+    get<T extends NumberArray>(index: number, out: T): T;
+    get(
         index: number,
-        out: T | TypedArray<C> = this.createArray()
+        out: NumberArray = this.createArray()
     ) {
         if (out.length % this._componentCount !== 0)
             throw new Error(

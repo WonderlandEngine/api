@@ -8,6 +8,11 @@ index.js
 index.d.ts
 wonderland.js
 wonderland.d.ts
+engine.js
+engine.d.ts
+wasm.js
+wasm.d.ts
+utils/
 doc.json
 
 # Logs
