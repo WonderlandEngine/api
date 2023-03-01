@@ -2546,12 +2546,10 @@ export class MeshAttributeAccessor<C extends TypedArrayCtor> {
             case MeshAttribute.Tangent:
             case MeshAttribute.Color:
             case MeshAttribute.JointWeight:
-                // XXX safe casts
                 this._bufferType = Float32Array as C;
                 this._tempBufferGetter = wasm.getTempBufferF32.bind(wasm) as (bytes: number) => TypedArray<C>;
                 break;
             case MeshAttribute.JointId:
-                // XXX safe casts
                 this._bufferType = Uint16Array as C;
                 this._tempBufferGetter = wasm.getTempBufferU16.bind(wasm) as (bytes: number) => TypedArray<C>;
                 break;
