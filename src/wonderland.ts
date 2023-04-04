@@ -20,21 +20,6 @@ export type MappedType<T, R> = {
 }[keyof R];
 
 /**
- * A list of typed array constructors that are mapped to their typed array type.
- */
-interface TypedArrayRegistry {
-    i8: [ Int8ArrayConstructor, Int8Array ],
-    u8: [ Uint8ArrayConstructor, Uint8Array ],
-    uc8: [ Uint8ClampedArrayConstructor, Uint8ClampedArray ],
-    i16: [ Int16ArrayConstructor, Int16Array ],
-    u16: [ Uint16ArrayConstructor, Uint16Array ],
-    i32: [ Int32ArrayConstructor, Int32Array ],
-    u32: [ Uint32ArrayConstructor, Uint32Array ],
-    f32: [ Float32ArrayConstructor, Float32Array ],
-    f64: [ Float64ArrayConstructor, Float64Array ],
-}
-
-/**
  * A type alias for any TypedArray constructor, except big-int arrays.
  */
 export type TypedArrayCtor = Int8ArrayConstructor | Uint8ArrayConstructor | Uint8ClampedArrayConstructor | Int16ArrayConstructor | Uint16ArrayConstructor | Int32ArrayConstructor | Uint32ArrayConstructor |  Float32ArrayConstructor | Float64ArrayConstructor;
@@ -43,7 +28,7 @@ export type TypedArrayCtor = Int8ArrayConstructor | Uint8ArrayConstructor | Uint
  *
  * @template {TypedArrayCtor} T - The TypedArray constructor.
  */
-export type TypedArray<T extends TypedArrayCtor> = MappedType<T, TypedArrayRegistry>;
+export type TypedArray<T extends TypedArrayCtor> = InstanceType<T>;
 
 /**
  * Represents any object that can be used as an array for read / write.
@@ -2692,16 +2677,16 @@ export class MeshAttributeAccessor<C extends Float32ArrayConstructor | Uint16Arr
      * @param count The number of **vertices** expected.
      * @returns A TypedArray with the appropriate format to access the data
      */
-    createArray(count = 1): TypedArray<C> {
+    createArray(count = 1) {
         count = count > this.length ? this.length : count;
-        return new this._bufferType(count * this._componentCount * this._arraySize) as TypedArray<C>;
+        return new this._bufferType(count * this._componentCount * this._arraySize);
     }
 
     /**
      * Get attribute element.
      *
      * @param index Index
-     * @param [out] Preallocated array to write into,
+     * @param out Preallocated array to write into,
      *      to avoid garbage, otherwise will allocate a new TypedArray.
      *
      * `out.length` needs to be a multiple of the attributes component count, see
