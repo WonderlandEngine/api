@@ -1,7 +1,7 @@
 import { expect, use } from '@esm-bundle/chai';
 import { chaiAlmost } from './chai/almost.js';
 
-import { PhysXComponent, Shape, ForceMode, CollisionEventType } from '../wonderland.js';
+import {PhysXComponent, Shape, ForceMode, CollisionEventType, LockAxis} from '..';
 
 import { init, reset } from './setup.js';
 
@@ -42,7 +42,7 @@ describe('PhysX', function() {
             shape: Shape.Plane,
         });
 
-        _wl_physx_update(0.01);
+        WL.wasm._wl_physx_update(0.01);
 
         /* Test getters */
         const pA = objA.getComponent("physx", 0);
@@ -106,7 +106,7 @@ describe('PhysX', function() {
             shape: Shape.Sphere,
         });
 
-        _wl_physx_update(0.01);
+        WL.wasm._wl_physx_update(0.01);
 
         let otherId = 123;
         let otherIdFiltered = 123;
@@ -140,9 +140,9 @@ describe('PhysX', function() {
 
         /* Make A collide with B */
         objA.setTranslationWorld([1, 1, -10]);
-        _wl_physx_update_global_pose(objA.objectId, compA._id);
+        WL.wasm._wl_physx_update_global_pose(objA.objectId, compA._id);
 
-        _wl_physx_update(0.01);
+        WL.wasm._wl_physx_update(0.01);
 
         /* Kinematic flag should have kept objA from falling */
         const local = [0, 0, 0];
@@ -158,9 +158,9 @@ describe('PhysX', function() {
 
         /* Stop A from colliding with B */
         objA.setTranslationWorld([2.1, 1, -10]);
-        _wl_physx_update_global_pose(objA.objectId, compA._id);
+        WL.wasm._wl_physx_update_global_pose(objA.objectId, compA._id);
 
-        _wl_physx_update(0.01);
+        WL.wasm._wl_physx_update(0.01);
 
         expect(otherId).to.equal(0);
         expect(otherIdFiltered).to.equal(123);
@@ -168,9 +168,9 @@ describe('PhysX', function() {
 
         /* Make A collide with C */
         objA.setTranslationWorld([-1, -1, 10]);
-        _wl_physx_update_global_pose(objA.objectId, compA._id);
+        WL.wasm._wl_physx_update_global_pose(objA.objectId, compA._id);
 
-        _wl_physx_update(0.01);
+        WL.wasm._wl_physx_update(0.01);
 
         expect(otherId).to.equal(compC._id);
         expect(otherIdFiltered).to.equal(compC._id);
@@ -179,13 +179,13 @@ describe('PhysX', function() {
         /* Uncollide and soak up the associated events */
         objA.setTranslationWorld([10, 10, -5]);
 
-        _wl_physx_update(0.01);
+        WL.wasm._wl_physx_update(0.01);
 
         /* Make A collide with D */
         objA.setTranslationWorld([-1, -10, 10]);
-        _wl_physx_update_global_pose(objA.objectId, compA._id);
+        WL.wasm._wl_physx_update_global_pose(objA.objectId, compA._id);
 
-        _wl_physx_update(0.01);
+        WL.wasm._wl_physx_update(0.01);
 
         expect(triggered).to.equal(1);
 
@@ -226,7 +226,7 @@ describe('PhysX', function() {
             shape: Shape.Box,
         });
 
-        _wl_physx_update(0.01);
+        WL.wasm._wl_physx_update(0.01);
 
         const hit = WL.physics.rayCast([0, 1, 0], [0, 0, -1], 255, 50);
 
@@ -245,13 +245,13 @@ describe('PhysX', function() {
         objA.setTranslationWorld([0, 0, -10]);
         objB.setTranslationWorld([1, 1, -10]);
 
-        _wl_physx_update(0.01);
+        WL.wasm._wl_physx_update(0.01);
 
         /* Add a physx component */
         const compA = objA.addComponent("physx");
 
         compA.shape = Shape.Plane;
-        compA.extents.set([1.0, 2.0, 3.0]);
+        compA.extents = [1.0, 2.0, 3.0];
 
         compA.staticFriction = 0.1;
         compA.dynamicFriction = 0.2;
@@ -272,7 +272,7 @@ describe('PhysX', function() {
         const compB = objB.addComponent("physx");
         compB.static = false;
         compB.kinematic = true;
-        compB.extents.set([3.0, 1.0, 2.0]);
+        compB.extents = [3.0, 1.0, 2.0];
         compB.shape = Shape.Box;
         compB.staticFriction = 1.1;
         compB.dynamicFriction = 1.2;
@@ -358,6 +358,103 @@ describe('PhysX', function() {
             expect(comp.allowSimulation).to.be.false;
             comp.allowSimulation = true;
             expect(comp.trigger).to.be.false;
+        });
+
+        it('linearLockAxis', function() {
+            const obj = WL.scene.addObject();
+            const comp = obj.addComponent('physx');
+            expect(comp.linearLockAxis).to.equal(LockAxis.None);
+            comp.linearLockAxis = LockAxis.Y;
+            expect(comp.linearLockAxis).to.equal(LockAxis.Y);
+            comp.linearLockAxis = LockAxis.X | LockAxis.Z;
+            expect(comp.linearLockAxis).to.equal(LockAxis.X | LockAxis.Z);
+            comp.linearLockAxis = LockAxis.None;
+            expect(comp.linearLockAxis).to.equal(LockAxis.None);
+        });
+
+        it('angularLockAxis', function() {
+            const obj = WL.scene.addObject();
+            const comp = obj.addComponent('physx');
+            expect(comp.angularLockAxis).to.equal(LockAxis.None);
+            comp.angularLockAxis = LockAxis.Z;
+            expect(comp.angularLockAxis).to.equal(LockAxis.Z);
+            comp.angularLockAxis = LockAxis.None;
+            expect(comp.angularLockAxis).to.equal(LockAxis.None);
+        });
+
+        it('groupsMask', function() {
+            const obj = WL.scene.addObject();
+            const comp = obj.addComponent('physx');
+            expect(comp.groupsMask).to.equal(255);
+            comp.groupsMask = (1 << 2);
+            expect(comp.groupsMask).to.equal(1 << 2);
+        });
+
+        it('blocksMask', function() {
+            const obj = WL.scene.addObject();
+            const comp = obj.addComponent('physx');
+            expect(comp.blocksMask).to.equal(255);
+            comp.blocksMask = (1 << 2);
+            expect(comp.blocksMask).to.equal(1 << 2);
+        });
+
+        it('clone', function() {
+            const obj = WL.scene.addObject();
+            const comp = obj.addComponent('physx');
+            comp.static = true;
+            comp.kinematic = true;
+            comp.gravity = false;
+            comp.simulate = false;
+            comp.allowSimulation = false;
+            comp.allowQuery = false;
+            comp.trigger = true;
+            comp.extents = [3.0, 1.0, 2.0];
+            comp.staticFriction = 4.0;
+            comp.dynamicFriction = 2.0;
+            comp.bounciness = 1.75;
+            comp.linearDamping = 0.25;
+            comp.angularDamping = 0.5;
+            comp.linearVelocity = [1.0, 2.0, 3.0];
+            comp.angularVelocity = [3.0, 4.0, 5.0];
+            comp.groupsMask = 1 << 3;
+            comp.blocksMask = 1 << 5;
+            comp.linearLockAxis = LockAxis.Y;
+            comp.angularLockAxis = LockAxis.Z;
+            comp.mass = 12.5;
+            /* Need ConvexMesh or TriangleMesh for shapeData to be used.
+             * Otherwise the getter returns null and the setter does nothing. */
+            comp.shape = Shape.ConvexMesh;
+            comp.shapeData = {index: 42};
+            expect(comp.shapeData).to.not.be.null;
+            /* Deactivate component to avoid PhysXManager trying to index
+             * shapeData.index during doActivate */
+            comp.active = false;
+
+            const clone = obj.addComponent('physx', comp);
+            expect(clone).to.be.instanceof(PhysXComponent);
+            expect(clone._id).to.not.equal(comp._id);
+            expect(clone.static).to.equal(comp.static);
+            expect(clone.kinematic).to.equal(comp.kinematic);
+            expect(clone.gravity).to.equal(comp.gravity);
+            expect(clone.simulate).to.equal(comp.simulate);
+            expect(clone.allowSimulation).to.equal(comp.allowSimulation);
+            expect(clone.allowQuery).to.equal(comp.allowQuery);
+            expect(clone.trigger).to.equal(comp.trigger);
+            expect(clone.extents).to.deep.equal(comp.extents);
+            expect(clone.staticFriction).to.equal(comp.staticFriction);
+            expect(clone.dynamicFriction).to.equal(comp.dynamicFriction);
+            expect(clone.bounciness).to.equal(comp.bounciness);
+            expect(clone.linearDamping).to.equal(comp.linearDamping);
+            expect(clone.angularDamping).to.equal(comp.angularDamping);
+            expect(clone.linearVelocity).to.deep.equal(comp.linearVelocity);
+            expect(clone.angularVelocity).to.deep.equal(comp.angularVelocity);
+            expect(clone.groupsMask).to.equal(comp.groupsMask);
+            expect(clone.blocksMask).to.equal(comp.blocksMask);
+            expect(clone.linearLockAxis).to.equal(comp.linearLockAxis);
+            expect(clone.angularLockAxis).to.equal(comp.angularLockAxis);
+            expect(clone.mass).to.equal(comp.mass);
+            expect(clone.shape).to.equal(comp.shape);
+            expect(clone.shapeData).to.deep.equal(comp.shapeData);
         });
     });
 });

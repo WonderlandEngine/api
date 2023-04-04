@@ -1,0 +1,40 @@
+{
+    "notifications": {
+        "projectSaveFailure": false,
+        "packageSuccess": false,
+        "packageFailure": false,
+        "javaScriptError": false
+    },
+    "paths": {
+        "projectDefault": "",
+        "nodePath": "",
+        "npmEntryPath": ""
+    },
+    "server": {
+        "ssl": {
+            "enabled": false,
+            "certFile": "",
+            "keyFile": "",
+            "keyPassphrase": "",
+            "dhParamsFile": ""
+        }
+    },
+    "startup": {
+        "startServer": false,
+        "autoReloadBrowser": false,
+        "forceFullPageReloads": false,
+        "watchJavaScript": false
+    },
+    "package": {
+        "onSave": false,
+        "onWindowSwitch": false,
+        "onXRHeadsetActivated": false,
+        "onTemplateChange": false
+    },
+    "editor": {
+        "mouseLookSensitivity": 1.0,
+        "mousePanSensitivity": 0.019999999552965164,
+        "autoNpmInstall": false,
+        "enablePlugins": false
+    }
+}
