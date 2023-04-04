@@ -1,11 +1,16 @@
 {
   "name": "@wonderlandengine/api",
-  "version": "0.9.5",
+  "version": "1.0.0-rc.2",
   "description": "Wonderland Engine's JavaScript API.",
-  "main": "./index.js",
-  "module": "./index.js",
-  "types": "./index.d.ts",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "type": "module",
+  "exports": {
+    ".": "./dist/index.js",
+    "./decorators.js": "./dist/decorators.js",
+    "./utils/": "./dist/utils/"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/WonderlandEngine/api.git"
@@ -21,23 +26,20 @@
     "url": "https://github.com/WonderlandEngine/api/issues"
   },
   "homepage": "https://github.com/WonderlandEngine/api#readme",
-  "files": [
-    "*.js",
-    "*.d.ts"
-  ],
   "scripts": {
     "build:ts": "tsc",
-    "build": "npm run build:ts && npm run build:esbuild",
-    "build:esbuild": "npm run build-dev -- --minify",
-    "build-dev": "esbuild ./src/index.ts --bundle --target=es6 --sourcemap --outfile=../wonderland.min.js --global-name=WL",
-    "watch": "npm run build-dev -- --watch",
-    "test": "npm run copy-deploy && npm run build:ts && web-test-runner",
+    "build:ts:watch": "tsc --watch",
+    "test": "npm run build:ts && web-test-runner",
     "test:single": "npm run test -- --files",
     "test:watch": "npm run test -- --watch",
-    "copy-deploy": "node ./scripts/copy-deploy.mjs",
     "pretty": "prettier --config ./prettierrc.json --write ./src",
+    "prepublishOnly": "npm run build:ts",
     "doc": "typedoc --entryPoints ./src/index.ts --tsconfig tsconfig.json --json ./doc.json --treatWarningsAsErrors"
   },
+  "files": [
+    "dist/**/*.d.ts",
+    "dist/**/*.js"
+  ],
   "dependencies": {
     "@types/webxr": "^0.5.0",
     "wasm-feature-detect": "^1.3.0"

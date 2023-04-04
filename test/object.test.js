@@ -22,6 +22,19 @@ describe('Object', function() {
         expect(obj2.name).to.equal('Object2');
     });
 
+    it('equals', function() {
+        const obj1 = WL.scene.addObject();
+        const obj2 = WL.scene.addObject();
+        const obj3 = WL.wrapObject(obj1.objectId);
+        expect(obj1.equals(null)).to.be.false;
+        expect(obj1.equals(undefined)).to.be.false;
+        expect(obj1.equals(obj1)).to.be.true;
+        expect(obj1.equals(obj2)).to.be.false;
+        expect(obj2.equals(obj1)).to.be.false;
+        expect(obj1.equals(obj3)).to.be.true;
+        expect(obj3.equals(obj1)).to.be.true;
+    });
+
     it('get changed', function() {
         /* @TODO Test unchanged state once it can be replicated in tests */
         const x = WL.scene.addObject();

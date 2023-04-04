@@ -1,0 +1,277 @@
+{
+    "objects": {
+        "32": {
+            "name": "Mesh",
+            "components": [
+                {
+                    "type": "mesh",
+                    "mesh": {
+                        "mesh": "p1",
+                        "material": "33"
+                    }
+                }
+            ]
+        }
+    },
+    "meshes": {
+        "p0": {
+            "link": {
+                "name": "PrimitivePlane",
+                "file": "default"
+            }
+        },
+        "p1": {
+            "link": {
+                "name": "PrimitiveCube",
+                "file": "default"
+            }
+        },
+        "p2": {
+            "link": {
+                "name": "PrimitiveSphere",
+                "file": "default"
+            }
+        },
+        "p3": {
+            "link": {
+                "name": "PrimitiveCone",
+                "file": "default"
+            }
+        },
+        "p4": {
+            "link": {
+                "name": "PrimitiveCylinder",
+                "file": "default"
+            }
+        },
+        "p5": {
+            "link": {
+                "name": "PrimitiveCircle",
+                "file": "default"
+            }
+        }
+    },
+    "textures": {},
+    "images": {},
+    "materials": {
+        "DefaultFontMaterial": {
+            "link": {
+                "name": "DefaultFontMaterial",
+                "file": "default"
+            }
+        },
+        "33": {
+            "name": "PhongMaterial"
+        }
+    },
+    "shaders": {
+        "1": {
+            "link": {
+                "name": "Background.frag",
+                "file": "default"
+            }
+        },
+        "2": {
+            "link": {
+                "name": "Depth.frag",
+                "file": "default"
+            }
+        },
+        "4": {
+            "link": {
+                "name": "DistanceFieldVector.frag",
+                "file": "default"
+            }
+        },
+        "6": {
+            "link": {
+                "name": "Dynamic.vert",
+                "file": "default"
+            }
+        },
+        "7": {
+            "link": {
+                "name": "Flat.frag",
+                "file": "default"
+            }
+        },
+        "10": {
+            "link": {
+                "name": "FullScreenTriangle.vert",
+                "file": "default"
+            }
+        },
+        "11": {
+            "link": {
+                "name": "MeshVisualizer.frag",
+                "file": "default"
+            }
+        },
+        "13": {
+            "link": {
+                "name": "Phong.frag",
+                "file": "default"
+            }
+        },
+        "16": {
+            "link": {
+                "name": "Physical.frag",
+                "file": "default"
+            }
+        },
+        "19": {
+            "link": {
+                "name": "Skinning.vert",
+                "file": "default"
+            }
+        },
+        "20": {
+            "link": {
+                "name": "Sky.frag",
+                "file": "default"
+            }
+        },
+        "21": {
+            "link": {
+                "name": "Text.frag",
+                "file": "default"
+            }
+        },
+        "23": {
+            "link": {
+                "name": "Text.vert",
+                "file": "default"
+            }
+        },
+        "24": {
+            "link": {
+                "name": "TileFeedback.frag",
+                "file": "default"
+            }
+        },
+        "25": {
+            "link": {
+                "name": "Particle.frag",
+                "file": "default"
+            }
+        }
+    },
+    "animations": {},
+    "skins": {},
+    "pipelines": {
+        "3": {
+            "link": {
+                "name": "Depth",
+                "file": "default"
+            }
+        },
+        "5": {
+            "link": {
+                "name": "DistanceFieldVector",
+                "file": "default"
+            }
+        },
+        "8": {
+            "link": {
+                "name": "Flat Opaque",
+                "file": "default"
+            }
+        },
+        "9": {
+            "link": {
+                "name": "Flat Opaque Textured",
+                "file": "default"
+            }
+        },
+        "12": {
+            "link": {
+                "name": "MeshVisualizer",
+                "file": "default"
+            }
+        },
+        "14": {
+            "link": {
+                "name": "Phong Opaque",
+                "file": "default"
+            }
+        },
+        "15": {
+            "link": {
+                "name": "Phong Opaque Textured",
+                "file": "default"
+            }
+        },
+        "17": {
+            "link": {
+                "name": "Physical Opaque",
+                "file": "default"
+            }
+        },
+        "18": {
+            "link": {
+                "name": "Physical Opaque Textured",
+                "file": "default"
+            }
+        },
+        "22": {
+            "link": {
+                "name": "Text",
+                "file": "default"
+            }
+        },
+        "26": {
+            "link": {
+                "name": "Phong Normalmapped",
+                "file": "default"
+            }
+        },
+        "27": {
+            "link": {
+                "name": "Phong Lightmapped",
+                "file": "default"
+            }
+        },
+        "28": {
+            "link": {
+                "name": "Foliage",
+                "file": "default"
+            }
+        },
+        "29": {
+            "link": {
+                "name": "Particle",
+                "file": "default"
+            }
+        },
+        "30": {
+            "link": {
+                "name": "Sky",
+                "file": "default"
+            }
+        }
+    },
+    "fonts": {
+        "31": {
+            "link": {
+                "name": "DejaVuSans.ttf",
+                "file": "default"
+            }
+        }
+    },
+    "languages": {},
+    "settings": {
+        "project": {
+            "name": "TestStreaming",
+            "version": [
+                0,
+                9,
+                5
+            ],
+            "packageForStreaming": true
+        },
+        "scripting": {
+            "bundlingType": "none",
+            "autoManageEntryPoint": false
+        }
+    }
+}

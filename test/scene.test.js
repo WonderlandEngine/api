@@ -1,7 +1,7 @@
 import { expect, use } from '@esm-bundle/chai';
 import { chaiAlmost } from './chai/almost.js';
 
-import { Object, Collider } from '../wonderland.js';
+import {Object, Collider, Component} from '..';
 import { init, reset } from './setup.js';
 
 use(chaiAlmost());
@@ -10,6 +10,40 @@ before(init);
 beforeEach(reset);
 
 describe('Scene', function() {
+
+    it('onSceneLoaded, missing scene', async function() {
+        let loaded = false;
+        await new Promise((res) => {
+            WL.onSceneLoaded.push(() => { loaded = true; res(); } );
+            WL.scene.load('missing-scene.bin');
+            setTimeout(res, 500);
+        });
+        expect(loaded).to.be.false;
+    });
+
+    it('onSceneLoaded', async function() {
+        let onDestroyCalled = false;
+        class DestroyCheck extends Component {
+            static TypeName = 'destroy-check';
+            onDestroy() {
+                onDestroyCalled = true;
+            }
+        }
+        WL.registerComponent(DestroyCheck);
+
+        const o = WL.scene.addObject();
+        o.addComponent(DestroyCheck);
+
+        await new Promise((res, rej) => {
+            WL.onSceneLoaded.push(() => res());
+            WL.scene.load('test/resources/projects/TestSkinnedMesh.bin');
+            setTimeout(rej, 500);
+        });
+        /* onSceneLoaded callbacks should only be notified once the scene is
+         * fully loaded */
+        expect(WL.scene.activeViews).to.not.be.empty;
+        expect(onDestroyCalled).to.be.true;
+    });
 
     it('addObject()', function() {
         const obj = WL.scene.addObject();

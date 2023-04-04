@@ -10,42 +10,17 @@ import {
     InputComponent,
     ViewComponent,
     TextComponent,
-    CustomParameter,
     Texture,
     Object as Object3D,
     Scene,
-    Type,
     Physics,
+    I18N,
 } from './wonderland.js';
 
+import {Type, ComponentProperty} from './property.js';
 import {isString} from './utils/object.js';
+import {Emitter} from './utils/event.js';
 import {WASM} from './wasm.js';
-
-/**
- * Callback triggered when the session starts.
- *
- * Used in {@link WonderlandEngine.onXRSessionStart}.
- *
- * @param session The session that started
- */
-export type XrSessionStartCallback = (session: XRSession) => void;
-
-/**
- * Callback triggered for supported / unsupported session.
- *
- * Used in {@link WonderlandEngine.onXRSupported}.
- *
- * @param type Type of session which is supported/not supported. Either `'vr'` or `'ar'`.
- * @param supported Whether given session type is supported.
- */
-export type XrSupportCallback = (type: string, supported: boolean) => void;
-
-/**
- * Callback triggered when the scene is loaded.
- *
- * Used in {@link WonderlandEngine.onSceneLoaded}.
- */
-export type SceneLoadedCallback = () => void;
 
 /* @todo: the `textures` literal should have a better shape/api. */
 export type TextureCache = {
@@ -62,114 +37,78 @@ export type TextureCache = {
 };
 
 /**
- * Default component parameter value per type.
- */
-const _componentDefaults = new Array(11);
-_componentDefaults[Type.Bool] = false;
-_componentDefaults[Type.Int] = 0;
-_componentDefaults[Type.Float] = 0.0;
-_componentDefaults[Type.String] = '';
-_componentDefaults[Type.Enum] = 0;
-_componentDefaults[Type.Object] = null;
-_componentDefaults[Type.Mesh] = null;
-_componentDefaults[Type.Texture] = null;
-_componentDefaults[Type.Material] = null;
-_componentDefaults[Type.Animation] = null;
-_componentDefaults[Type.Skin] = null;
-
-/**
- * Setup the defaults value of the properties on a given
- * component class.
- *
- * @param ctor The component class
- */
-function _setupDefaults(ctor: ComponentConstructor) {
-    for (const name in ctor.Properties) {
-        const p = ctor.Properties[name];
-        p.default = p.default || _componentDefaults[p.type];
-        ctor.prototype[name] = p.default;
-    }
-}
-
-/**
  * Main Wonderland Engine instance.
  *
  * Controls the canvas, rendering, and JS <-> WASM communication.
  */
 export class WonderlandEngine {
     /**
-     * List of functions to call if a WebXR session is started.
-     */
-    readonly onXRSessionStart: XrSessionStartCallback[] = [
-        (s) => ((this.xrSession as XRSession) = s),
-    ];
-
-    /**
-     * List of functions to call if a WebXR session ends.
-     */
-    readonly onXRSessionEnd: (() => void)[] = [() => ((this.xrSession as null) = null)];
-
-    /**
-     * Whether AR is supported by the browser.
+     * {@link Emitter} for WebXR session start events.
      *
-     * `undefined` until support could be determined.
+     * Usage from a within a component:
+     * ```js
+     * this.engine.onXRSessionStart.add((session, mode) => console.log(session, mode));
+     * ```
      */
-    readonly arSupported: boolean | undefined = undefined;
+    readonly onXRSessionStart = new Emitter<[XRSession, XRSessionMode]>();
 
     /**
-     * Whether VR is supported by the browser.
+     * {@link Emitter} for WebXR session end events.
      *
-     * `undefined` until support could be determined.
+     * Usage from a within a component:
+     * ```js
+     * this.engine.onXRSessionEnd.add(() => console.log("XR session ended."));
+     * ```
      */
-    readonly vrSupported: boolean | undefined = undefined;
+    readonly onXRSessionEnd = new Emitter();
+
+    /** Whether AR is supported by the browser. */
+    readonly arSupported: boolean = false;
+
+    /** Whether VR is supported by the browser. */
+    readonly vrSupported: boolean = false;
 
     /**
-     * List of functions to call once VR/AR support has been determined.
+     * {@link Emitter} for scene loaded events.
      *
-     * Will be called once for AR and once for VR independent of support for each.
-     * This allows you to notify the user of both cases: support and missing support of XR.
-     * See the `supported` parameter of the callback, which indicates support.
+     * Listeners get notified when a call to {@link Scene#load()} finishes,
+     * which also happens after the main scene has replaced the loading screen.
+     *
+     * Usage from a within a component:
+     * ```js
+     * this.engine.onSceneLoaded.add(() => console.log("Scene switched!"));
+     * ```
      */
-    readonly onXRSupported: XrSupportCallback[] = [
-        (type, supported) => {
-            if (type == 'ar') {
-                (this.arSupported as boolean) = supported;
-            }
-            if (type == 'vr') {
-                (this.vrSupported as boolean) = supported;
-            }
-        },
-    ];
-
-    /**
-     * Current WebXR session or `null` if no session active.
-     */
-    readonly xrSession: XRSession | null = null;
-
-    /**
-     * List of functions to call once the main scene has been loaded.
-     */
-    readonly onSceneLoaded: SceneLoadedCallback[] = [];
+    readonly onSceneLoaded = new Emitter();
 
     /**
      * Current main scene.
      */
-    readonly scene: Scene;
-
-    /**
-     * Physics manager, only available when physx is enabled in the runtime.
-     */
-    readonly physics: Physics | null;
+    readonly scene: Scene = null!;
 
     /**
      * Canvas element that Wonderland Engine renders to.
      */
-    canvas: HTMLCanvasElement | null;
+    canvas: HTMLCanvasElement | null = null;
 
     /**
      * Access to the textures managed by Wonderland Engine.
      */
     textures: TextureCache;
+
+    /**
+     * Access to internationalization.
+     */
+    i18n: I18N;
+
+    /**
+     * If `true`, the component classes found in the `Dependencies` are automatically
+     * registered upon component registration.
+     *
+     * For more information, please have a look at how to setup the {@link Component.Dependencies}
+     * static attribute.
+     */
+    autoRegisterDependencies = true;
 
     /* Component class instances per type to avoid GC */
     private _componentCache: Record<string, Component[]> = {};
@@ -185,22 +124,24 @@ export class WonderlandEngine {
     #wasm: WASM;
 
     /**
-     * Create a new engine instance.
-     *
-     * @param wasm Wasm bridge instance
+     * Physics manager, only available when physx is enabled in the runtime.
      *
      * @hidden
      */
-    constructor(wasm: WASM) {
+    #physics: Physics | null = null;
+
+    /**
+     * Create a new engine instance.
+     *
+     * @param wasm Wasm bridge instance
+     * @param loadingScreen Loading screen .bin file data
+     *
+     * @hidden
+     */
+    constructor(wasm: WASM, loadingScreen: ArrayBuffer | null) {
         this.#wasm = wasm;
         this.#wasm['_setEngine'](this); /* String lookup to bypass private. */
-
-        this.scene = new Scene(this);
-        /* For internal testing, we provide compatibility with DOM-less execution */
-        this.canvas =
-            typeof document === 'undefined'
-                ? null
-                : (document.getElementById('canvas') as HTMLCanvasElement);
+        this.#wasm._loadingScreen = loadingScreen;
 
         this.textures = {
             /* Backward compatibility. @todo: Remove at 1.0.0. */
@@ -211,8 +152,8 @@ export class WonderlandEngine {
                 }
                 image.src = filename;
                 return new Promise((resolve, reject) => {
-                    image.onload = function () {
-                        let texture = new Texture(image);
+                    image.onload = () => {
+                        let texture = new Texture(this, image);
                         if (!texture.valid) {
                             reject(
                                 'Failed to add image ' +
@@ -229,33 +170,10 @@ export class WonderlandEngine {
             },
         };
 
+        this.i18n = new I18N(this);
+
         this._componentCache = {};
         this._objectCache.length = 0;
-
-        /* Setup the error handler. This is used to to manage native errors. */
-        _wl_set_error_callback(
-            addFunction(function (messagePtr: number) {
-                throw new Error(UTF8ToString(messagePtr));
-            }, 'vi')
-        );
-
-        this.physics = null;
-        if (wasm.withPhysX) {
-            /* Setup the physics callback. */
-            const physics = new Physics(this);
-            _wl_physx_set_collision_callback(
-                addFunction((a: number, index: number, type: number, b: number) => {
-                    const callback = physics._callbacks[a][index];
-                    const component = new PhysXComponent(
-                        this,
-                        Object3D._typeIndexFor('physx'),
-                        b
-                    );
-                    callback(type, component);
-                }, 'viiii')
-            );
-            this.physics = physics;
-        }
     }
 
     /**
@@ -265,35 +183,9 @@ export class WonderlandEngine {
      * automatically.
      */
     start(): void {
-        window._wl_application_start();
+        this.wasm._wl_application_start();
     }
 
-    /**
-     * Register a custom JavaScript component type.
-     *
-     * ```js
-     * registerComponent('my-new-type', {
-     *    myParam: {type: Type.Float, default: 42.0},
-     * }, {
-     *    init: function() {},
-     *    start: function() {},
-     *    update: function(dt) {},
-     *    onActivate: function() {},
-     *    onDeactivate: function() {},
-     *    onDestroy: function() {},
-     * });
-     * ```
-     *
-     * @param name Name of the component.
-     * @param params Dict of param names to {@link CustomParameter}.
-     * @param object Object containing functions for the component type.
-     * @deprecated Use {@link WonderlandEngine.registerComponent:CLASSES} instead.
-     */
-    registerComponent(
-        name: string,
-        params: {[key: string]: CustomParameter},
-        object: ComponentProto
-    ): void;
     /**
      * Register a custom JavaScript component type.
      *
@@ -327,24 +219,93 @@ export class WonderlandEngine {
      * @since 1.0.0
      */
     registerComponent(...classes: ComponentConstructor[]): void;
+    /**
+     * Register a custom JavaScript component type.
+     *
+     * ```js
+     * registerComponent('my-new-type', {
+     *    myParam: {type: Type.Float, default: 42.0},
+     * }, {
+     *    init: function() {},
+     *    start: function() {},
+     *    update: function(dt) {},
+     *    onActivate: function() {},
+     *    onDeactivate: function() {},
+     *    onDestroy: function() {},
+     * });
+     * ```
+     *
+     * @param name Name of the component.
+     * @param params Dict of param names to {@link ComponentProperty}.
+     * @param object Object containing functions for the component type.
+     * @deprecated Use {@link WonderlandEngine.registerComponent:CLASSES} instead.
+     */
+    registerComponent(
+        name: string,
+        params: {[key: string]: ComponentProperty},
+        object: ComponentProto
+    ): void;
     /** @overload */
     registerComponent(...args: unknown[]): void {
         if (isString(args[0])) {
             /* Registration is using `name`, `params`, and `object`. */
-            const typeIndex = this.wasm._registerComponentLegacy(
-                args[0] as string,
-                args[1] as {[key: string]: CustomParameter},
+            this.wasm._registerComponentLegacy(
+                args[0],
+                args[1] as {[key: string]: ComponentProperty},
                 args[2] as ComponentProto
             );
-            const ctor = this.wasm._componentTypes[typeIndex] as ComponentConstructor;
-            _setupDefaults(ctor);
             return;
         }
-        for (const arg of args) {
-            const typeIndex = this.wasm._registerComponent(arg as ComponentConstructor);
-            const ctor = this.wasm._componentTypes[typeIndex] as ComponentConstructor;
-            _setupDefaults(ctor);
+        for (const arg of args as ComponentConstructor[]) {
+            this.wasm._registerComponent(arg, this.autoRegisterDependencies);
         }
+    }
+
+    /**
+     * Checks whether the given component is registered or not.
+     *
+     * @param typeOrClass A string representing the component typename (e.g., `'cursor-component'`),
+     *     or a component class (e.g., `CursorComponent`).
+     * @returns `true` if the component is registered, `false` otherwise.
+     */
+    isRegistered(typeOrClass: string | ComponentConstructor) {
+        return this.#wasm.isRegistered(
+            isString(typeOrClass) ? typeOrClass : typeOrClass.TypeName
+        );
+    }
+
+    /**
+     * Request a XR session.
+     *
+     * @note Please use this call instead of directly calling `navigator.xr.requestSession()`.
+     * Wonderland Engine requires to be aware that a session is started, and this
+     * is done through this call.
+     *
+     * @param mode The XR mode.
+     * @param features An array of required features, e.g., `['local-floor', 'hit-test']`.
+     * @param optionalFeatures An array of optional features, e.g., `['bounded-floor', 'depth-sensing']`.
+     * @returns A promise resolving with the `XRSession`, a string error message otherwise.
+     */
+    requestXRSession(
+        mode: XRSessionMode,
+        features: string[],
+        optionalFeatures?: string[]
+    ): Promise<XRSession> {
+        if (!navigator.xr) {
+            const isLocalhost =
+                location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+            const missingHTTPS = location.protocol !== 'https:' && !isLocalhost;
+            return Promise.reject(
+                missingHTTPS
+                    ? 'WebXR is only supported with HTTPS or on localhost!'
+                    : 'WebXR unsupported in this browser.'
+            );
+        }
+        return this.#wasm.webxr_request_session_func(
+            mode,
+            features,
+            optionalFeatures ?? []
+        );
     }
 
     /**
@@ -360,7 +321,6 @@ export class WonderlandEngine {
     wrapObject(objectId: number): Object3D {
         const cache = this._objectCache;
         const o = cache[objectId] || (cache[objectId] = new Object3D(this, objectId));
-        o.objectId = objectId;
         return o;
     }
 
@@ -378,7 +338,80 @@ export class WonderlandEngine {
         return this.#wasm;
     }
 
+    /** Current WebXR session or `null` if no session active. */
+    get xrSession(): XRSession | null {
+        return this.#wasm.webxr_session;
+    }
+
+    /** Current WebXR frame or `null` if no session active. */
+    get xrFrame(): XRFrame | null {
+        return this.#wasm.webxr_frame;
+    }
+
+    /** Current WebXR frame or `null` if no session active. */
+    get xrBaseLayer(): XRProjectionLayer | null {
+        return this.#wasm.webxr_baseLayer;
+    }
+
+    /** Current WebXR WebGLFramebuffr or `null` if no session active. */
+    get xrFramebuffer(): WebGLFramebuffer | null {
+        if (!Array.isArray(this.wasm.webxr_fbo)) {
+            return this.wasm.GL.framebuffers[this.wasm.webxr_fbo as number];
+        }
+        /* For now, we only use a single framebuffer. */
+        return this.wasm.GL.framebuffers[this.wasm.webxr_fbo[0]];
+    }
+
+    /** Physics manager, only available when physx is enabled in the runtime. */
+    get physics() {
+        return this.#physics;
+    }
+
     /* Internal-Only Methods */
+
+    /**
+     * Initialize the engine.
+     *
+     * @note Should be called after the WebAssembly is fully loaded.
+     *
+     * @hidden
+     */
+    _init() {
+        (this.scene as Scene) = new Scene(this);
+        /* For internal testing, we provide compatibility with DOM-less execution */
+        this.canvas =
+            typeof document === 'undefined'
+                ? null
+                : (document.getElementById('canvas') as HTMLCanvasElement);
+
+        /* Setup the error handler. This is used to to manage native errors. */
+        this.#wasm._wl_set_error_callback(
+            this.#wasm.addFunction((messagePtr: number) => {
+                throw new Error(this.#wasm.UTF8ToString(messagePtr));
+            }, 'vi')
+        );
+
+        this.#physics = null;
+        if (this.#wasm.withPhysX) {
+            /* Setup the physics callback. */
+            const physics = new Physics(this);
+            this.#wasm._wl_physx_set_collision_callback(
+                this.#wasm.addFunction(
+                    (a: number, index: number, type: number, b: number) => {
+                        const callback = physics._callbacks[a][index];
+                        const component = new PhysXComponent(
+                            this,
+                            this.wasm._typeIndexFor('physx'),
+                            b
+                        );
+                        callback(type, component);
+                    },
+                    'viiii'
+                )
+            );
+            this.#physics = physics;
+        }
+    }
 
     /**
      * Reset the runtime state, including:

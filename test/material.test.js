@@ -2,7 +2,7 @@ import { expect, use } from '@esm-bundle/chai';
 import { chaiAlmost } from './chai/almost.js';
 
 import { init } from './setup.js';
-import { Material, MaterialParamType, Texture } from '../wonderland.js';
+import { Material, MaterialParamType, Texture } from '..';
 
 use(chaiAlmost());
 
@@ -56,13 +56,14 @@ describe('Material', function() {
 
         const mat = new Material(WL, {pipeline: 'Phong Opaque'});
         expect(mat.color).to.be.undefined;
-        expect(mat.diffuseColor).to.deep.equal(new Float32Array([0, 0, 0, 0]));
+        expect(mat.diffuseColor).to.deep.equal(new Float32Array([0, 0, 0, 1]));
+        expect(mat.pipeline).to.equal('Phong Opaque');
     });
 
     it('parameters', function() {
         const mat = new Material(WL, {pipeline: 'Phong Opaque'});
 
-        expect(mat.diffuseColor).to.deep.equal(new Float32Array([0, 0, 0, 0]));
+        expect(mat.diffuseColor).to.deep.equal(new Float32Array([0, 0, 0, 1]));
         mat.diffuseColor = [1.0, 0.0, 0.0, 1.0];
         expect(mat.diffuseColor).to.deep.equal(new Float32Array([1.0, 0.0, 0.0, 1.0]));
 
@@ -72,6 +73,19 @@ describe('Material', function() {
         mat.alphaTextureThreshold = 0.5;
         expect(mat.alphaTextureThreshold).to.eql(0.5);
         expect(mat.alphaMaskTexture).to.be.an.instanceOf(Texture);
+    });
+
+    it('equals', function() {
+        const mat1 = new Material(WL, {pipeline: 'Phong Opaque'});
+        const mat2 = new Material(WL, {pipeline: 'Phong Opaque'});
+        const mat3 = new Material(WL, mat1._index);
+        expect(mat1.equals(null)).to.be.false;
+        expect(mat1.equals(undefined)).to.be.false;
+        expect(mat1.equals(mat1)).to.be.true;
+        expect(mat1.equals(mat2)).to.be.false;
+        expect(mat2.equals(mat1)).to.be.false;
+        expect(mat1.equals(mat3)).to.be.true;
+        expect(mat3.equals(mat1)).to.be.true;
     });
 
 });
