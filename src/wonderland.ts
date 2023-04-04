@@ -2530,8 +2530,6 @@ export class Mesh {
     attribute(attr: MeshAttribute.Color): MeshAttributeAccessor<Float32ArrayConstructor> | null;
     attribute(attr: MeshAttribute.JointId): MeshAttributeAccessor<Uint16ArrayConstructor> | null;
     attribute(attr: MeshAttribute.JointWeight): MeshAttributeAccessor<Float32ArrayConstructor> | null;
-    attribute(attr: MeshAttribute.SecondaryJointId): MeshAttributeAccessor<Uint16ArrayConstructor> | null;
-    attribute(attr: MeshAttribute.SecondaryJointWeight): MeshAttributeAccessor<Float32ArrayConstructor> | null;
     attribute<C extends TypedArrayCtor>(attr: MeshAttribute): MeshAttributeAccessor<C> | null {
         if (typeof attr != 'number')
             throw new TypeError('Expected number, but got ' + typeof attr);
