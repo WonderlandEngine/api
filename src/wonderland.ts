@@ -9,6 +9,17 @@ import {Emitter} from './utils/event.js';
 import {ComponentProperty} from './property.js';
 
 /**
+ * A type alias for any TypedArray constructor, except big-int arrays.
+ */
+export type TypedArrayCtor = Int8ArrayConstructor | Uint8ArrayConstructor | Uint8ClampedArrayConstructor | Int16ArrayConstructor | Uint16ArrayConstructor | Int32ArrayConstructor | Uint32ArrayConstructor |  Float32ArrayConstructor | Float64ArrayConstructor;
+/**
+ * The TypedArray corresponding to a given TypedArray constructor.
+ *
+ * @template {TypedArrayCtor} T - The TypedArray constructor.
+ */
+export type TypedArray<T extends TypedArrayCtor> = InstanceType<T>;
+
+/**
  * Represents any object that can be used as an array for read / write.
  */
 export interface NumberArray {
@@ -2486,7 +2497,15 @@ export class Mesh {
      * For flexible reusable components, take this into account that only `Position`
      * is guaranteed to be present at all time.
      */
-    attribute(attr: MeshAttribute): MeshAttributeAccessor | null {
+    attribute(attr: MeshAttribute.Position): MeshAttributeAccessor<Float32ArrayConstructor> | null;
+    attribute(attr: MeshAttribute.Tangent): MeshAttributeAccessor<Float32ArrayConstructor> | null;
+    attribute(attr: MeshAttribute.Normal): MeshAttributeAccessor<Float32ArrayConstructor> | null;
+    attribute(attr: MeshAttribute.TextureCoordinate): MeshAttributeAccessor<Float32ArrayConstructor> | null;
+    attribute(attr: MeshAttribute.Color): MeshAttributeAccessor<Float32ArrayConstructor> | null;
+    attribute(attr: MeshAttribute.JointId): MeshAttributeAccessor<Uint16ArrayConstructor> | null;
+    attribute(attr: MeshAttribute.JointWeight): MeshAttributeAccessor<Float32ArrayConstructor> | null;
+    attribute(attr: MeshAttribute): MeshAttributeAccessor<Float32ArrayConstructor | Uint16ArrayConstructor> | null;
+    attribute<C extends Float32ArrayConstructor | Uint16ArrayConstructor>(attr: MeshAttribute): MeshAttributeAccessor<C> | null {
         if (typeof attr != 'number')
             throw new TypeError('Expected number, but got ' + typeof attr);
 
@@ -2498,7 +2517,7 @@ export class Mesh {
         );
         if (tempMemUint32[0] == 255) return null;
 
-        const a = new MeshAttributeAccessor(this._engine, attr);
+        const a = new MeshAttributeAccessor<C>(this._engine, attr);
         a._attribute = tempMemUint32[0];
         a._offset = tempMemUint32[1];
         a._stride = tempMemUint32[2];
@@ -2568,7 +2587,7 @@ export class Mesh {
  *   mesh.update();
  * ```
  */
-export class MeshAttributeAccessor {
+export class MeshAttributeAccessor<C extends Float32ArrayConstructor | Uint16ArrayConstructor = Float32ArrayConstructor | Uint16ArrayConstructor> {
     /** Attribute index. @hidden */
     _attribute: number = -1;
     /** Attribute offset. @hidden */
@@ -2591,12 +2610,12 @@ export class MeshAttributeAccessor {
     /**
      * Class to instantiate an ArrayBuffer to get/set values.
      */
-    private _bufferType: typeof Float32Array | typeof Uint16Array;
+    private _bufferType: C;
     /**
      * Function to allocate temporary WASM memory. It is cached in the accessor to avoid
      * conditionals during get/set.
      */
-    private _tempBufferGetter: (bytes: number) => Float32Array | Uint16Array;
+    private _tempBufferGetter: (bytes: number) => TypedArray<C>;
 
     /**
      * Create a new instance.
@@ -2616,12 +2635,12 @@ export class MeshAttributeAccessor {
             case MeshAttribute.Tangent:
             case MeshAttribute.Color:
             case MeshAttribute.JointWeight:
-                this._bufferType = Float32Array;
-                this._tempBufferGetter = wasm.getTempBufferF32.bind(wasm);
+                this._bufferType = Float32Array as C;
+                this._tempBufferGetter = wasm.getTempBufferF32.bind(wasm) as (bytes: number) => TypedArray<C>;
                 break;
             case MeshAttribute.JointId:
-                this._bufferType = Uint16Array;
-                this._tempBufferGetter = wasm.getTempBufferU16.bind(wasm);
+                this._bufferType = Uint16Array as C;
+                this._tempBufferGetter = wasm.getTempBufferU16.bind(wasm) as (bytes: number) => TypedArray<C>;
                 break;
             default:
                 throw new Error(`Invalid attribute accessor type: ${type}`);
@@ -2647,13 +2666,11 @@ export class MeshAttributeAccessor {
      * @param count The number of **vertices** expected.
      * @returns A TypedArray with the appropriate format to access the data
      */
-    createArray(count = 1): Float32Array | Uint16Array {
+    createArray(count = 1) {
         count = count > this.length ? this.length : count;
         return new this._bufferType(count * this._componentCount * this._arraySize);
     }
 
-    /** @overload */
-    get(index: number): Float32Array | Uint16Array;
     /**
      * Get attribute element.
      *
@@ -2668,9 +2685,11 @@ export class MeshAttributeAccessor {
      *
      * @returns The `out` parameter
      */
-    get<T extends NumberArray>(
+    get(index: number): TypedArray<C>;
+    get<T extends NumberArray>(index: number, out: T): T;
+    get(
         index: number,
-        out: T | Float32Array | Uint16Array = this.createArray()
+        out: NumberArray = this.createArray()
     ) {
         if (out.length % this._componentCount !== 0)
             throw new Error(
