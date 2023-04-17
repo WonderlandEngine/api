@@ -4125,6 +4125,29 @@ export class Object3D {
         return this._engine._wrapComponent(type, componentType, componentId);
     }
 
+    /* `getComponents` overloads for native components. */
+
+    /** @overload */
+    getComponents(type: 'collision'): CollisionComponent[];
+    /** @overload */
+    getComponents(type: 'text'): TextComponent[];
+    /** @overload */
+    getComponents(type: 'view'): ViewComponent[];
+    /** @overload */
+    getComponents(type: 'mesh'): MeshComponent[];
+    /** @overload */
+    getComponents(type: 'input'): InputComponent[];
+    /** @overload */
+    getComponents(type: 'light'): LightComponent[];
+    /** @overload */
+    getComponents(type: 'animation'): AnimationComponent[];
+    /** @overload */
+    getComponents(type: 'physx'): PhysXComponent[];
+    /** @overload */
+    getComponents(type?: string | null): Component[];
+    /** @overload */
+    getComponents<T extends Component>(clazz: ComponentConstructor<T>): T[];
+
     /**
      * @param typeOrClass Type name, pass a falsey value (`undefined` or `null`) to retrieve all.
      *     It's also possible to give a class definition. In this case, the method will use the `class.TypeName` field to
