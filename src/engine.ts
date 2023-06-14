@@ -1,6 +1,5 @@
 import {
     Component,
-    ComponentProto,
     ComponentConstructor,
     CollisionComponent,
     AnimationComponent,
@@ -10,31 +9,18 @@ import {
     InputComponent,
     ViewComponent,
     TextComponent,
-    Texture,
     Object as Object3D,
-    Scene,
     Physics,
     I18N,
+    XR,
 } from './wonderland.js';
 
-import {Type, ComponentProperty} from './property.js';
+import {Emitter, RetainEmitter} from './utils/event.js';
 import {isString} from './utils/object.js';
-import {Emitter} from './utils/event.js';
+import {Scene} from './scene.js';
+import {Version} from './version.js';
 import {WASM} from './wasm.js';
-
-/* @todo: the `textures` literal should have a better shape/api. */
-export type TextureCache = {
-    [key: string]: Texture | ((filename: string, crossOrigin?: string) => Promise<Texture>);
-
-    /**
-     * Load an image from URL as {@link Texture}.
-     *
-     * @param filename URL to load from.
-     * @param crossOrigin Cross origin flag for the image object.
-     * @returns Loaded texture.
-     */
-    load: (filename: string, crossOrigin?: string) => Promise<Texture>;
-};
+import {TextureManager} from './texture-manager.js';
 
 /**
  * Main Wonderland Engine instance.
@@ -42,16 +28,6 @@ export type TextureCache = {
  * Controls the canvas, rendering, and JS <-> WASM communication.
  */
 export class WonderlandEngine {
-    /**
-     * {@link Emitter} for WebXR session start events.
-     *
-     * Usage from a within a component:
-     * ```js
-     * this.engine.onXRSessionStart.add((session, mode) => console.log(session, mode));
-     * ```
-     */
-    readonly onXRSessionStart = new Emitter<[XRSession, XRSessionMode]>();
-
     /**
      * {@link Emitter} for WebXR session end events.
      *
@@ -61,6 +37,43 @@ export class WonderlandEngine {
      * ```
      */
     readonly onXRSessionEnd = new Emitter();
+
+    /**
+     * {@link Emitter} for WebXR session start events.
+     *
+     * Usage from a within a component:
+     * ```js
+     * this.engine.onXRSessionStart.add((session, mode) => console.log(session, mode));
+     * ```
+     *
+     * By default, this emitter is retained and will automatically call any callback added
+     * while a session is already started:
+     *
+     * ```js
+     * // XR session is already active.
+     * this.engine.onXRSessionStart.add((session, mode) => {
+     *     console.log(session, mode); // Triggered immediately.
+     * });
+     * ```
+     */
+    readonly onXRSessionStart: Emitter<[XRSession, XRSessionMode]> = new RetainEmitter<
+        [XRSession, XRSessionMode]
+    >();
+
+    /**
+     * {@link Emitter} for canvas / main framebuffer resize events.
+     *
+     * Usage from a within a component:
+     * ```js
+     * this.engine.onResize.add(() => {
+     *     const canvas = this.engine.canvas;
+     *     console.log(`New Size: ${canvas.width}, ${canvas.height}`);
+     * });
+     * ```
+     *
+     * @note The size of the canvas is in physical pixels, and is set via {@link WonderlandEngine.resize}.
+     */
+    readonly onResize: Emitter = new Emitter();
 
     /** Whether AR is supported by the browser. */
     readonly arSupported: boolean = false;
@@ -87,28 +100,14 @@ export class WonderlandEngine {
     readonly scene: Scene = null!;
 
     /**
-     * Canvas element that Wonderland Engine renders to.
-     */
-    canvas: HTMLCanvasElement | null = null;
-
-    /**
-     * Access to the textures managed by Wonderland Engine.
-     */
-    textures: TextureCache;
-
-    /**
      * Access to internationalization.
      */
-    i18n: I18N;
+    readonly i18n: I18N = new I18N(this);
 
     /**
-     * If `true`, the component classes found in the `Dependencies` are automatically
-     * registered upon component registration.
-     *
-     * For more information, please have a look at how to setup the {@link Component.Dependencies}
-     * static attribute.
+     * WebXR related state, `null` if no XR session is active.
      */
-    autoRegisterDependencies = true;
+    readonly xr: XR | null = null;
 
     /* Component class instances per type to avoid GC */
     private _componentCache: Record<string, Component[]> = {};
@@ -130,6 +129,16 @@ export class WonderlandEngine {
      */
     #physics: Physics | null = null;
 
+    /** Texture manager. @hidden */
+    #textures: TextureManager = new TextureManager(this);
+
+    /**
+     * Resize observer to track for canvas size changes.
+     *
+     * @hidden
+     */
+    #resizeObserver: ResizeObserver | null = null;
+
     /**
      * Create a new engine instance.
      *
@@ -142,38 +151,17 @@ export class WonderlandEngine {
         this.#wasm = wasm;
         this.#wasm['_setEngine'](this); /* String lookup to bypass private. */
         this.#wasm._loadingScreen = loadingScreen;
-
-        this.textures = {
-            /* Backward compatibility. @todo: Remove at 1.0.0. */
-            load: (filename: string, crossOrigin?: string) => {
-                let image = new Image();
-                if (crossOrigin !== undefined) {
-                    image.crossOrigin = crossOrigin;
-                }
-                image.src = filename;
-                return new Promise((resolve, reject) => {
-                    image.onload = () => {
-                        let texture = new Texture(this, image);
-                        if (!texture.valid) {
-                            reject(
-                                'Failed to add image ' +
-                                    image.src +
-                                    ' to texture atlas. Probably incompatible format.'
-                            );
-                        }
-                        resolve(texture);
-                    };
-                    image.onerror = function () {
-                        reject('Failed to load image. Not found or no read access');
-                    };
-                });
-            },
-        };
-
-        this.i18n = new I18N(this);
-
         this._componentCache = {};
         this._objectCache.length = 0;
+
+        this.canvas.addEventListener(
+            'webglcontextlost',
+            function (e) {
+                console.error('Context lost:');
+                console.error(e);
+            },
+            false
+        );
     }
 
     /**
@@ -218,46 +206,9 @@ export class WonderlandEngine {
      *
      * @since 1.0.0
      */
-    registerComponent(...classes: ComponentConstructor[]): void;
-    /**
-     * Register a custom JavaScript component type.
-     *
-     * ```js
-     * registerComponent('my-new-type', {
-     *    myParam: {type: Type.Float, default: 42.0},
-     * }, {
-     *    init: function() {},
-     *    start: function() {},
-     *    update: function(dt) {},
-     *    onActivate: function() {},
-     *    onDeactivate: function() {},
-     *    onDestroy: function() {},
-     * });
-     * ```
-     *
-     * @param name Name of the component.
-     * @param params Dict of param names to {@link ComponentProperty}.
-     * @param object Object containing functions for the component type.
-     * @deprecated Use {@link WonderlandEngine.registerComponent:CLASSES} instead.
-     */
-    registerComponent(
-        name: string,
-        params: {[key: string]: ComponentProperty},
-        object: ComponentProto
-    ): void;
-    /** @overload */
-    registerComponent(...args: unknown[]): void {
-        if (isString(args[0])) {
-            /* Registration is using `name`, `params`, and `object`. */
-            this.wasm._registerComponentLegacy(
-                args[0],
-                args[1] as {[key: string]: ComponentProperty},
-                args[2] as ComponentProto
-            );
-            return;
-        }
-        for (const arg of args as ComponentConstructor[]) {
-            this.wasm._registerComponent(arg, this.autoRegisterDependencies);
+    registerComponent(...classes: ComponentConstructor[]) {
+        for (const arg of classes) {
+            this.wasm._registerComponent(arg);
         }
     }
 
@@ -275,6 +226,38 @@ export class WonderlandEngine {
     }
 
     /**
+     * Resize the canvas and the rendering context.
+     *
+     * @note The `width` and `height` parameters will be scaled by the
+     * `devicePixelRatio` value. By default, the pixel ratio used is
+     * [window.devicePixelRatio](https://developer.mozilla.org/en-US/docs/Web/API/Window/devicePixelRatio).
+     *
+     * @param width The width, in CSS pixels.
+     * @param height The height, in CSS pixels.
+     * @param devicePixelRatio The pixel ratio factor.
+     */
+    resize(width: number, height: number, devicePixelRatio = window.devicePixelRatio) {
+        width = width * devicePixelRatio;
+        height = height * devicePixelRatio;
+        this.canvas.width = width;
+        this.canvas.height = height;
+        this.wasm._wl_application_resize(width, height);
+        this.onResize.notify();
+    }
+
+    /**
+     * Run the next frame.
+     *
+     * @param fixedDelta The elapsed time between this frame and the previous one.
+     *
+     * @note The engine automatically schedules next frames. You should only
+     * use this method for testing.
+     */
+    nextFrame(fixedDelta: number = 0) {
+        this.#wasm._wl_nextFrame(fixedDelta);
+    }
+
+    /**
      * Request a XR session.
      *
      * @note Please use this call instead of directly calling `navigator.xr.requestSession()`.
@@ -289,7 +272,7 @@ export class WonderlandEngine {
     requestXRSession(
         mode: XRSessionMode,
         features: string[],
-        optionalFeatures?: string[]
+        optionalFeatures: string[] = []
     ): Promise<XRSession> {
         if (!navigator.xr) {
             const isLocalhost =
@@ -301,11 +284,7 @@ export class WonderlandEngine {
                     : 'WebXR unsupported in this browser.'
             );
         }
-        return this.#wasm.webxr_request_session_func(
-            mode,
-            features,
-            optionalFeatures ?? []
-        );
+        return this.#wasm.webxr_requestSession(mode, features, optionalFeatures);
     }
 
     /**
@@ -321,6 +300,7 @@ export class WonderlandEngine {
     wrapObject(objectId: number): Object3D {
         const cache = this._objectCache;
         const o = cache[objectId] || (cache[objectId] = new Object3D(this, objectId));
+        (o['_objectId'] as number) = objectId;
         return o;
     }
 
@@ -338,33 +318,114 @@ export class WonderlandEngine {
         return this.#wasm;
     }
 
-    /** Current WebXR session or `null` if no session active. */
+    /** Canvas element that Wonderland Engine renders to. */
+    get canvas(): HTMLCanvasElement {
+        return this.#wasm.canvas;
+    }
+
+    /**
+     * Current WebXR session or `null` if no session active.
+     *
+     * @deprecated Use {@link XR.session} on the {@link xr}
+     * object instead.
+     */
     get xrSession(): XRSession | null {
-        return this.#wasm.webxr_session;
+        return this.xr?.session ?? null;
     }
 
-    /** Current WebXR frame or `null` if no session active. */
+    /**
+     * Current WebXR frame or `null` if no session active.
+     *
+     * @deprecated Use {@link XR.frame} on the {@link xr}
+     * object instead.
+     */
     get xrFrame(): XRFrame | null {
-        return this.#wasm.webxr_frame;
+        return this.xr?.frame ?? null;
     }
 
-    /** Current WebXR frame or `null` if no session active. */
+    /**
+     * Current WebXR base layer or `null` if no session active.
+     *
+     * @deprecated Use {@link XR.baseLayer} on the {@link xr}
+     * object instead.
+     */
     get xrBaseLayer(): XRProjectionLayer | null {
-        return this.#wasm.webxr_baseLayer;
+        return this.xr?.baseLayer ?? null;
     }
 
-    /** Current WebXR WebGLFramebuffr or `null` if no session active. */
+    /**
+     * Current WebXR framebuffer or `null` if no session active.
+     *
+     * @deprecated Use {@link XR.framebuffers} on the
+     * {@link xr} object instead.
+     */
     get xrFramebuffer(): WebGLFramebuffer | null {
-        if (!Array.isArray(this.wasm.webxr_fbo)) {
-            return this.wasm.GL.framebuffers[this.wasm.webxr_fbo as number];
-        }
-        /* For now, we only use a single framebuffer. */
-        return this.wasm.GL.framebuffers[this.wasm.webxr_fbo[0]];
+        return this.xr?.framebuffers[0] ?? null;
+    }
+
+    /** Framebuffer scale factor. */
+    get xrFramebufferScaleFactor() {
+        return this.#wasm.webxr_framebufferScaleFactor;
+    }
+
+    set xrFramebufferScaleFactor(value: number) {
+        (this.#wasm.webxr_framebufferScaleFactor as number) = value;
     }
 
     /** Physics manager, only available when physx is enabled in the runtime. */
     get physics() {
         return this.#physics;
+    }
+
+    /**
+     * Texture managger.
+     *
+     * Use this to load or programmatically create new textures at runtime.
+     */
+    get textures() {
+        return this.#textures;
+    }
+
+    /*
+     * Enable or disable the mechanism to automatically resize the canvas.
+     *
+     * Internally, the engine uses a [ResizeObserver](https://developer.mozilla.org/en-US/docs/Web/API/ResizeObserver).
+     * Changing the canvas css will thus automatically be tracked by the engine.
+     */
+    set autoResizeCanvas(flag: boolean) {
+        const state = !!this.#resizeObserver;
+        if (state === flag) return;
+
+        if (!flag) {
+            this.#resizeObserver?.unobserve(this.canvas);
+            this.#resizeObserver = null;
+            return;
+        }
+        this.#resizeObserver = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                if (entry.target === this.canvas) {
+                    this.resize(entry.contentRect.width, entry.contentRect.height);
+                }
+            }
+        });
+        this.#resizeObserver.observe(this.canvas);
+    }
+
+    /** `true` if the canvas is automatically resized by the engine. */
+    get autoResizeCanvas() {
+        return this.#resizeObserver !== null;
+    }
+
+    /** Retrieves the runtime version. */
+    get runtimeVersion(): Version {
+        const wasm = this.#wasm;
+        const v = wasm._wl_application_version(wasm._tempMem);
+        return {
+            major: wasm._tempMemUint16[0],
+            minor: wasm._tempMemUint16[1],
+            patch: wasm._tempMemUint16[2],
+            rc: wasm._tempMemUint16[3],
+        };
     }
 
     /* Internal-Only Methods */
@@ -378,11 +439,6 @@ export class WonderlandEngine {
      */
     _init() {
         (this.scene as Scene) = new Scene(this);
-        /* For internal testing, we provide compatibility with DOM-less execution */
-        this.canvas =
-            typeof document === 'undefined'
-                ? null
-                : (document.getElementById('canvas') as HTMLCanvasElement);
 
         /* Setup the error handler. This is used to to manage native errors. */
         this.#wasm._wl_set_error_callback(
@@ -411,6 +467,8 @@ export class WonderlandEngine {
             );
             this.#physics = physics;
         }
+
+        this.resize(this.canvas.clientWidth, this.canvas.clientHeight);
     }
 
     /**
@@ -426,6 +484,7 @@ export class WonderlandEngine {
     _reset(): void {
         this._componentCache = {};
         this._objectCache.length = 0;
+        this.#textures._reset();
         this.scene.reset();
         this.wasm.reset();
     }

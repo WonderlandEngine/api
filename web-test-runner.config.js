@@ -1,28 +1,26 @@
-import {chromeLauncher} from '@web/test-runner';
-import {resolve} from 'path';
 import {symlinkSync, existsSync, unlinkSync, lstatSync, rmdirSync} from 'fs';
+import { fileURLToPath } from 'url';
+import {resolve} from 'path';
+
+import {chromeLauncher} from '@web/test-runner';
+import {esbuildPlugin} from '@web/dev-server-esbuild';
+
+console.log(`[TestRunner]: Reading configuration file`);
 
 const deployRoot = resolve(process.env['DEPLOY_FOLDER'] || '../../deploy/');
 
 /* We need to relink every run in case the env var changed,
  * so first remove old link (or old deploy copy) */
-if (existsSync('deploy')) {
-    /* Previously, we would copy the directory instead of linking it */
-    if (!lstatSync('deploy').isSymbolicLink()) {
-        console.log(`Deleting old 'deploy' copy.`);
-        rmdirSync('deploy', {recursive: true});
-    } else {
-        console.log(`Deleting old 'deploy' symlink.`);
-        unlinkSync('deploy');
-    }
+if (existsSync('deploy') && lstatSync('deploy').isSymbolicLink()) {
+    unlinkSync('deploy');
 }
-console.log(`Creating symlink 'deploy' to '${deployRoot}'.`);
+console.log(`[TestRunner]: Creating symlink 'deploy' to '${deployRoot}'`);
 symlinkSync(deployRoot, 'deploy', 'junction');
 
 export default {
     concurrency: 10,
     nodeResolve: true,
-    files: ['test/**/*.test.js'],
+    files: ['test/**/*.test.js', 'test/**/*.test.ts'],
 
     browsers: [
         chromeLauncher({
@@ -37,4 +35,11 @@ export default {
             timeout: '15000',
         },
     },
+
+    plugins: [
+        esbuildPlugin({
+            ts: true,
+            tsconfig: fileURLToPath(new URL('./test/tsconfig.json', import.meta.url)),
+        })
+    ],
 };
