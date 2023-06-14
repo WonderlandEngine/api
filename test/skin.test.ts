@@ -1,14 +1,13 @@
-import { expect } from '@esm-bundle/chai';
+import {expect} from '@esm-bundle/chai';
 
-import { Skin } from '..';
-import { init, reset } from './setup.js';
+import {Skin} from '..';
+import {init, reset, WL} from './setup.js';
 
 before(init);
 beforeEach(reset);
 
-describe('Skin', function() {
-
-    it('equals', function() {
+describe('Skin', function () {
+    it('equals', function () {
         const skin1 = new Skin(WL, 1);
         const skin2 = new Skin(WL, 2);
         const skin3 = new Skin(WL, 1);
@@ -20,5 +19,4 @@ describe('Skin', function() {
         expect(skin1.equals(skin3)).to.be.true;
         expect(skin3.equals(skin1)).to.be.true;
     });
-
 });

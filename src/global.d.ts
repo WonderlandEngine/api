@@ -3,8 +3,13 @@
  */
 
 interface Window {
-    instantiateWonderlandRuntime?: (module: any) => void;
+    instantiateWonderlandRuntime?: (
+        module?: Record<string, any>
+    ) => Promise<Record<string, any>>;
     _WL?: {
-        runtimes: {[key: string]: (module: any) => void};
+        runtimes: Record<
+            string,
+            (module?: Record<string, any>) => Promise<Record<string, any>>
+        >;
     };
 }

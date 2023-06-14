@@ -7,17 +7,28 @@ import {WonderlandEngine} from './engine.js';
 import {isNumber, isString} from './utils/object.js';
 import {Emitter} from './utils/event.js';
 import {ComponentProperty} from './property.js';
+import {WASM} from './wasm.js';
 
 /**
  * A type alias for any TypedArray constructor, except big-int arrays.
  */
-export type TypedArrayCtor = Int8ArrayConstructor | Uint8ArrayConstructor | Uint8ClampedArrayConstructor | Int16ArrayConstructor | Uint16ArrayConstructor | Int32ArrayConstructor | Uint32ArrayConstructor |  Float32ArrayConstructor | Float64ArrayConstructor;
+export type TypedArrayCtor =
+    | Int8ArrayConstructor
+    | Uint8ArrayConstructor
+    | Uint8ClampedArrayConstructor
+    | Int16ArrayConstructor
+    | Uint16ArrayConstructor
+    | Int32ArrayConstructor
+    | Uint32ArrayConstructor
+    | Float32ArrayConstructor
+    | Float64ArrayConstructor;
+
 /**
- * The TypedArray corresponding to a given TypedArray constructor.
+ * Typed array instance based on a given {@link TypedArrayCtor} constructor.
  *
- * @template {TypedArrayCtor} T - The TypedArray constructor.
+ * @typeParam T - The TypedArray constructor.
  */
-export type TypedArray<T extends TypedArrayCtor> = InstanceType<T>;
+export type TypedArray<T extends TypedArrayCtor = TypedArrayCtor> = InstanceType<T>;
 
 /**
  * Represents any object that can be used as an array for read / write.
@@ -42,7 +53,9 @@ export type Constructor<T = any> = {
 export type ComponentConstructor<T extends Component = Component> = Constructor<T> & {
     TypeName: string;
     Properties: Record<string, ComponentProperty>;
+    /** @deprecated @hidden */
     Dependencies?: ComponentConstructor[];
+    onRegister?: (engine: WonderlandEngine) => void;
 };
 
 /**
@@ -86,23 +99,6 @@ export interface ComponentProto {
      */
     onDestroy?: () => void;
 }
-
-export interface GLTFExtensions {
-    root: Record<string, any>;
-    mesh: Record<string, any>;
-    node: Record<string, any>;
-    idMapping: Record<string, any>;
-}
-
-/**
- * Result obtained when loading a scene.
- */
-export type SceneAppendResult =
-    | Object3D
-    | {
-          root: Object3D;
-          extensions: Record<string, any>;
-      };
 
 /**
  * Callback triggered on collision event.
@@ -157,13 +153,13 @@ export enum Collider {
  */
 export enum Alignment {
     /** Text start is at object origin */
-    Left = 1,
+    Left = 0,
 
     /** Text center is at object origin */
-    Center = 2,
+    Center = 1,
 
     /** Text end is at object origin */
-    Right = 3,
+    Right = 2,
 }
 
 /**
@@ -171,16 +167,16 @@ export enum Alignment {
  */
 export enum Justification {
     /** Text line is at object origin */
-    Line = 1,
+    Line = 0,
 
     /** Text middle is at object origin */
-    Middle = 2,
+    Middle = 1,
 
     /** Text top is at object origin */
-    Top = 3,
+    Top = 2,
 
     /** Text bottom is at object origin */
-    Bottom = 4,
+    Bottom = 3,
 }
 
 /**
@@ -225,13 +221,13 @@ export enum InputType {
  */
 export enum LightType {
     /** Point light */
-    Point = 1,
+    Point = 0,
 
     /** Spot light */
-    Spot = 2,
+    Spot = 1,
 
     /** Sun light / Directional light */
-    Sun = 3,
+    Sun = 2,
 }
 
 /**
@@ -239,14 +235,14 @@ export enum LightType {
  */
 export enum AnimationState {
     /** Animation is currently playing */
-    Playing = 1,
+    Playing = 0,
 
     /** Animation is paused and will continue at current playback
      * time on {@link AnimationComponent#play} */
-    Paused = 2,
+    Paused = 1,
 
     /** Animation is stopped */
-    Stopped = 3,
+    Stopped = 2,
 }
 
 /**
@@ -380,322 +376,6 @@ function isMeshShape(shape: Shape): boolean {
 const UP_VECTOR = [0, 1, 0];
 
 /**
- * Provides global scene functionality like raycasting.
- */
-export class Scene {
-    /** Called before rendering the scene */
-    readonly onPreRender = new Emitter();
-    /** Called after the scene has been rendered */
-    readonly onPostRender = new Emitter();
-
-    /** Wonderland Engine instance. @hidden */
-    protected _engine: WonderlandEngine;
-
-    /** Ray hit pointer in WASM heap. @hidden */
-    private _rayHit: number;
-    /** Ray hit. @hidden */
-    private _hit: RayHit;
-
-    constructor(engine: WonderlandEngine) {
-        this._engine = engine;
-        this._rayHit = engine.wasm._malloc(4 * (3 * 4 + 3 * 4 + 4 + 2) + 4);
-        this._hit = new RayHit(this._engine, this._rayHit);
-    }
-
-    /**
-     * Currently active view components.
-     */
-    get activeViews(): ViewComponent[] {
-        const wasm = this._engine.wasm;
-        const count = wasm._wl_scene_get_active_views(this._engine.wasm._tempMem, 16);
-
-        const views: ViewComponent[] = [];
-        const viewTypeIndex = wasm._typeIndexFor('view');
-        for (let i = 0; i < count; ++i) {
-            views.push(
-                new ViewComponent(
-                    this._engine,
-                    viewTypeIndex,
-                    this._engine.wasm._tempMemInt[i]
-                )
-            );
-        }
-
-        return views;
-    }
-
-    /**
-     * Cast a ray through the scene and find intersecting objects.
-     *
-     * The resulting ray hit will contain up to **4** closest ray hits,
-     * sorted by increasing distance.
-     *
-     * @param o Ray origin.
-     * @param d Ray direction.
-     * @param group Collision group to filter by: only objects that are
-     *        part of given group are considered for raycast.
-     *
-     * @returns The scene cached {@link RayHit} instance.
-     * @note The returned object is owned by the Scene instance
-     *   will be reused with the next {@link Scene#rayCast} call.
-     */
-    rayCast(o: Readonly<NumberArray>, d: Readonly<NumberArray>, group: number): RayHit {
-        this._engine.wasm._wl_scene_ray_cast(
-            o[0],
-            o[1],
-            o[2],
-            d[0],
-            d[1],
-            d[2],
-            group,
-            this._rayHit
-        );
-        return this._hit;
-    }
-
-    /**
-     * Add an object to the scene.
-     *
-     * @param parent Parent object or `null`.
-     * @returns A newly created object.
-     */
-    addObject(parent: Object3D | null): Object3D {
-        const parentId = parent ? parent.objectId : 0;
-        const objectId = this._engine.wasm._wl_scene_add_object(parentId);
-        return this._engine.wrapObject(objectId);
-    }
-
-    /**
-     * Batch-add objects to the scene.
-     *
-     * Will provide better performance for adding multiple objects (e.g. > 16)
-     * than calling {@link Scene#addObject} repeatedly in a loop.
-     *
-     * By providing upfront information of how many objects will be required,
-     * the engine is able to batch-allocate the required memory rather than
-     * convervatively grow the memory in small steps.
-     *
-     * **Experimental:** This API might change in upcoming versions.
-     *
-     * @param count Number of objects to add.
-     * @param parent Parent object or `null`, default `null`.
-     * @param componentCountHint Hint for how many components in total will
-     *      be added to the created objects afterwards, default `0`.
-     * @returns Newly created objects
-     */
-    addObjects(
-        count: number,
-        parent: Object3D | null,
-        componentCountHint: number
-    ): Object3D[] {
-        const parentId = parent ? parent.objectId : 0;
-        this._engine.wasm.requireTempMem(count * 2);
-        const actualCount = this._engine.wasm._wl_scene_add_objects(
-            parentId,
-            count,
-            componentCountHint || 0,
-            this._engine.wasm._tempMem,
-            this._engine.wasm._tempMemSize >> 1
-        );
-        const ids = this._engine.wasm._tempMemUint16.subarray(0, actualCount);
-        const wrapper = this._engine.wrapObject.bind(this._engine);
-        const objects = Array.from(ids, wrapper);
-        return objects;
-    }
-
-    /**
-     * Pre-allocate memory for a given amount of objects and components.
-     *
-     * Will provide better performance for adding objects later with {@link Scene#addObject}
-     * and {@link Scene#addObjects}.
-     *
-     * By providing upfront information of how many objects will be required,
-     * the engine is able to batch-allocate the required memory rather than
-     * conservatively grow the memory in small steps.
-     *
-     * **Experimental:** This API might change in upcoming versions.
-     *
-     * @param objectCount Number of objects to add.
-     * @param componentCountPerType Amount of components to
-     *      allocate for {@link Object3D.addComponent}, e.g. `{mesh: 100, collision: 200, "my-comp": 100}`.
-     * @since 0.8.10
-     */
-    reserveObjects(objectCount: number, componentCountPerType: {[key: string]: number}) {
-        const wasm = this._engine.wasm;
-        componentCountPerType = componentCountPerType || {};
-        const jsManagerIndex = wasm._typeIndexFor('js');
-        let countsPerTypeIndex = wasm._tempMemInt.subarray();
-        countsPerTypeIndex.fill(0);
-        for (const e of Object.entries(componentCountPerType)) {
-            const typeIndex = wasm._typeIndexFor(e[0]);
-            countsPerTypeIndex[typeIndex < 0 ? jsManagerIndex : typeIndex] += e[1];
-        }
-        wasm._wl_scene_reserve_objects(objectCount, wasm._tempMem);
-    }
-
-    /**
-     * Set the background clear color.
-     *
-     * @param color new clear color (RGBA).
-     * @since 0.8.5
-     */
-    set clearColor(color: number[]) {
-        this._engine.wasm._wl_scene_set_clearColor(color[0], color[1], color[2], color[3]);
-    }
-
-    /**
-     * Set whether to clear the color framebuffer before drawing.
-     *
-     * This function is useful if an external framework (e.g. an AR tracking
-     * framework) is responsible for drawing a camera frame before Wonderland
-     * Engine draws the scene on top of it.
-     *
-     * @param b Whether to enable color clear.
-     * @since 0.9.4
-     */
-    set colorClearEnabled(b: boolean) {
-        this._engine.wasm._wl_scene_enableColorClear(b);
-    }
-
-    /** Hosting engine instance. */
-    get engine() {
-        return this._engine;
-    }
-
-    /**
-     * Load a scene file (.bin)
-     *
-     * Will replace the currently active scene with the one loaded
-     * from given file. It is assumed that JavaScript components required by
-     * the new scene were registered in advance.
-     *
-     * @param filename Path to the .bin file.
-     */
-    load(filename: string) {
-        const wasm = this._engine.wasm;
-        const strLen = wasm.lengthBytesUTF8(filename) + 1;
-        const ptr = wasm._tempMem;
-        wasm.stringToUTF8(filename, ptr, strLen);
-        wasm._wl_load_scene(ptr);
-    }
-
-    /**
-     * Load an external 3D file (.gltf, .glb).
-     *
-     * Loads and parses the gltf file and its images and appends the result
-     * to scene.
-     *
-     * ```js
-     * WL.scene.append(filename).then(root => {
-     *     // root contains the loaded scene
-     * });
-     * ```
-     *
-     * In case the `loadGltfExtensions` option is set to true, the response
-     * will be an object containing both the root of the loaded scene and
-     * any glTF extensions found on nodes, meshes and the root of the file.
-     *
-     * ```js
-     * WL.scene.append(filename, { loadGltfExtensions: true }).then(({root, extensions}) => {
-     *     // root contains the loaded scene
-     *     // extensions.root contains any extensions at the root of glTF document
-     *     const rootExtensions = extensions.root;
-     *     // extensions.mesh and extensions.node contain extensions indexed by Object id
-     *     const childObject = root.children[0];
-     *     const meshExtensions = root.meshExtensions[childObject.objectId];
-     *     const nodeExtensions = root.nodeExtensions[childObject.objectId];
-     *     // extensions.idMapping contains a mapping from glTF node index to Object id
-     * });
-     * ```
-     *
-     * @param filename Path to the .gltf or .glb file.
-     * @param options Additional options for loading.
-     * @returns Root of the loaded scene.
-     */
-    append(filename: string, options: Record<any, string>): Promise<SceneAppendResult> {
-        options = options || {};
-        const loadGltfExtensions = !!options.loadGltfExtensions;
-
-        const wasm = this._engine.wasm;
-
-        const strLen = wasm.lengthBytesUTF8(filename) + 1;
-        const ptr = wasm._tempMem;
-        wasm.stringToUTF8(filename, ptr, strLen);
-        const callback = wasm._sceneLoadedCallback.length;
-        const promise = new Promise((resolve: (r: SceneAppendResult) => void, reject) => {
-            wasm._sceneLoadedCallback[callback] = {
-                success: (id: number, extensions: Record<string, any>) => {
-                    const root = this._engine.wrapObject(id);
-                    resolve(extensions ? {root, extensions} : root);
-                },
-                error: () => reject(),
-            };
-        });
-
-        wasm._wl_append_scene(ptr, loadGltfExtensions, callback);
-        return promise;
-    }
-
-    /**
-     * Unmarshalls the GltfExtensions from an Uint32Array.
-     *
-     * @param data Array containing the gltf extension data.
-     * @returns The extensions stored in an object literal.
-     *
-     * @hidden
-     */
-    _unmarshallGltfExtensions(data: Uint32Array): GLTFExtensions {
-        /* @todo: This method should be moved in the internal Emscripten library. */
-        const extensions: GLTFExtensions = {
-            root: {},
-            mesh: {},
-            node: {},
-            idMapping: {},
-        };
-
-        let index = 0;
-        const readString = () => {
-            const strPtr = data[index++];
-            const strLen = data[index++];
-            return this._engine.wasm.UTF8ViewToString(strPtr, strPtr + strLen);
-        };
-
-        const idMappingSize = data[index++];
-        const idMapping = new Array(idMappingSize);
-        for (let i = 0; i < idMappingSize; ++i) {
-            idMapping[i] = data[index++];
-        }
-        extensions.idMapping = idMapping;
-
-        const meshExtensionsSize = data[index++];
-        for (let i = 0; i < meshExtensionsSize; ++i) {
-            const objectId = data[index++];
-            extensions.mesh[idMapping[objectId]] = JSON.parse(readString());
-        }
-        const nodeExtensionsSize = data[index++];
-        for (let i = 0; i < nodeExtensionsSize; ++i) {
-            const objectId = data[index++];
-            extensions.node[idMapping[objectId]] = JSON.parse(readString());
-        }
-        const rootExtensionsStr = readString();
-        if (rootExtensionsStr) {
-            extensions.root = JSON.parse(rootExtensionsStr);
-        }
-
-        return extensions;
-    }
-
-    /**
-     * Reset the scene.
-     *
-     * This method deletes all used and allocated objects, and components.
-     */
-    reset() {
-        this._engine.wasm._wl_scene_reset();
-    }
-}
-
-/**
  * Native component
  *
  * Provides access to a native component instance of a specified component type.
@@ -705,7 +385,7 @@ export class Scene {
  * ```js
  * import { Component, Type } from '@wonderlandengine/api';
  *
- * class MyComponent extends Component {
+ * export class MyComponent extends Component {
  *     static TypeName = 'my-component';
  *     static Properties = {
  *         myBoolean: { type: Type.Boolean, default: false },
@@ -721,7 +401,7 @@ export class Component {
     /**
      * Unique identifier for this component class.
      *
-     * This is used to register, add, and retrieve component of a given type.
+     * This is used to register, add, and retrieve components of a given type.
      */
     static TypeName: string;
 
@@ -764,28 +444,65 @@ export class Component {
     static Properties: Record<string, ComponentProperty>;
 
     /**
-     * List of components this type depends on.
+     * This was never released in an official version, we are keeping it
+     * to easy transition to the new API.
      *
-     * When the {@link WonderlandEngine.autoRegisterDependencies} is set to `true`,
-     * those components will be automatically registered.
+     * @deprecated Use {@link Component.onRegister} instead.
+     * @hidden
+     */
+    static Dependencies?: ComponentConstructor[];
+
+    /**
+     * Called when this component class is registered.
      *
-     * Usage example:
+     * @example
+     *
+     * This callback can be used to register dependencies of a component,
+     * e.g., component classes that need to be registered in order to add
+     * them at runtime with {@link Object3D.addComponent}, independent of whether
+     * they are used in the editor.
      *
      * ```js
-     * class DependencyA extends Component {
-     *     static TypeName = 'dependency-a';
-     * }
+     * class Spawner extends Component {
+     *     static TypeName = 'spawner';
      *
-     * class MyComponent extends Component {
-     *     static TypeName = 'my-component';
-     *     static Dependencies = [DependencyA];
+     *     static onRegister(engine) {
+     *         engine.registerComponent(SpawnedComponent);
+     *     }
+     *
+     *     // You can now use addComponent with SpawnedComponent
      * }
      * ```
      *
-     * On the above example, registering `MyComponent` automatically leads to
-     * the registration of `DependencyA`.
+     * @example
+     *
+     * This callback can be used to register different implementations of a
+     * component depending on client features or API versions.
+     *
+     * ```js
+     * // Properties need to be the same for all implementations!
+     * const SharedProperties = {};
+     *
+     * class Anchor extends Component {
+     *     static TypeName = 'spawner';
+     *     static Properties = SharedProperties;
+     *
+     *     static onRegister(engine) {
+     *         if(navigator.xr === undefined) {
+     *             /* WebXR unsupported, keep this dummy component *\/
+     *             return;
+     *         }
+     *         /* WebXR supported! Override already registered dummy implementation
+     *          * with one depending on hit-test API support *\/
+     *         engine.registerComponent(window.HitTestSource === undefined ?
+     *             AnchorWithoutHitTest : AnchorWithHitTest);
+     *     }
+     *
+     *     // This one implements no functions
+     * }
+     * ```
      */
-    static Dependencies?: ComponentConstructor[];
+    static onRegister?: (engine: WonderlandEngine) => void;
 
     /**
      * Triggered when the component is initialized by the runtime. This method
@@ -867,7 +584,7 @@ export class Component {
      */
     _object: Object3D | null;
 
-    /** Wonderland Engine instance */
+    /** Wonderland Engine instance. @hidden */
     protected readonly _engine: WonderlandEngine;
 
     /**
@@ -959,6 +676,151 @@ export class Component {
     equals(otherComponent: Component | undefined | null): boolean {
         if (!otherComponent) return false;
         return this._manager == otherComponent._manager && this._id == otherComponent._id;
+    }
+
+    /**
+     * Reset the component properties to default.
+     *
+     * @returns Reference to self (for method chaining).
+     */
+    reset(): this {
+        const ctor = this.constructor as ComponentConstructor;
+        const properties = ctor.Properties;
+        for (const name in properties) {
+            (this as Record<string, any>)[name] = properties[name].default;
+        }
+        return this;
+    }
+
+    /**
+     * Trigger the component {@link Component.init} method.
+     *
+     * @note Use this method instead of directly calling {@link Component.init},
+     * because this method creates an handler for the {@link Component.start}.
+     *
+     * @note This api is meant to be used internally.
+     *
+     * @hidden
+     */
+    _triggerInit() {
+        if (this.init) {
+            try {
+                this.init();
+            } catch (e) {
+                console.error(
+                    `Exception during ${this.type} init() on object ${this.object.name}`
+                );
+                console.error(e);
+            }
+        }
+        if (!this.start) return;
+
+        /* Arm onActivate() with the initial start() call */
+        const oldActivate = this.onActivate;
+        this.onActivate = function () {
+            /* As "component" is the component index, which may change
+             * through calls to init() and start(), we call it on the
+             * calling object, which will be the component, instead of
+             * wljs_component_start() etc */
+            try {
+                this.start?.();
+            } catch (e) {
+                console.error(
+                    `Exception during ${this.type} start() on object ${this.object.name}`
+                );
+                console.error(e);
+            }
+            this.onActivate = oldActivate;
+            if (!this.onActivate) return;
+
+            try {
+                this.onActivate();
+            } catch (e) {
+                console.error(
+                    `Exception during ${this.type} onActivate() on object ${this.object.name}`
+                );
+                console.error(e);
+            }
+        };
+    }
+
+    /**
+     * Trigger the component {@link Component.update} method.
+     *
+     * @note This api is meant to be used internally.
+     *
+     * @hidden
+     */
+    _triggerUpdate(dt: number) {
+        if (!this.update) return;
+        try {
+            this.update(dt);
+        } catch (e) {
+            console.error(
+                `Exception during ${this.type} update() on object ${this.object.name}`
+            );
+            console.error(e);
+            if (this._engine.wasm._deactivate_component_on_error) {
+                this.active = false;
+            }
+        }
+    }
+
+    /**
+     * Trigger the component {@link Component.onActivate} method.
+     *
+     * @note This api is meant to be used internally.
+     *
+     * @hidden
+     */
+    _triggerOnActivate() {
+        if (!this.onActivate) return;
+        try {
+            this.onActivate();
+        } catch (e) {
+            console.error(
+                `Exception during ${this.type} onActivate() on object ${this.object.name}`
+            );
+            console.error(e);
+        }
+    }
+
+    /**
+     * Trigger the component {@link Component.onDeactivate} method.
+     *
+     * @note This api is meant to be used internally.
+     *
+     * @hidden
+     */
+    _triggerOnDeactivate() {
+        if (!this.onDeactivate) return;
+        try {
+            this.onDeactivate();
+        } catch (e) {
+            console.error(
+                `Exception during ${this.type} onDeactivate() on object ${this.object.name}`
+            );
+            console.error(e);
+        }
+    }
+
+    /**
+     * Trigger the component {@link Component.onDestroy} method.
+     *
+     * @note This api is meant to be used internally.
+     *
+     * @hidden
+     */
+    _triggerOnDestroy() {
+        if (!this.onDestroy) return;
+        try {
+            this.onDestroy();
+        } catch (e) {
+            console.error(
+                `Exception during ${this.type} onDestroy() on object ${this.object.name}`
+            );
+            console.error(e);
+        }
     }
 }
 
@@ -1083,7 +945,7 @@ export class CollisionComponent extends Component {
             this._engine.wasm._tempMem,
             this._engine.wasm._tempMemSize >> 1
         );
-        let overlaps = new Array(count);
+        const overlaps: CollisionComponent[] = new Array(count);
         for (let i = 0; i < count; ++i) {
             overlaps[i] = new CollisionComponent(
                 this._engine,
@@ -1148,7 +1010,7 @@ export class TextComponent extends Component {
      *
      * @param spacing Character spacing for the text component.
      */
-    set characterSpacing(spacing) {
+    set characterSpacing(spacing: number) {
         this._engine.wasm._wl_text_component_set_character_spacing(this._id, spacing);
     }
 
@@ -1195,13 +1057,12 @@ export class TextComponent extends Component {
      *
      * @param text Text of the text component.
      */
-    set text(text: string) {
+    set text(text: any) {
         const wasm = this._engine.wasm;
-        const strLen = wasm.lengthBytesUTF8(text) + 1;
-        wasm.requireTempMem(strLen);
-        const ptr = wasm._tempMem;
-        wasm.stringToUTF8(text, ptr, strLen);
-        wasm._wl_text_component_set_text(this._id, ptr);
+        wasm._wl_text_component_set_text(
+            this._id,
+            wasm.tempUTF8(text.toString())
+        );
     }
 
     /**
@@ -1377,14 +1238,51 @@ export class LightComponent extends Component {
     /** @override */
     static TypeName = 'light';
 
-    /** View on the light color. */
+    /** @overload */
+    getColor(): Float32Array;
+    /**
+     * Get light color.
+     *
+     * @param out Destination array/vector, expected to have at least 3 elements.
+     * @returns The `out` parameter.
+     * @since 1.0.0
+     */
+    getColor<T extends NumberArray>(out: T): T;
+    getColor(out: NumberArray = new Float32Array(3)): NumberArray {
+        const wasm = this._engine.wasm;
+        const ptr = wasm._wl_light_component_get_color(this._id) / 4; /* Align F32 */
+        out[0] = wasm.HEAPF32[ptr];
+        out[1] = wasm.HEAPF32[ptr + 1];
+        out[2] = wasm.HEAPF32[ptr + 2];
+        return out;
+    }
+
+    /**
+     * Set light color.
+     *
+     * @param c New color array/vector, expected to have at least 3 elements.
+     * @since 1.0.0
+     */
+    setColor(c: Readonly<NumberArray>): void {
+        const wasm = this._engine.wasm;
+        const ptr = wasm._wl_light_component_get_color(this._id) / 4; /* Align F32 */
+        wasm.HEAPF32[ptr] = c[0];
+        wasm.HEAPF32[ptr + 1] = c[1];
+        wasm.HEAPF32[ptr + 2] = c[2];
+    }
+
+    /**
+     * View on the light color.
+     *
+     * @note Prefer to use {@link getColor} in performance-critical code.
+     */
     @nativeProperty()
     get color(): Float32Array {
         const wasm = this._engine.wasm;
         return new Float32Array(
             wasm.HEAPF32.buffer,
             wasm._wl_light_component_get_color(this._id),
-            4
+            3
         );
     }
 
@@ -1392,6 +1290,8 @@ export class LightComponent extends Component {
      * Set light color.
      *
      * @param c Color of the light component.
+     *
+     * @note Prefer to use {@link setColor} in performance-critical code.
      */
     set color(c: Readonly<NumberArray>) {
         this.color.set(c);
@@ -1410,6 +1310,177 @@ export class LightComponent extends Component {
      */
     set lightType(t: LightType) {
         this._engine.wasm._wl_light_component_set_type(this._id, t);
+    }
+
+    /**
+     * Light intensity.
+     * @since 1.0.0
+     */
+    @nativeProperty()
+    get intensity(): number {
+        return this._engine.wasm._wl_light_component_get_intensity(this._id);
+    }
+
+    /**
+     * Set light intensity.
+     *
+     * @param intensity Intensity of the light component.
+     * @since 1.0.0
+     */
+    set intensity(intensity: number) {
+        this._engine.wasm._wl_light_component_set_intensity(this._id, intensity);
+    }
+
+    /**
+     * Outer angle for spot lights, in degrees.
+     * @since 1.0.0
+     */
+    @nativeProperty()
+    get outerAngle(): number {
+        return this._engine.wasm._wl_light_component_get_outerAngle(this._id);
+    }
+
+    /**
+     * Set outer angle for spot lights.
+     *
+     * @param angle Outer angle, in degrees.
+     * @since 1.0.0
+     */
+    set outerAngle(angle: number) {
+        this._engine.wasm._wl_light_component_set_outerAngle(this._id, angle);
+    }
+
+    /**
+     * Inner angle for spot lights, in degrees.
+     * @since 1.0.0
+     */
+    @nativeProperty()
+    get innerAngle(): number {
+        return this._engine.wasm._wl_light_component_get_innerAngle(this._id);
+    }
+
+    /**
+     * Set inner angle for spot lights.
+     *
+     * @param angle Inner angle, in degrees.
+     * @since 1.0.0
+     */
+    set innerAngle(angle: number) {
+        this._engine.wasm._wl_light_component_set_innerAngle(this._id, angle);
+    }
+
+    /**
+     * Whether the light casts shadows.
+     * @since 1.0.0
+     */
+    @nativeProperty()
+    get shadows(): boolean {
+        return !!this._engine.wasm._wl_light_component_get_shadows(this._id);
+    }
+
+    /**
+     * Set whether the light casts shadows.
+     *
+     * @param b Whether the light casts shadows.
+     * @since 1.0.0
+     */
+    set shadows(b: boolean) {
+        this._engine.wasm._wl_light_component_set_shadows(this._id, b);
+    }
+
+    /**
+     * Range for shadows.
+     * @since 1.0.0
+     */
+    @nativeProperty()
+    get shadowRange(): number {
+        return this._engine.wasm._wl_light_component_get_shadowRange(this._id);
+    }
+
+    /**
+     * Set range for shadows.
+     *
+     * @param range Range for shadows.
+     * @since 1.0.0
+     */
+    set shadowRange(range: number) {
+        this._engine.wasm._wl_light_component_set_shadowRange(this._id, range);
+    }
+
+    /**
+     * Bias value for shadows.
+     * @since 1.0.0
+     */
+    @nativeProperty()
+    get shadowBias(): number {
+        return this._engine.wasm._wl_light_component_get_shadowBias(this._id);
+    }
+
+    /**
+     * Set bias value for shadows.
+     *
+     * @param bias Bias for shadows.
+     * @since 1.0.0
+     */
+    set shadowBias(bias: number) {
+        this._engine.wasm._wl_light_component_set_shadowBias(this._id, bias);
+    }
+
+    /**
+     * Normal bias value for shadows.
+     * @since 1.0.0
+     */
+    @nativeProperty()
+    get shadowNormalBias(): number {
+        return this._engine.wasm._wl_light_component_get_shadowNormalBias(this._id);
+    }
+
+    /**
+     * Set normal bias value for shadows.
+     *
+     * @param bias Normal bias for shadows.
+     * @since 1.0.0
+     */
+    set shadowNormalBias(bias: number) {
+        this._engine.wasm._wl_light_component_set_shadowNormalBias(this._id, bias);
+    }
+
+    /**
+     * Texel size for shadows.
+     * @since 1.0.0
+     */
+    @nativeProperty()
+    get shadowTexelSize(): number {
+        return this._engine.wasm._wl_light_component_get_shadowTexelSize(this._id);
+    }
+
+    /**
+     * Set texel size for shadows.
+     *
+     * @param size Texel size for shadows.
+     * @since 1.0.0
+     */
+    set shadowTexelSize(size: number) {
+        this._engine.wasm._wl_light_component_set_shadowTexelSize(this._id, size);
+    }
+
+    /**
+     * Cascade count for {@link LightType.Sun} shadows.
+     * @since 1.0.0
+     */
+    @nativeProperty()
+    get cascadeCount(): number {
+        return this._engine.wasm._wl_light_component_get_cascadeCount(this._id);
+    }
+
+    /**
+     * Set cascade count for {@link LightType.Sun} shadows.
+     *
+     * @param count Cascade count.
+     * @since 1.0.0
+     */
+    set cascadeCount(count: number) {
+        this._engine.wasm._wl_light_component_set_cascadeCount(this._id, count);
     }
 }
 
@@ -1690,9 +1761,9 @@ export class PhysXComponent extends Component {
     /**
      * Set whether to allow simulation of this rigid body.
      *
-     * {@link #allowSimulation} and {@link #trigger} can not be enabled at the
-     * same time. Enabling {@link #allowSimulation} while {@link trigger} is enabled
-     * will disable {@link #trigger}.
+     * {@link allowSimulation} and {@link trigger} can not be enabled at the
+     * same time. Enabling {@link allowSimulation} while {@link trigger} is enabled
+     * will disable {@link trigger}.
      *
      * @param b Whether to allow simulation of this rigid body.
      */
@@ -1728,7 +1799,7 @@ export class PhysXComponent extends Component {
     /**
      * Set whether this physics body is a trigger.
      *
-     * {@link #allowSimulation} and {@link trigger} can not be enabled at the
+     * {@link allowSimulation} and {@link trigger} can not be enabled at the
      * same time. Enabling trigger while {@link allowSimulation} is enabled,
      * will disable {@link allowSimulation}.
      *
@@ -2273,9 +2344,8 @@ export class Physics {
         o: Readonly<NumberArray>,
         d: Readonly<NumberArray>,
         group: number,
-        maxDistance?: number
+        maxDistance: number = 100.0
     ): RayHit {
-        if (typeof maxDistance === 'undefined') maxDistance = 100.0;
         this._engine.wasm._wl_physx_ray_cast(
             o[0],
             o[1],
@@ -2284,7 +2354,7 @@ export class Physics {
             d[1],
             d[2],
             group,
-            maxDistance || 100,
+            maxDistance,
             this._rayHit
         );
         return this._hit;
@@ -2306,6 +2376,20 @@ export enum MeshIndexType {
 }
 
 /**
+ * Mesh skinning type.
+ */
+export enum MeshSkinningType {
+    /** Not skinned */
+    None = 0,
+
+    /** Skinned, 4 joints/weight per vertex */
+    FourJoints = 1,
+
+    /** Skinned, 8 joints/weight per vertex */
+    EightJoints = 2,
+}
+
+/**
  * Mesh constructor parameters object.
  *
  * Usage:
@@ -2321,8 +2405,8 @@ export interface MeshParameters {
     indexData: Readonly<NumberArray>;
     /** Index type, `null` if not indexed. */
     indexType: MeshIndexType;
-    /** `true` if the mesh should be skinned. Defaults to false. */
-    skinned: boolean;
+    /** Whether the mesh should be skinned. Defaults to not skinned. */
+    skinningType: MeshSkinningType;
 }
 
 /**
@@ -2390,14 +2474,14 @@ export class Mesh {
             }
         }
 
-        const {skinned = false} = params;
+        const {skinningType = MeshSkinningType.None} = params;
 
         this._index = wasm._wl_mesh_create(
             indexData,
             indexDataSize,
             indexType,
             params.vertexCount,
-            skinned
+            skinningType
         );
     }
 
@@ -2453,7 +2537,7 @@ export class Mesh {
      * Mesh bounding sphere.
      *
      * @param out Preallocated array to write into, to avoid garbage,
-     *     otherwise will allocate a new {@link Float32Array}.
+     *     otherwise will allocate a new Float32Array.
      *
      * ```js
      *  const sphere = new Float32Array(4);
@@ -2468,6 +2552,7 @@ export class Mesh {
      *
      * @returns Bounding sphere, 0-2 sphere origin, 3 radius.
      */
+    getBoundingSphere<T extends NumberArray>(out: T | Float32Array): T | Float32Array;
     getBoundingSphere<T extends NumberArray>(
         out: T | Float32Array = new Float32Array(4)
     ): T | Float32Array {
@@ -2483,6 +2568,34 @@ export class Mesh {
         return out as T;
     }
 
+    /** @overload */
+    attribute(
+        attr: MeshAttribute.Position
+    ): MeshAttributeAccessor<Float32ArrayConstructor> | null;
+    /** @overload */
+    attribute(
+        attr: MeshAttribute.Tangent
+    ): MeshAttributeAccessor<Float32ArrayConstructor> | null;
+    /** @overload */
+    attribute(
+        attr: MeshAttribute.Normal
+    ): MeshAttributeAccessor<Float32ArrayConstructor> | null;
+    /** @overload */
+    attribute(
+        attr: MeshAttribute.TextureCoordinate
+    ): MeshAttributeAccessor<Float32ArrayConstructor> | null;
+    /** @overload */
+    attribute(
+        attr: MeshAttribute.Color
+    ): MeshAttributeAccessor<Float32ArrayConstructor> | null;
+    /** @overload */
+    attribute(
+        attr: MeshAttribute.JointId
+    ): MeshAttributeAccessor<Uint16ArrayConstructor> | null;
+    /** @overload */
+    attribute(
+        attr: MeshAttribute.JointWeight
+    ): MeshAttributeAccessor<Float32ArrayConstructor> | null;
     /**
      * Get an attribute accessor to retrieve or modify data of give attribute.
      *
@@ -2497,15 +2610,8 @@ export class Mesh {
      * For flexible reusable components, take this into account that only `Position`
      * is guaranteed to be present at all time.
      */
-    attribute(attr: MeshAttribute.Position): MeshAttributeAccessor<Float32ArrayConstructor> | null;
-    attribute(attr: MeshAttribute.Tangent): MeshAttributeAccessor<Float32ArrayConstructor> | null;
-    attribute(attr: MeshAttribute.Normal): MeshAttributeAccessor<Float32ArrayConstructor> | null;
-    attribute(attr: MeshAttribute.TextureCoordinate): MeshAttributeAccessor<Float32ArrayConstructor> | null;
-    attribute(attr: MeshAttribute.Color): MeshAttributeAccessor<Float32ArrayConstructor> | null;
-    attribute(attr: MeshAttribute.JointId): MeshAttributeAccessor<Uint16ArrayConstructor> | null;
-    attribute(attr: MeshAttribute.JointWeight): MeshAttributeAccessor<Float32ArrayConstructor> | null;
-    attribute(attr: MeshAttribute): MeshAttributeAccessor<Float32ArrayConstructor | Uint16ArrayConstructor> | null;
-    attribute<C extends Float32ArrayConstructor | Uint16ArrayConstructor>(attr: MeshAttribute): MeshAttributeAccessor<C> | null {
+    attribute(attr: MeshAttribute): MeshAttributeAccessor | null;
+    attribute(attr: MeshAttribute): MeshAttributeAccessor | null {
         if (typeof attr != 'number')
             throw new TypeError('Expected number, but got ' + typeof attr);
 
@@ -2517,17 +2623,20 @@ export class Mesh {
         );
         if (tempMemUint32[0] == 255) return null;
 
-        const a = new MeshAttributeAccessor<C>(this._engine, attr);
-        a._attribute = tempMemUint32[0];
-        a._offset = tempMemUint32[1];
-        a._stride = tempMemUint32[2];
-        a._formatSize = tempMemUint32[3];
-        a._componentCount = tempMemUint32[4];
         const arraySize = tempMemUint32[5];
-        /* The WASM API returns `0` for a scalar value. We clamp it to 1 as we strictly use it as a multiplier for get/set operations */
-        a._arraySize = arraySize ? arraySize : 1;
-        (a.length as number) = this.vertexCount;
-        return a;
+        return new MeshAttributeAccessor(this._engine, {
+            attribute: tempMemUint32[0],
+            offset: tempMemUint32[1],
+            stride: tempMemUint32[2],
+            formatSize: tempMemUint32[3],
+            componentCount: tempMemUint32[4],
+            /* The WASM API returns `0` for a scalar value. We clamp it to 1 as we strictly use it as a multiplier for get/set operations */
+            arraySize: arraySize ? arraySize : 1,
+            length: this.vertexCount,
+            bufferType: (attr !== MeshAttribute.JointId
+                ? Float32Array
+                : Uint16Array) as TypedArrayCtor,
+        });
     }
 
     /**
@@ -2566,6 +2675,20 @@ export class Mesh {
 }
 
 /**
+ * Options to create a new {@link MeshAttributeAccessor} instance.
+ */
+interface MeshAttributeAccessorOptions<T extends TypedArrayCtor> {
+    attribute: number;
+    offset: number;
+    stride: number;
+    formatSize: number;
+    componentCount: number;
+    arraySize: number;
+    length: number;
+    bufferType: T;
+}
+
+/**
  * An iterator over a mesh vertex attribute.
  *
  * Usage:
@@ -2587,71 +2710,70 @@ export class Mesh {
  *   mesh.update();
  * ```
  */
-export class MeshAttributeAccessor<C extends Float32ArrayConstructor | Uint16ArrayConstructor = Float32ArrayConstructor | Uint16ArrayConstructor> {
-    /** Attribute index. @hidden */
-    _attribute: number = -1;
-    /** Attribute offset. @hidden */
-    _offset: number = 0;
-    /** Attribute stride. @hidden */
-    _stride: number = 0;
-    /** Format size native enum. @hidden */
-    _formatSize: number = 0;
-    /** Number of components per vertex. @hidden */
-    _componentCount: number = 0;
-    /** Number of values per vertex. @hidden */
-    _arraySize: number = 1;
-
+export class MeshAttributeAccessor<T extends TypedArrayCtor = TypedArrayCtor> {
     /** Max number of elements. */
     readonly length: number = 0;
 
     /** Wonderland Engine instance. @hidden */
     protected _engine: WonderlandEngine;
 
+    /** Attribute index. @hidden */
+    private _attribute: number = -1;
+    /** Attribute offset. @hidden */
+    private _offset: number = 0;
+    /** Attribute stride. @hidden */
+    private _stride: number = 0;
+    /** Format size native enum. @hidden */
+    private _formatSize: number = 0;
+    /** Number of components per vertex. @hidden */
+    private _componentCount: number = 0;
+    /** Number of values per vertex. @hidden */
+    private _arraySize: number = 1;
     /**
      * Class to instantiate an ArrayBuffer to get/set values.
      */
-    private _bufferType: C;
+    private _bufferType: T;
     /**
      * Function to allocate temporary WASM memory. It is cached in the accessor to avoid
      * conditionals during get/set.
      */
-    private _tempBufferGetter: (bytes: number) => TypedArray<C>;
+    private _tempBufferGetter: (bytes: number) => TypedArray<T>;
 
     /**
      * Create a new instance.
      *
-     * @param type The type of data this accessor is wrapping.
+     * @note Please use {@link Mesh.attribute} to create a new instance.
+     *
+     * @param options Contains information about how to read the data.
      * @note Do not use this constructor. Instead, please use the {@link Mesh.attribute} method.
      *
      * @hidden
      */
-    constructor(engine: WonderlandEngine, type = MeshAttribute.Position) {
+    constructor(engine: WonderlandEngine, options: MeshAttributeAccessorOptions<T>) {
         this._engine = engine;
         const wasm = this._engine.wasm;
-        switch (type) {
-            case MeshAttribute.Position:
-            case MeshAttribute.Normal:
-            case MeshAttribute.TextureCoordinate:
-            case MeshAttribute.Tangent:
-            case MeshAttribute.Color:
-            case MeshAttribute.JointWeight:
-                this._bufferType = Float32Array as C;
-                this._tempBufferGetter = wasm.getTempBufferF32.bind(wasm) as (bytes: number) => TypedArray<C>;
-                break;
-            case MeshAttribute.JointId:
-                this._bufferType = Uint16Array as C;
-                this._tempBufferGetter = wasm.getTempBufferU16.bind(wasm) as (bytes: number) => TypedArray<C>;
-                break;
-            default:
-                throw new Error(`Invalid attribute accessor type: ${type}`);
-        }
+
+        this._attribute = options.attribute;
+        this._offset = options.offset;
+        this._stride = options.stride;
+        this._formatSize = options.formatSize;
+        this._componentCount = options.componentCount;
+        this._arraySize = options.arraySize;
+        this._bufferType = options.bufferType;
+        this.length = options.length;
+
+        this._tempBufferGetter = (
+            this._bufferType === Float32Array
+                ? wasm.getTempBufferF32.bind(wasm)
+                : wasm.getTempBufferU16.bind(wasm)
+        ) as () => TypedArray<T>;
     }
 
     /**
-     * Create a new TypedArray to hold this attribute values.
+     * Create a new TypedArray to hold this attribute's values.
      *
      * This method is useful to create a view to hold the data to
-     * pass to {@link MeshAttributeAccessor.get} and {@link MeshAttributeAccessor.set}
+     * pass to {@link get} and {@link set}
      *
      * Example:
      *
@@ -2666,11 +2788,15 @@ export class MeshAttributeAccessor<C extends Float32ArrayConstructor | Uint16Arr
      * @param count The number of **vertices** expected.
      * @returns A TypedArray with the appropriate format to access the data
      */
-    createArray(count = 1) {
+    createArray(count = 1): TypedArray<T> {
         count = count > this.length ? this.length : count;
-        return new this._bufferType(count * this._componentCount * this._arraySize);
+        return new this._bufferType(
+            count * this._componentCount * this._arraySize
+        ) as TypedArray<T>;
     }
 
+    /** @overload */
+    get(index: number): TypedArray<T>;
     /**
      * Get attribute element.
      *
@@ -2685,16 +2811,13 @@ export class MeshAttributeAccessor<C extends Float32ArrayConstructor | Uint16Arr
      *
      * @returns The `out` parameter
      */
-    get(index: number): TypedArray<C>;
     get<T extends NumberArray>(index: number, out: T): T;
-    get(
-        index: number,
-        out: NumberArray = this.createArray()
-    ) {
-        if (out.length % this._componentCount !== 0)
+    get(index: number, out: NumberArray = this.createArray()): NumberArray {
+        if (out.length % this._componentCount !== 0) {
             throw new Error(
                 `out.length, ${out.length} is not a multiple of the attribute vector components, ${this._componentCount}`
             );
+        }
 
         const dest = this._tempBufferGetter(out.length);
         const elementSize = this._bufferType.BYTES_PER_ELEMENT;
@@ -2816,9 +2939,7 @@ export class Material {
             if (!params?.pipeline) throw new Error("Missing parameter 'pipeline'");
             const wasm = this._engine.wasm;
             const pipeline = params.pipeline;
-            const lengthBytes = wasm.lengthBytesUTF8(pipeline) + 1;
-            wasm.stringToUTF8(pipeline, wasm._tempMem, lengthBytes);
-            this._index = wasm._wl_material_create(wasm._tempMem);
+            this._index = wasm._wl_material_create(wasm.tempUTF8(pipeline));
             if (this._index < 0) throw new Error(`No such pipeline '${pipeline}'`);
         } else {
             this._index = params;
@@ -2835,7 +2956,7 @@ export class Material {
                 const wasm = engine.wasm;
                 const definition = wasm._materialDefinitions[target._definition];
                 const param = definition.get(prop);
-                if (!param) return (target as {[key: string | symbol]: any})[prop];
+                if (!param) return (target as Record<string | symbol, any>)[prop];
                 if (
                     wasm._wl_material_get_param_value(
                         target._index,
@@ -2870,10 +2991,10 @@ export class Material {
                                       type.componentCount
                                   );
                         case MaterialParamType.Sampler:
-                            return new Texture(engine, wasm._tempMemInt[0]);
+                            return engine.textures.wrap(wasm._tempMemInt[0]);
                         default:
                             throw new Error(
-                                `Invalid type ${type} on parameter ${param.index} for material ${target._index}`
+                                `Invalid type ${type.type} on parameter ${param.index} for material ${target._index}`
                             );
                     }
                 }
@@ -2884,7 +3005,7 @@ export class Material {
                 const definition = wasm._materialDefinitions[target._definition];
                 const param = definition.get(prop);
                 if (!param) {
-                    (target as {[key: string | symbol]: any})[prop] = value;
+                    (target as Record<string | symbol, any>)[prop] = value;
                     return true;
                 }
                 const type = param.type;
@@ -2933,9 +3054,7 @@ export class Material {
     /** Name of the pipeline used by this material. */
     get pipeline(): string {
         const wasm = this._engine.wasm;
-        return wasm.UTF8ToString(
-            (wasm._wl_material_get_pipeline || wasm._wl_material_get_shader)(this._index)
-        );
+        return wasm.UTF8ToString(wasm._wl_material_get_pipeline(this._index));
     }
 
     /** Hosting engine instance. */
@@ -3019,7 +3138,8 @@ export class Texture {
         } else {
             this._id = param;
         }
-        this._engine.textures[this._id] = this;
+
+        this._engine.textures._set(this);
     }
 
     /** Whether this texture is valid. */
@@ -3111,11 +3231,9 @@ export class Texture {
      * @since 0.9.0
      */
     destroy(): void {
-        this._engine.wasm._wl_texture_destroy(this._id);
-        if (this._imageIndex !== null) {
-            this._engine.wasm._images[this._imageIndex] = null;
-            this._imageIndex = undefined!;
-        }
+        this.engine.textures._destroy(this);
+        this._id = -1;
+        this._imageIndex = null;
     }
 
     /**
@@ -3197,7 +3315,7 @@ export class Animation {
         }
         const ptr = wasm._malloc(2 * newTargets.length);
         for (let i = 0; i < newTargets.length; ++i) {
-            wasm.HEAPU16[ptr >> (1 + i)] = (newTargets[i] as Object3D).objectId;
+            wasm.HEAPU16[ptr >> (1 + i)] = newTargets[i].objectId;
         }
         const animId = wasm._wl_animation_retarget(this._index, ptr);
         wasm._free(ptr);
@@ -3272,10 +3390,7 @@ export class Object3D {
      */
     set name(newName: string) {
         const wasm = this._engine.wasm;
-        const lengthBytes = wasm.lengthBytesUTF8(newName) + 1;
-        const mem = wasm._tempMem;
-        wasm.stringToUTF8(newName, mem, lengthBytes);
-        wasm._wl_object_set_name(this.objectId, mem);
+        wasm._wl_object_set_name(this.objectId, wasm.tempUTF8(newName));
     }
 
     /**
@@ -3304,7 +3419,7 @@ export class Object3D {
             wasm._tempMemSize >> 1
         );
 
-        const children = new Array(childrenCount);
+        const children: Object3D[] = new Array(childrenCount);
         for (let i = 0; i < childrenCount; ++i) {
             children[i] = this._engine.wrapObject(wasm._tempMemUint16[i]);
         }
@@ -3335,64 +3450,116 @@ export class Object3D {
         return this._engine;
     }
 
-    /** Reset local transformation (translation, rotation and scaling) to identity. */
-    resetTransform(): void {
+    /**
+     * Reset local transformation (translation, rotation and scaling) to identity.
+     *
+     * @returns Reference to self (for method chaining).
+     */
+    resetTransform(): this {
         this._engine.wasm._wl_object_reset_translation_rotation(this.objectId);
         this._engine.wasm._wl_object_reset_scaling(this.objectId);
+        return this;
     }
 
-    /** Reset local translation and rotation to identity */
-    resetTranslationRotation(): void {
+    /**
+     * Reset local position and rotation to identity.
+     *
+     * @returns Reference to self (for method chaining).
+     */
+    resetPositionRotation(): this {
         this._engine.wasm._wl_object_reset_translation_rotation(this.objectId);
+        return this;
+    }
+    /** @deprecated Please use {@link Object3D.resetPositionRotation} instead. */
+    resetTranslationRotation(): this {
+        return this.resetPositionRotation();
     }
 
     /**
      * Reset local rotation, keep translation.
+     *
      * @note To reset both rotation and translation, prefer
      *       {@link resetTranslationRotation}.
+     *
+     * @returns Reference to self (for method chaining).
      */
-    resetRotation(): void {
+    resetRotation(): this {
         this._engine.wasm._wl_object_reset_rotation(this.objectId);
+        return this;
     }
 
     /**
      * Reset local translation, keep rotation.
+     *
      * @note To reset both rotation and translation, prefer
      *       {@link resetTranslationRotation}.
+     *
+     * @returns Reference to self (for method chaining).
      */
-    resetTranslation(): void {
+    resetPosition(): this {
         this._engine.wasm._wl_object_reset_translation(this.objectId);
+        return this;
     }
-
-    /** Reset local scaling to identity (``[1.0, 1.0, 1.0]``). */
-    resetScaling(): void {
-        this._engine.wasm._wl_object_reset_scaling(this.objectId);
+    /** @deprecated Please use {@link Object3D.resetPosition} instead. */
+    resetTranslation(): this {
+        return this.resetPosition();
     }
 
     /**
-     * Translate object by a vector in the parent's space.
-     * @param v Vector to translate by.
+     * Reset local scaling to identity (``[1.0, 1.0, 1.0]``).
+     *
+     * @returns Reference to self (for method chaining).
      */
-    translate(v: Readonly<NumberArray>): void {
+    resetScaling(): this {
+        this._engine.wasm._wl_object_reset_scaling(this.objectId);
+        return this;
+    }
+
+    /** @deprecated Please use {@link Object3D.translateLocal} instead. */
+    translate(v: Readonly<NumberArray>): this {
+        return this.translateLocal(v);
+    }
+    /**
+     * Translate object by a vector in the parent's space.
+     *
+     * @param v Vector to translate by.
+     *
+     * @returns Reference to self (for method chaining).
+     */
+    translateLocal(v: Readonly<NumberArray>): this {
         this._engine.wasm._wl_object_translate(this.objectId, v[0], v[1], v[2]);
+        return this;
     }
 
     /**
      * Translate object by a vector in object space.
+     *
      * @param v Vector to translate by.
+     *
+     * @returns Reference to self (for method chaining).
      */
-    translateObject(v: Readonly<NumberArray>): void {
+    translateObject(v: Readonly<NumberArray>): this {
         this._engine.wasm._wl_object_translate_obj(this.objectId, v[0], v[1], v[2]);
+        return this;
     }
 
     /**
      * Translate object by a vector in world space.
+     *
      * @param v Vector to translate by.
+     *
+     * @returns Reference to self (for method chaining).
      */
-    translateWorld(v: Readonly<NumberArray>): void {
+    translateWorld(v: Readonly<NumberArray>): this {
         this._engine.wasm._wl_object_translate_world(this.objectId, v[0], v[1], v[2]);
+        return this;
     }
 
+    /** @deprecated Please use {@link Object3D.rotateAxisAngleDegLocal} instead. */
+    rotateAxisAngleDeg(a: Readonly<NumberArray>, d: number): this {
+        this.rotateAxisAngleDegLocal(a, d);
+        return this;
+    }
     /**
      * Rotate around given axis by given angle (degrees) in local space.
      *
@@ -3404,11 +3571,18 @@ export class Object3D {
      *     {@link rotateAxisAngleDegObject}
      *
      * @see {@link rotateAxisAngleRad}
+     *
+     * @returns Reference to self (for method chaining).
      */
-    rotateAxisAngleDeg(a: Readonly<NumberArray>, d: number): void {
+    rotateAxisAngleDegLocal(a: Readonly<NumberArray>, d: number): this {
         this._engine.wasm._wl_object_rotate_axis_angle(this.objectId, a[0], a[1], a[2], d);
+        return this;
     }
 
+    /** @deprecated Please use {@link Object3D.rotateAxisAngleRadLocal} instead. */
+    rotateAxisAngleRad(a: Readonly<NumberArray>, d: number): this {
+        return this.rotateAxisAngleRadLocal(a, d);
+    }
     /**
      * Rotate around given axis by given angle (radians) in local space.
      *
@@ -3420,8 +3594,10 @@ export class Object3D {
      *     {@link rotateAxisAngleDegObject}
      *
      * @see {@link rotateAxisAngleDeg}
+     *
+     * @returns Reference to self (for method chaining).
      */
-    rotateAxisAngleRad(a: Readonly<NumberArray>, d: number): void {
+    rotateAxisAngleRadLocal(a: Readonly<NumberArray>, d: number): this {
         this._engine.wasm._wl_object_rotate_axis_angle_rad(
             this.objectId,
             a[0],
@@ -3429,6 +3605,7 @@ export class Object3D {
             a[2],
             d
         );
+        return this;
     }
 
     /**
@@ -3441,8 +3618,10 @@ export class Object3D {
      * local transformation.
      *
      * @see {@link rotateAxisAngleRadObject}
+     *
+     * @returns Reference to self (for method chaining).
      */
-    rotateAxisAngleDegObject(a: Readonly<NumberArray>, d: number): void {
+    rotateAxisAngleDegObject(a: Readonly<NumberArray>, d: number): this {
         this._engine.wasm._wl_object_rotate_axis_angle_obj(
             this.objectId,
             a[0],
@@ -3450,6 +3629,7 @@ export class Object3D {
             a[2],
             d
         );
+        return this;
     }
 
     /**
@@ -3461,8 +3641,10 @@ export class Object3D {
      * @param d Angle in degrees
      *
      * @see {@link rotateAxisAngleDegObject}
+     *
+     * @returns Reference to self (for method chaining).
      */
-    rotateAxisAngleRadObject(a: Readonly<NumberArray>, d: number): void {
+    rotateAxisAngleRadObject(a: Readonly<NumberArray>, d: number): this {
         this._engine.wasm._wl_object_rotate_axis_angle_rad_obj(
             this.objectId,
             a[0],
@@ -3470,15 +3652,24 @@ export class Object3D {
             a[2],
             d
         );
+        return this;
     }
 
+    /** @deprecated Please use {@link Object3D.rotateLocal} instead. */
+    rotate(q: Readonly<NumberArray>): this {
+        this.rotateLocal(q);
+        return this;
+    }
     /**
      * Rotate by a quaternion.
      *
      * @param q the Quaternion to rotate by.
+     *
+     * @returns Reference to self (for method chaining).
      */
-    rotate(q: Readonly<NumberArray>): void {
+    rotateLocal(q: Readonly<NumberArray>): this {
         this._engine.wasm._wl_object_rotate_quat(this.objectId, q[0], q[1], q[2], q[3]);
+        return this;
     }
 
     /**
@@ -3488,21 +3679,365 @@ export class Object3D {
      * local transformation.
      *
      * @param q the Quaternion to rotate by.
+     *
+     * @returns Reference to self (for method chaining).
      */
-    rotateObject(q: Readonly<NumberArray>): void {
+    rotateObject(q: Readonly<NumberArray>): this {
         this._engine.wasm._wl_object_rotate_quat_obj(this.objectId, q[0], q[1], q[2], q[3]);
+        return this;
     }
 
+    /** @deprecated Please use {@link Object3D.scaleLocal} instead. */
+    scale(v: Readonly<NumberArray>): this {
+        this.scaleLocal(v);
+        return this;
+    }
     /**
      * Scale object by a vector in object space.
      *
      * @param v Vector to scale by.
+     *
+     * @returns Reference to self (for method chaining).
      */
-    scale(v: Readonly<NumberArray>): void {
+    scaleLocal(v: Readonly<NumberArray>): this {
         this._engine.wasm._wl_object_scale(this.objectId, v[0], v[1], v[2]);
+        return this;
     }
 
-    /** Local / object space transformation. */
+    /** @overload */
+    getPositionLocal(): Float32Array;
+    /**
+     * Compute local / object space position from transformation.
+     *
+     * @param out Destination array/vector, expected to have at least 3 elements.
+     * @returns The `out` parameter.
+     */
+    getPositionLocal<T extends NumberArray>(out: T): T;
+    getPositionLocal(out: NumberArray = new Float32Array(3)): NumberArray {
+        const wasm = this._engine.wasm;
+        /* Translation is different than rotation & scaling.
+         * We can't simply read the memory. */
+        wasm._wl_object_get_translation_local(this.objectId, wasm._tempMem);
+        out[0] = wasm._tempMemFloat[0];
+        out[1] = wasm._tempMemFloat[1];
+        out[2] = wasm._tempMemFloat[2];
+        return out;
+    }
+    /** @overload */
+    getTranslationLocal(): Float32Array;
+    /** @deprecated Please use {@link Object3D.getPositionLocal} instead. */
+    getTranslationLocal<T extends NumberArray>(out: T): T;
+    getTranslationLocal(out: NumberArray = new Float32Array(3)): NumberArray {
+        return this.getPositionLocal(out);
+    }
+
+    /** @overload */
+    getPositionWorld(): Float32Array;
+    /**
+     * Compute world space position from transformation.
+     *
+     * May recompute transformations of the hierarchy of this object,
+     * if they were changed by JavaScript components this frame.
+     *
+     * @param out Destination array/vector, expected to have at least 3 elements.
+     * @return The `out` parameter.
+     */
+    getPositionWorld<T extends NumberArray>(out: T): T;
+    getPositionWorld(out: NumberArray = new Float32Array(3)): NumberArray {
+        const wasm = this._engine.wasm;
+        /* Translation is different than rotation & scaling.
+         * We can't simply read the memory. */
+        wasm._wl_object_get_translation_world(this.objectId, wasm._tempMem);
+        out[0] = wasm._tempMemFloat[0];
+        out[1] = wasm._tempMemFloat[1];
+        out[2] = wasm._tempMemFloat[2];
+        return out;
+    }
+    /** @overload */
+    getTranslationWorld(): Float32Array;
+    /** @deprecated Please use {@link Object3D.getPositionWorld} instead. */
+    getTranslationWorld<T extends NumberArray>(out: T): T;
+    getTranslationWorld(out: NumberArray = new Float32Array(3)): NumberArray {
+        return this.getPositionWorld(out);
+    }
+
+    /**
+     * Set local / object space position.
+     *
+     * Concatenates a new translation dual quaternion onto the existing rotation.
+     *
+     * @param v New local position array/vector, expected to have at least 3 elements.
+     *
+     * @returns Reference to self (for method chaining).
+     */
+    setPositionLocal(v: Readonly<NumberArray>): this {
+        this._engine.wasm._wl_object_set_translation_local(this.objectId, v[0], v[1], v[2]);
+        return this;
+    }
+    /** @deprecated Please use {@link Object3D.setPositionLocal} instead. */
+    setTranslationLocal(v: Readonly<NumberArray>): this {
+        return this.setPositionLocal(v);
+    }
+
+    /**
+     * Set world space position.
+     *
+     * Applies the inverse parent transform with a new translation dual quaternion
+     * which is concatenated onto the existing rotation.
+     *
+     * @param v New world position array/vector, expected to have at least 3 elements.
+     *
+     * @returns Reference to self (for method chaining).
+     */
+    setPositionWorld(v: Readonly<NumberArray>): this {
+        this._engine.wasm._wl_object_set_translation_world(this.objectId, v[0], v[1], v[2]);
+        return this;
+    }
+    /** @deprecated Please use {@link Object3D.setPositionWorld} instead. */
+    setTranslationWorld(v: Readonly<NumberArray>): this {
+        return this.setPositionWorld(v);
+    }
+
+    /** @overload */
+    getScalingLocal(): Float32Array;
+    /**
+     * Local / object space scaling.
+     *
+     * @param out Destination array/vector, expected to have at least 3 elements.
+     * @return The `out` parameter.
+     *
+     * @since 1.0.0
+     */
+    getScalingLocal<T extends NumberArray>(out: T): T;
+    getScalingLocal(out: NumberArray = new Float32Array(3)) {
+        const wasm = this._engine.wasm;
+        const ptr = wasm._wl_object_scaling_local(this.objectId) / 4; /* Align F32 */
+        out[0] = wasm.HEAPF32[ptr];
+        out[1] = wasm.HEAPF32[ptr + 1];
+        out[2] = wasm.HEAPF32[ptr + 2];
+        return out;
+    }
+
+    /**
+     * Set local / object space scaling.
+     *
+     * @param v New local scaling array/vector, expected to have at least 3 elements.
+     *
+     * @returns Reference to self (for method chaining).
+     */
+    setScalingLocal(v: Readonly<NumberArray>): this {
+        this._engine.wasm._wl_object_set_scaling_local(this.objectId, v[0], v[1], v[2]);
+        return this;
+    }
+
+    /** @overload */
+    getScalingWorld(): Float32Array;
+    /**
+     * World space scaling.
+     *
+     * @param out Destination array/vector, expected to have at least 3 elements.
+     * @return The `out` parameter.
+     *
+     * @since 1.0.0
+     */
+    getScalingWorld<T extends NumberArray>(out: T): T;
+    getScalingWorld(out: NumberArray = new Float32Array(3)) {
+        const wasm = this._engine.wasm;
+        const ptr = wasm._wl_object_scaling_world(this.objectId) / 4; /* Align F32 */
+        out[0] = wasm.HEAPF32[ptr];
+        out[1] = wasm.HEAPF32[ptr + 1];
+        out[2] = wasm.HEAPF32[ptr + 2];
+        return out;
+    }
+
+    /**
+     * Set World space scaling.
+     *
+     * @param v New world scaling array/vector, expected to have at least 3 elements.
+     *
+     * @returns Reference to self (for method chaining).
+     */
+    setScalingWorld(v: Readonly<NumberArray>): this {
+        this._engine.wasm._wl_object_set_scaling_world(this.objectId, v[0], v[1], v[2]);
+        return this;
+    }
+
+    /** @overload */
+    getRotationLocal(): Float32Array;
+    /**
+     * Local space rotation.
+     *
+     * @param out Destination array/vector, expected to have at least 4 elements.
+     * @return The `out` parameter.
+     *
+     * @since 1.0.0
+     */
+    getRotationLocal<T extends NumberArray>(out: T): T;
+    getRotationLocal(out: NumberArray = new Float32Array(4)) {
+        const wasm = this._engine.wasm;
+        const ptr = wasm._wl_object_trans_local(this.objectId) / 4; /* Align F32 */
+        /* The first 4 floats represent the rotation quaternion. */
+        out[0] = wasm.HEAPF32[ptr];
+        out[1] = wasm.HEAPF32[ptr + 1];
+        out[2] = wasm.HEAPF32[ptr + 2];
+        out[3] = wasm.HEAPF32[ptr + 3];
+        return out;
+    }
+
+    /**
+     * Set local space rotation.
+     *
+     * @param v New world rotation array/vector, expected to have at least 4 elements.
+     *
+     * @returns Reference to self (for method chaining).
+     */
+    setRotationLocal(v: Readonly<NumberArray>): this {
+        this._engine.wasm._wl_object_set_rotation_local(
+            this.objectId,
+            v[0],
+            v[1],
+            v[2],
+            v[3]
+        );
+        return this;
+    }
+
+    /** @overload */
+    getRotationWorld(): Float32Array;
+    /**
+     * World space rotation.
+     *
+     * @param out Destination array/vector, expected to have at least 4 elements.
+     * @return The `out` parameter.
+     *
+     * @since 1.0.0
+     */
+    getRotationWorld<T extends NumberArray>(out: T): T;
+    getRotationWorld(out: NumberArray = new Float32Array(4)) {
+        const wasm = this._engine.wasm;
+        const ptr = wasm._wl_object_trans_world(this.objectId) / 4; /* Align F32 */
+        /* The first 4 floats represent the rotation quaternion. */
+        out[0] = wasm.HEAPF32[ptr];
+        out[1] = wasm.HEAPF32[ptr + 1];
+        out[2] = wasm.HEAPF32[ptr + 2];
+        out[3] = wasm.HEAPF32[ptr + 3];
+        return out;
+    }
+
+    /**
+     * Set local space rotation.
+     *
+     * @param v New world rotation array/vector, expected to have at least 4 elements.
+     *
+     * @returns Reference to self (for method chaining).
+     */
+    setRotationWorld(v: Readonly<NumberArray>): this {
+        this._engine.wasm._wl_object_set_rotation_world(
+            this.objectId,
+            v[0],
+            v[1],
+            v[2],
+            v[3]
+        );
+        return this;
+    }
+
+    /** @overload */
+    getTransformLocal(): Float32Array;
+    /**
+     * Local space transformation.
+     *
+     * @param out Destination array/vector, expected to have at least 8 elements.
+     * @return The `out` parameter.
+     */
+    getTransformLocal<T extends NumberArray>(out: T): T;
+    getTransformLocal(out: NumberArray = new Float32Array(8)) {
+        const wasm = this._engine.wasm;
+        const ptr = wasm._wl_object_trans_local(this.objectId) / 4; /* Align F32 */
+        out[0] = wasm.HEAPF32[ptr];
+        out[1] = wasm.HEAPF32[ptr + 1];
+        out[2] = wasm.HEAPF32[ptr + 2];
+        out[3] = wasm.HEAPF32[ptr + 3];
+        out[4] = wasm.HEAPF32[ptr + 4];
+        out[5] = wasm.HEAPF32[ptr + 5];
+        out[6] = wasm.HEAPF32[ptr + 6];
+        out[7] = wasm.HEAPF32[ptr + 7];
+        return out;
+    }
+
+    /**
+     * Set local space rotation.
+     *
+     * @param v New local transform array, expected to have at least 8 elements.
+     *
+     * @returns Reference to self (for method chaining).
+     */
+    setTransformLocal(v: Readonly<NumberArray>): this {
+        const wasm = this._engine.wasm;
+        const ptr = wasm._wl_object_trans_local(this.objectId) / 4; /* Align F32 */
+        wasm.HEAPF32[ptr] = v[0];
+        wasm.HEAPF32[ptr + 1] = v[1];
+        wasm.HEAPF32[ptr + 2] = v[2];
+        wasm.HEAPF32[ptr + 3] = v[3];
+        wasm.HEAPF32[ptr + 4] = v[4];
+        wasm.HEAPF32[ptr + 5] = v[5];
+        wasm.HEAPF32[ptr + 6] = v[6];
+        wasm.HEAPF32[ptr + 7] = v[7];
+        this.setDirty();
+        return this;
+    }
+
+    /** @overload */
+    getTransformWorld(): Float32Array;
+    /**
+     * World space transformation.
+     *
+     * @param out Destination array, expected to have at least 8 elements.
+     * @return The `out` parameter.
+     */
+    getTransformWorld<T extends NumberArray>(out: T): T;
+    getTransformWorld(out: NumberArray = new Float32Array(8)) {
+        const wasm = this._engine.wasm;
+        const ptr = wasm._wl_object_trans_world(this.objectId) / 4; /* Align F32 */
+        out[0] = wasm.HEAPF32[ptr];
+        out[1] = wasm.HEAPF32[ptr + 1];
+        out[2] = wasm.HEAPF32[ptr + 2];
+        out[3] = wasm.HEAPF32[ptr + 3];
+        out[4] = wasm.HEAPF32[ptr + 4];
+        out[5] = wasm.HEAPF32[ptr + 5];
+        out[6] = wasm.HEAPF32[ptr + 6];
+        out[7] = wasm.HEAPF32[ptr + 7];
+        return out;
+    }
+
+    /**
+     * Set world space rotation.
+     *
+     * @param v New world transform array, expected to have at least 8 elements.
+     *
+     * @returns Reference to self (for method chaining).
+     */
+    setTransformWorld(v: Readonly<NumberArray>): this {
+        const wasm = this._engine.wasm;
+        const ptr = wasm._wl_object_trans_world(this.objectId) / 4; /* Align F32 */
+        wasm.HEAPF32[ptr] = v[0];
+        wasm.HEAPF32[ptr + 1] = v[1];
+        wasm.HEAPF32[ptr + 2] = v[2];
+        wasm.HEAPF32[ptr + 3] = v[3];
+        wasm.HEAPF32[ptr + 4] = v[4];
+        wasm.HEAPF32[ptr + 5] = v[5];
+        wasm.HEAPF32[ptr + 6] = v[6];
+        wasm.HEAPF32[ptr + 7] = v[7];
+        this._engine.wasm._wl_object_trans_world_to_local(this.objectId);
+        return this;
+    }
+
+    /**
+     * Local space transformation.
+     *
+     * @deprecated Please use {@link Object3D.setTransformLocal} and
+     * {@link Object3D.getTransformLocal} instead.
+     */
     get transformLocal(): Float32Array {
         const wasm = this._engine.wasm;
         return new Float32Array(
@@ -3518,6 +4053,9 @@ export class Object3D {
      * @param t Local space transformation.
      *
      * @since 0.8.5
+     *
+     * @deprecated Please use {@link Object3D.setTransformLocal} and
+     * {@link Object3D.getTransformLocal} instead.
      */
     set transformLocal(t: Readonly<NumberArray>) {
         this.transformLocal.set(t);
@@ -3525,66 +4063,13 @@ export class Object3D {
     }
 
     /**
-     * Compute local / object space translation from transformation.
-     *
-     * @param out Destination array/vector, expected to have at least 3 elements.
-     * @return The `out` parameter.
-     */
-    getTranslationLocal<T extends NumberArray>(out: T): T {
-        const wasm = this._engine.wasm;
-        wasm._wl_object_get_translation_local(this.objectId, wasm._tempMem);
-        out[0] = wasm._tempMemFloat[0];
-        out[1] = wasm._tempMemFloat[1];
-        out[2] = wasm._tempMemFloat[2];
-        return out;
-    }
-
-    /**
-     * Compute world space translation from transformation.
-     *
-     * May recompute transformations of the hierarchy of this object,
-     * if they were changed by JavaScript components this frame.
-     *
-     * @param out Destination array/vector, expected to have at least 3 elements.
-     * @return The `out` parameter.
-     */
-    getTranslationWorld<T extends NumberArray>(out: T): T {
-        const wasm = this._engine.wasm;
-        wasm._wl_object_get_translation_world(this.objectId, wasm._tempMem);
-        out[0] = wasm._tempMemFloat[0];
-        out[1] = wasm._tempMemFloat[1];
-        out[2] = wasm._tempMemFloat[2];
-        return out;
-    }
-
-    /**
-     * Set local / object space translation.
-     *
-     * Concatenates a new translation dual quaternion onto the existing rotation.
-     *
-     * @param v New local translation array/vector, expected to have at least 3 elements.
-     */
-    setTranslationLocal(v: Readonly<NumberArray>): void {
-        this._engine.wasm._wl_object_set_translation_local(this.objectId, v[0], v[1], v[2]);
-    }
-
-    /**
-     * Set world space translation.
-     *
-     * Applies the inverse parent transform with a new translation dual quaternion
-     * which is concatenated onto the existing rotation.
-     *
-     * @param v New world translation array/vector, expected to have at least 3 elements.
-     */
-    setTranslationWorld(v: Readonly<NumberArray>): void {
-        this._engine.wasm._wl_object_set_translation_world(this.objectId, v[0], v[1], v[2]);
-    }
-
-    /**
      * Global / world space transformation.
      *
      * May recompute transformations of the hierarchy of this object,
      * if they were changed by JavaScript components this frame.
+     *
+     * @deprecated Please use {@link Object3D.setTransformWorld} and
+     * {@link Object3D.getTransformWorld} instead.
      */
     get transformWorld(): Float32Array {
         const wasm = this._engine.wasm;
@@ -3601,13 +4086,21 @@ export class Object3D {
      * @param t Global / world space transformation.
      *
      * @since 0.8.5
+     *
+     * @deprecated Please use {@link Object3D.setTransformWorld} and
+     * {@link Object3D.getTransformWorld} instead.
      */
     set transformWorld(t: Readonly<NumberArray>) {
         this.transformWorld.set(t);
         this._engine.wasm._wl_object_trans_world_to_local(this.objectId);
     }
 
-    /** Local / object space scaling. */
+    /**
+     * Local / object space scaling.
+     *
+     * @deprecated Please use {@link Object3D.setScalingLocal} and
+     * {@link Object3D.getScalingLocal} instead.
+     */
     get scalingLocal(): Float32Array {
         const wasm = this._engine.wasm;
         return new Float32Array(
@@ -3620,9 +4113,12 @@ export class Object3D {
     /**
      * Set local space scaling.
      *
-     * @param s Global / world space transformation.
+     * @param s Local space scaling.
      *
      * @since 0.8.7
+     *
+     * @deprecated Please use {@link Object3D.setScalingLocal} and
+     * {@link Object3D.getScalingLocal} instead.
      */
     set scalingLocal(s: Readonly<NumberArray>) {
         this.scalingLocal.set(s);
@@ -3634,6 +4130,9 @@ export class Object3D {
      *
      * May recompute transformations of the hierarchy of this object,
      * if they were changed by JavaScript components this frame.
+     *
+     * @deprecated Please use {@link Object3D.setScalingWorld} and
+     * {@link Object3D.getScalingWorld} instead.
      */
     get scalingWorld(): Float32Array {
         const wasm = this._engine.wasm;
@@ -3647,9 +4146,12 @@ export class Object3D {
     /**
      * Set world space scaling.
      *
-     * @param t Global / world space transformation.
+     * @param t World space scaling.
      *
      * @since 0.8.7
+     *
+     * @deprecated Please use {@link Object3D.setScalingWorld} and
+     * {@link Object3D.getScalingWorld} instead.
      */
     set scalingWorld(s: Readonly<NumberArray>) {
         this.scalingWorld.set(s);
@@ -3660,6 +4162,9 @@ export class Object3D {
      * Local space rotation.
      *
      * @since 0.8.7
+     *
+     * @deprecated Please use {@link Object3D.getRotationLocal} and
+     * {@link Object3D.setRotationLocal} instead.
      */
     get rotationLocal(): Float32Array {
         return this.transformLocal.subarray(0, 4);
@@ -3669,6 +4174,9 @@ export class Object3D {
      * Global / world space rotation
      *
      * @since 0.8.7
+     *
+     * @deprecated Please use {@link Object3D.getRotationWorld} and
+     * {@link Object3D.setRotationWorld} instead.
      */
     get rotationWorld(): Float32Array {
         return this.transformWorld.subarray(0, 4);
@@ -3680,6 +4188,9 @@ export class Object3D {
      * @param r Local space rotation
      *
      * @since 0.8.7
+     *
+     * @deprecated Please use {@link Object3D.getRotationLocal} and
+     * {@link Object3D.setRotationLocal} instead.
      */
     set rotationLocal(r: Readonly<NumberArray>) {
         this._engine.wasm._wl_object_set_rotation_local(
@@ -3697,6 +4208,9 @@ export class Object3D {
      * @param r Global / world space rotation.
      *
      * @since 0.8.7
+     *
+     * @deprecated Please use {@link Object3D.getRotationWorld} and
+     * {@link Object3D.setRotationWorld} instead.
      */
     set rotationWorld(r: Readonly<NumberArray>) {
         this._engine.wasm._wl_object_set_rotation_world(
@@ -3708,6 +4222,10 @@ export class Object3D {
         );
     }
 
+    /** @deprecated Please use {@link Object3D.getForwardWorld} instead. */
+    getForward<T extends NumberArray>(out: T): T {
+        return this.getForwardWorld(out);
+    }
     /**
      * Compute the object's forward facing world space vector.
      *
@@ -3717,7 +4235,7 @@ export class Object3D {
      * @param out Destination array/vector, expected to have at least 3 elements.
      * @return The `out` parameter.
      */
-    getForward<T extends NumberArray>(out: T): T {
+    getForwardWorld<T extends NumberArray>(out: T): T {
         out[0] = 0;
         out[1] = 0;
         out[2] = -1;
@@ -3725,13 +4243,17 @@ export class Object3D {
         return out;
     }
 
+    /** @deprecated Please use {@link Object3D.getUpWorld} instead. */
+    getUp<T extends NumberArray>(out: T): T {
+        return this.getUpWorld(out);
+    }
     /**
      * Compute the object's up facing world space vector.
      *
      * @param out Destination array/vector, expected to have at least 3 elements.
      * @return The `out` parameter.
      */
-    getUp<T extends NumberArray>(out: T): T {
+    getUpWorld<T extends NumberArray>(out: T): T {
         out[0] = 0;
         out[1] = 1;
         out[2] = 0;
@@ -3739,13 +4261,17 @@ export class Object3D {
         return out;
     }
 
+    /** @deprecated Please use {@link Object3D.getRightWorld} instead. */
+    getRight<T extends NumberArray>(out: T): T {
+        return this.getRightWorld(out);
+    }
     /**
      * Compute the object's right facing world space vector.
      *
      * @param out Destination array/vector, expected to have at least 3 elements.
      * @return The `out` parameter.
      */
-    getRight<T extends NumberArray>(out: T): T {
+    getRightWorld<T extends NumberArray>(out: T): T {
         out[0] = 1;
         out[1] = 0;
         out[2] = 0;
@@ -4015,8 +4541,10 @@ export class Object3D {
      *
      * @param p Target position to turn towards, in world space.
      * @param up Up vector to align object with, in world space. Default is `[0, 1, 0]`.
+     *
+     * @returns Reference to self (for method chaining).
      */
-    lookAt(p: NumberArray, up: NumberArray = UP_VECTOR): void {
+    lookAt(p: NumberArray, up: NumberArray = UP_VECTOR): this {
         this._engine.wasm._wl_object_lookAt(
             this.objectId,
             p[0],
@@ -4026,6 +4554,7 @@ export class Object3D {
             up[1],
             up[2]
         );
+        return this;
     }
 
     /** Destroy the object with all of its components and remove it from the scene */
@@ -4080,12 +4609,6 @@ export class Object3D {
     getComponent(type: 'physx', index?: number): PhysXComponent | null;
     /** @overload */
     getComponent(typeOrClass: string, index?: number): Component | null;
-    /** @overload */
-    getComponent<T extends Component>(
-        typeOrClass: ComponentConstructor<T>,
-        index?: number
-    ): T | null;
-
     /**
      * Get a component attached to this object.
      *
@@ -4095,24 +4618,26 @@ export class Object3D {
      *      components if the object has multiple components of the same type.
      * @returns The component or `null` if there is no such component on this object
      */
+    getComponent<T extends Component>(
+        typeOrClass: ComponentConstructor<T>,
+        index?: number
+    ): T | null;
     getComponent(
         typeOrClass: string | ComponentConstructor,
-        index?: number
+        index: number = 0
     ): Component | null {
         const type = isString(typeOrClass) ? typeOrClass : typeOrClass.TypeName;
         const wasm = this._engine.wasm;
-        const lengthBytes = wasm.lengthBytesUTF8(type) + 1;
-        const mem = wasm._tempMem;
-        wasm.stringToUTF8(type, mem, lengthBytes);
-        const componentType = this._engine.wasm._wl_get_component_manager_index(mem);
+        const componentType = wasm._wl_get_component_manager_index(wasm.tempUTF8(type));
 
         if (componentType < 0) {
             /* Not a native component, try js: */
-            const typeIndex = this._engine.wasm._componentTypeIndices[type];
-            const jsIndex = this._engine.wasm._wl_get_js_component_index(
+            const typeIndex = wasm._componentTypeIndices[type];
+            if (typeIndex === undefined) return null;
+            const jsIndex = wasm._wl_get_js_component_index(
                 this.objectId,
                 typeIndex,
-                index || 0
+                index
             );
             return jsIndex < 0 ? null : this._engine.wasm._components[jsIndex];
         }
@@ -4120,7 +4645,7 @@ export class Object3D {
         const componentId = this._engine.wasm._wl_get_component_id(
             this.objectId,
             componentType,
-            index || 0
+            index
         );
         return this._engine._wrapComponent(type, componentType, componentId);
     }
@@ -4211,10 +4736,7 @@ export class Object3D {
     /** @overload */
     addComponent(type: 'physx', params?: Record<string, any>): PhysXComponent | null;
     /** @overload */
-    addComponent<T extends Component>(
-        typeClass: ComponentConstructor<T>,
-        params?: Record<string, any>
-    ): T | null;
+    addComponent(type: string, params?: Record<string, any>): Component | null;
     /**
      * Add component of given type to the object.
      *
@@ -4239,6 +4761,10 @@ export class Object3D {
      *
      * @returns The component or `null` if the type was not found
      */
+    addComponent<T extends Component>(
+        typeClass: ComponentConstructor<T>,
+        params?: Record<string, any>
+    ): T | null;
     addComponent(
         typeOrClass: ComponentConstructor | string,
         params?: Record<string, any>
@@ -4446,14 +4972,14 @@ export class RayHit {
 
     /** Hit objects */
     get objects(): (Object3D | null)[] {
-        let p = this._ptr + (48 * 2 + 16);
-        let objIds = new Uint16Array(this._engine.wasm.HEAPU16.buffer, p, this.hitCount);
-        return [
-            objIds[0] <= 0 ? null : this._engine.wrapObject(objIds[0]),
-            objIds[1] <= 0 ? null : this._engine.wrapObject(objIds[1]),
-            objIds[2] <= 0 ? null : this._engine.wrapObject(objIds[2]),
-            objIds[3] <= 0 ? null : this._engine.wrapObject(objIds[3]),
-        ];
+        const HEAPU16 = this._engine.wasm.HEAPU16;
+        const objects: (Object3D | null)[] = [null, null, null, null];
+
+        let p = (this._ptr + (48 * 2 + 16)) >> 1;
+        for (let i = 0; i < this.hitCount; ++i) {
+            objects[i] = this._engine.wrapObject(HEAPU16[p + i]);
+        }
+        return objects;
     }
 
     /** Number of hits (max 4) */
@@ -4570,11 +5096,9 @@ export class I18N {
      * @param code Language code to switch to
      */
     set language(code: string | null) {
-        const wasm = this._engine.wasm;
         if (code == null) return;
-        const strLen = wasm.lengthBytesUTF8(code) + 1;
-        wasm.stringToUTF8(code, wasm._tempMem, strLen);
-        wasm._wl_i18n_setLanguage(wasm._tempMem);
+        const wasm = this._engine.wasm;
+        wasm._wl_i18n_setLanguage(wasm.tempUTF8(code));
     }
 
     /**
@@ -4595,9 +5119,7 @@ export class I18N {
      */
     translate(term: string): string | null {
         const wasm = this._engine.wasm;
-        const strLen = wasm.lengthBytesUTF8(term) + 1;
-        wasm.stringToUTF8(term, wasm._tempMem, strLen);
-        const translation = wasm._wl_i18n_translate(wasm._tempMem);
+        const translation = wasm._wl_i18n_translate(wasm.tempUTF8(term));
         if (translation === 0) return null;
         return wasm.UTF8ToString(translation);
     }
@@ -4618,9 +5140,7 @@ export class I18N {
      */
     languageIndex(code: string): number {
         const wasm = this._engine.wasm;
-        const strLen = wasm.lengthBytesUTF8(code) + 1;
-        wasm.stringToUTF8(code, wasm._tempMem, strLen);
-        return wasm._wl_i18n_languageIndex(wasm._tempMem);
+        return wasm._wl_i18n_languageIndex(wasm.tempUTF8(code));
     }
 
     /**
@@ -4645,5 +5165,82 @@ export class I18N {
         const name = wasm._wl_i18n_languageName(index);
         if (name === 0) return null;
         return wasm.UTF8ToString(name);
+    }
+}
+
+/** Properties of a WebXR session */
+export class XR {
+    /** Wonderland WASM bridge. @hidden */
+    readonly #wasm: WASM;
+    readonly #mode: XRSessionMode;
+
+    constructor(wasm: any, mode: XRSessionMode) {
+        this.#wasm = wasm;
+        this.#mode = mode;
+    }
+
+    /** Current WebXR session mode */
+    get sessionMode(): XRSessionMode {
+        return this.#mode;
+    }
+
+    /** Current WebXR session */
+    get session(): XRSession {
+        return this.#wasm.webxr_session!;
+    }
+
+    /** Current WebXR frame */
+    get frame(): XRFrame {
+        return this.#wasm.webxr_frame!;
+    }
+
+    /** @overload */
+    referenceSpaceForType(type: 'viewer'): XRReferenceSpace;
+    /**
+     * Get a WebXR reference space of a given reference space type.
+     *
+     * @param type Type of reference space to get
+     * @returns Reference space, or `null` if there's no reference space
+     *     of the requested type available
+     */
+    referenceSpaceForType(type: XRReferenceSpaceType): XRReferenceSpace | null;
+    referenceSpaceForType(type: XRReferenceSpaceType): XRReferenceSpace | null {
+        return this.#wasm.webxr_refSpaces![type] ?? null;
+    }
+
+    /** Set current reference space type used for retrieving eye, head, hand and joint poses */
+    set currentReferenceSpace(refSpace: XRReferenceSpace) {
+        this.#wasm.webxr_refSpace! = refSpace;
+
+        this.#wasm.webxr_refSpaceType = null;
+        for (const type of Object.keys(this.#wasm.webxr_refSpaces!)) {
+            if (this.#wasm.webxr_refSpaces![type as XRReferenceSpaceType] === refSpace) {
+                /* Keep track of reference space type */
+                this.#wasm.webxr_refSpaceType = type as XRReferenceSpaceType;
+            }
+        }
+    }
+
+    /** Current reference space type used for retrieving eye, head, hand and joint poses */
+    get currentReferenceSpace(): XRReferenceSpace {
+        return this.#wasm.webxr_refSpace!;
+    }
+
+    /** Current WebXR reference space type or `null` if not a default reference space */
+    get currentReferenceSpaceType(): XRReferenceSpaceType {
+        return this.#wasm.webxr_refSpaceType!;
+    }
+
+    /** Current WebXR base layer  */
+    get baseLayer(): XRProjectionLayer {
+        return this.#wasm.webxr_baseLayer!;
+    }
+
+    /** Current WebXR framebuffer */
+    get framebuffers(): WebGLFramebuffer[] {
+        if (!Array.isArray(this.#wasm.webxr_fbo)) {
+            return [this.#wasm.GL.framebuffers[this.#wasm.webxr_fbo]];
+        }
+        return this.#wasm.webxr_fbo.map((id) => this.#wasm.GL.framebuffers[id]);
     }
 }

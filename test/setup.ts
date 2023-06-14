@@ -1,4 +1,6 @@
-import { loadRuntime } from '..';
+import {loadRuntime, WonderlandEngine} from '..';
+
+export let WL: WonderlandEngine = null!;
 
 /**
  * Creates a new engine:
@@ -9,15 +11,22 @@ import { loadRuntime } from '..';
  * thus call this function before and test, in order to clean any
  * previous engine instance running and create a new one.
  */
-export async function init({ physx = false } = {}) {
+export async function init({physx = false} = {}) {
     const canvas = document.createElement('canvas');
     canvas.id = 'canvas';
     canvas.style.width = '100%';
     canvas.style.height = '100%';
     document.body.append(canvas);
 
-    const engine = await loadRuntime('deploy/WonderlandRuntime', {simd: false, threads: false, loader: true, physx, loadingScreen: 'deploy/WonderlandRuntime-LoadingScreen.bin'});
-    window.WL = engine;
+    const engine = await loadRuntime('deploy/WonderlandRuntime', {
+        simd: false,
+        threads: false,
+        loader: true,
+        physx,
+        loadingScreen: 'deploy/WonderlandRuntime-LoadingScreen.bin',
+        canvas: 'canvas',
+    });
+    WL = engine;
 }
 
 /**
@@ -28,7 +37,7 @@ export async function init({ physx = false } = {}) {
  *
  * Should be called before running a test to prevent side effects.
  */
- export function reset() {
-    if(!WL) return;
+export function reset() {
+    if (!WL) return;
     WL._reset();
 }

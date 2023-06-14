@@ -1,4 +1,5 @@
 import {WonderlandEngine} from './engine.js';
+import {RetainEmitter} from './index.js';
 import {ComponentProperty, Type} from './property.js';
 import {
     Animation,
@@ -9,7 +10,7 @@ import {
     Material,
     Mesh,
     Skin,
-    Texture,
+    XR,
 } from './wonderland.js';
 
 /**
@@ -26,7 +27,7 @@ export interface MaterialDefinition {
     };
 }
 
-type XRRequestSessionFunc = (
+type XRRequestSessionFunction = (
     mode: XRSessionMode,
     requiredFeatures: string[],
     optionalFeatures: string[]
@@ -59,15 +60,22 @@ const _componentDefaults = new Map<Type, any>([
 function _setupDefaults(ctor: ComponentConstructor) {
     for (const name in ctor.Properties) {
         const p = ctor.Properties[name];
-        /* Convert enum default string to an index. We need to check if it's
-         * already been converted so we don't try to look up the index. */
-        if (p.type === Type.Enum && typeof p.default !== 'number') {
-            /* Matches the editor behavior for packaged components. Default
-             * value is a string, but is converted to an index. If there is no
-             * default string, it becomes index 0. */
+        if (p.type === Type.Enum) {
+            /* Enum default can be a string or an index. Convert to and/or
+             * sanity-check the index. */
             if (p.values?.length) {
-                p.default = Math.max(p.values.indexOf(p.default), 0);
+                /* Don't try to look up the default if the user specified a
+                 * number or we already converted to one. */
+                if (typeof p.default !== 'number') {
+                    /* If undefined, missing element or wrong type this returns
+                     * -1 which becomes 0 below. This matches editor behavior. */
+                    p.default = p.values.indexOf(p.default);
+                }
+                if (p.default < 0 || p.default >= p.values.length) {
+                    p.default = 0;
+                }
             } else {
+                /* There's no index value that makes sense */
                 p.default = undefined;
             }
         } else {
@@ -97,6 +105,13 @@ export class WASM {
      */
     readonly wasm: ArrayBuffer = null!;
 
+    /**
+     * Emscripten canvas.
+     *
+     * @note This api is meant to be used internally.
+     */
+    readonly canvas: HTMLCanvasElement = null!;
+
     /** Current WebXR  */
 
     /**
@@ -111,7 +126,7 @@ export class WASM {
      *
      * @note This api is meant to be used internally.
      */
-    readonly webxr_request_session_func: XRRequestSessionFunc = null!;
+    readonly webxr_requestSession: XRRequestSessionFunction = null!;
 
     /**
      * Emscripten WebXR frame.
@@ -121,6 +136,30 @@ export class WASM {
     readonly webxr_frame: XRFrame | null = null;
 
     /**
+     * Emscripten current WebXR reference space.
+     *
+     * @note This api is meant to be used internally.
+     */
+    webxr_refSpace: XRReferenceSpace | null = null;
+
+    /**
+     * Emscripten WebXR reference spaces.
+     *
+     * @note This api is meant to be used internally.
+     */
+    readonly webxr_refSpaces: Record<
+        XRReferenceSpaceType,
+        XRReferenceSpace | undefined
+    > | null = null;
+
+    /**
+     * Emscripten WebXR current reference space type.
+     *
+     * @note This api is meant to be used internally.
+     */
+    webxr_refSpaceType: XRReferenceSpaceType | null = null;
+
+    /**
      * Emscripten WebXR GL projection layer.
      *
      * @note This api is meant to be used internally.
@@ -128,11 +167,20 @@ export class WASM {
     readonly webxr_baseLayer: XRProjectionLayer | null = null;
 
     /**
+     * Emscripten WebXR framebuffer scale factor.
+     *
+     * @note This api is meant to be used internally.
+     */
+    webxr_framebufferScaleFactor: number = 1.0;
+
+    /**
      * Emscripten WebXR framebuffer(s).
      *
      * @note This api is meant to be used internally.
      */
-    readonly webxr_fbo: number | number[] = -1;
+    /* webxr_fbo will not get overwritten if we are rendering to the
+     * default framebuffer, e.g., when using WebXR emulator. */
+    readonly webxr_fbo: number | number[] = 0;
 
     /**
      * Convert a WASM memory view to a JavaScript string.
@@ -198,6 +246,9 @@ export class WASM {
     /** Decoder for UTF8 `ArrayBuffer` to JavaScript string. */
     private readonly _utf8Decoder = new TextDecoder('utf8');
 
+    /** List of .bin files to delay-load. */
+    _queuedBinFiles: string[] = [];
+
     /**
      * Create a new instance of the WebAssembly <> API bridge.
      *
@@ -252,7 +303,7 @@ export class WASM {
      */
     _registerComponentLegacy(
         typeName: string,
-        params: {[key: string]: ComponentProperty},
+        params: Record<string, ComponentProperty>,
         object: ComponentProto
     ) {
         const ctor = class CustomComponent extends Component {};
@@ -268,18 +319,23 @@ export class WASM {
      * @note This api is meant to be used internally.
      *
      * @param ctor The class to register.
-     * @param recursive If `true`, automatically registers dependencies.
      * @returns The registration index.
      */
-    _registerComponent(ctor: ComponentConstructor, recursive = false) {
+    _registerComponent(ctor: ComponentConstructor) {
         if (!ctor.TypeName) throw new Error('no name provided for component.');
+        if (!ctor.prototype._triggerInit) {
+            throw new Error(
+                `registerComponent(): Component ${ctor.TypeName} must extend Component`
+            );
+        }
 
+        // TODO: 'Dependencies' is hard-deprecated, remove at 1.1
         const dependencies = ctor.Dependencies;
-        if (recursive && dependencies) {
+        if (dependencies) {
             for (const dependency of dependencies) {
                 /* For dependencies, we skip potential over-registration. */
                 if (!this.isRegistered(dependency.TypeName)) {
-                    this._registerComponent(dependency, recursive);
+                    this._registerComponent(dependency);
                 }
             }
         }
@@ -293,7 +349,15 @@ export class WASM {
         this._componentTypes[typeIndex] = ctor;
         this._componentTypeIndices[ctor.TypeName] = typeIndex;
 
-        console.log('WL: registered component', ctor.TypeName, 'with index', typeIndex);
+        console.log(
+            'Registered component',
+            ctor.TypeName,
+            `(class ${ctor.name})`,
+            'with index',
+            typeIndex
+        );
+
+        if (ctor.onRegister) ctor.onRegister(this._engine);
 
         return typeIndex;
     }
@@ -428,7 +492,28 @@ export class WASM {
     }
 
     /**
+     * Copy the string into temporary WASM memory and retrieve the pointer.
+     *
+     * @note This method will compute the strlen and append a `\0`.
+     *
+     * @note The result should be used **directly** otherwise it might get
+     * overridden by any next call modifying the temporary memory.
+     *
+     * @param str The string to write to temporary memory
+     * @return The temporary pointer onto the WASM memory
+     */
+    tempUTF8(str: string): number {
+        const strLen = this.lengthBytesUTF8(str) + 1;
+        this.requireTempMem(strLen);
+        this.stringToUTF8(str, this._tempMem, strLen);
+        return this._tempMem;
+    }
+
+    /**
      * Return the index of the component type.
+     *
+     * @note This method uses malloc and copies the string
+     * to avoid overwriting caller's temporary data.
      *
      * @param type The type
      * @return The component type index
@@ -437,9 +522,8 @@ export class WASM {
         const lengthBytes = this.lengthBytesUTF8(type) + 1;
         const mem = this._malloc(lengthBytes);
         this.stringToUTF8(type, mem, lengthBytes);
-        const componentType = this._engine.wasm._wl_get_component_manager_index(mem);
+        const componentType = this._wl_get_component_manager_index(mem);
         this._free(mem);
-
         return componentType;
     }
 
@@ -474,7 +558,16 @@ export class WASM {
     /* WebAssembly to JS call bridge. */
 
     protected _wljs_xr_session_start(mode: XRSessionMode) {
-        this._engine.onXRSessionStart.notify(this.webxr_session!, mode);
+        if (this._engine.xr === null) {
+            (this._engine.xr as XR | null) = new XR(this, mode);
+            this._engine.onXRSessionStart.notify(this.webxr_session!, mode);
+        }
+    }
+    protected _wljs_xr_session_end() {
+        const startEmitter = this._engine.onXRSessionStart;
+        if (startEmitter instanceof RetainEmitter) startEmitter.reset();
+        this._engine.onXRSessionEnd.notify();
+        (this._engine.xr as null) = null;
     }
     protected _wljs_xr_disable() {
         /* @todo This could directly be fully handled in JS. */
@@ -496,7 +589,7 @@ export class WASM {
         }
     }
     protected _wljs_scene_add_material_definition(definitionId: number) {
-        const definition = new Map();
+        const definition: Map<string, MaterialDefinition> = new Map();
         /* Cache material definition for faster read/write */
         const nbParams = this._wl_material_definition_get_count(definitionId);
         for (let i = 0; i < nbParams; ++i) {
@@ -567,7 +660,7 @@ export class WASM {
     ) {
         const param = this.UTF8ViewToString(p, pe);
         (this._components[c] as Record<string, any>)[param] =
-            v > 0 ? new Texture(this._engine, v) : null;
+            v > 0 ? this._engine.textures.wrap(v) : null;
     }
     protected _wljs_set_component_param_material(
         c: number,
@@ -605,59 +698,20 @@ export class WASM {
         object: number
     ) {
         const ctor = this._componentTypes[type];
-        const component = new ctor();
+        const component = new ctor().reset();
         /* Sets the manager and identifier from the outside, to simplify the user's constructor. */
 
         /* @ts-ignore */
         component._engine = this._engine;
         (component._manager as number) = jsManagerIndex;
         (component._id as number) = id;
-        (component._object as Object3D) = this._engine.wrapObject(object);
+        component._object = this._engine.wrapObject(object);
         this._components[index] = component;
         return component;
     }
     _wljs_component_init(component: number) {
         const c = this._components[component];
-        if (c.init) {
-            try {
-                c.init();
-            } catch (e) {
-                console.error(
-                    `Exception during ${c.type} init() on object ${c.object.name}`
-                );
-                console.error(e);
-            }
-        }
-
-        if (c.start) {
-            /* Arm onActivate() with the initial start() call */
-            const oldActivate = c.onActivate;
-            c.onActivate = function () {
-                /* As "component" is the component index, which may change
-                 * through calls to init() and start(), we call it on the
-                 * calling object, which will be the component, instead of
-                 * wljs_component_start() etc */
-                try {
-                    if (this.start) this.start();
-                } catch (e) {
-                    console.error(
-                        `Exception during ${this.type} start() on object ${this.object.name}`
-                    );
-                    console.error(e);
-                }
-                this.onActivate = oldActivate;
-                if (this.onActivate) {
-                    try {
-                        this.onActivate();
-                    } catch (e) {
-                        console.error(
-                            `Exception during ${this.type} onActivate() on object ${this.object.name}`
-                        );
-                        console.error(e);
-                    }
-                }
-            };
-        }
+        c._triggerInit();
     }
     protected _wljs_component_update(component: number, dt: number) {
         const c = this._components[component];
@@ -666,50 +720,19 @@ export class WASM {
             this._components[component] = new Component(this._engine);
             return;
         }
-        if (!c.update) return;
-        try {
-            c.update(dt);
-        } catch (e) {
-            console.error(`Exception during ${c.type} update() on object ${c.object.name}`);
-            console.error(e);
-            if (this._deactivate_component_on_error) c.active = false;
-        }
+        c._triggerUpdate(dt);
     }
     protected _wljs_component_onActivate(component: number) {
         const c = this._components[component];
-        if (!c || !c.onActivate) return;
-        try {
-            c.onActivate();
-        } catch (e) {
-            console.error(
-                `Exception during ${c.type} onActivate() on object ${c.object.name}`
-            );
-            console.error(e);
-        }
+        if (c) c._triggerOnActivate();
     }
     protected _wljs_component_onDeactivate(component: number) {
         const c = this._components[component];
-        if (!c.onDeactivate) return;
-        try {
-            c.onDeactivate();
-        } catch (e) {
-            console.error(
-                `Exception during ${c.type} onDeactivate() on object ${c.object.name}`
-            );
-            console.error(e);
-        }
+        c._triggerOnDeactivate();
     }
     protected _wljs_component_onDestroy(component: number) {
         const c = this._components[component];
-        if (!c.onDestroy) return;
-        try {
-            c.onDestroy();
-        } catch (e) {
-            console.error(
-                `Exception during ${c.type} onDestroy() on object ${c.object.name}`
-            );
-            console.error(e);
-        }
+        c._triggerOnDestroy();
     }
     protected _wljs_swap(a: number, b: number) {
         const componentA = this._components[a];
@@ -722,9 +745,11 @@ export class WASM {
     HEAP8: Int8Array = null!;
     HEAPU8: Uint8Array = null!;
     HEAPU16: Uint16Array = null!;
+    HEAP16: Int16Array = null!;
     HEAPU32: Uint32Array = null!;
     HEAP32: Int32Array = null!;
     HEAPF32: Float32Array = null!;
+    HEAPF64: Float64Array = null!;
 
     GL: {
         framebuffers: WebGLFramebuffer[];
@@ -737,9 +762,18 @@ export class WASM {
     stringToUTF8: (str: string, outPtr: number, len: number) => void = null!;
     UTF8ToString: (ptr: number) => string = null!;
     addFunction: (func: Function, sig: string) => number = null!;
+    removeFunction: (ptr: number) => void = null!;
 
     _wl_set_error_callback: (cbPtr: number) => void = null!;
+    _wl_application_version: (out: number) => number = null!;
     _wl_application_start: () => void = null!;
+    _wl_application_resize: (width: number, height: number) => void = null!;
+
+    _wl_nextUpdate: (delta: number) => void = null!;
+    _wl_nextFrame: (delta: number) => void = null!;
+
+    _wl_renderer_set_mesh_layout: (layout: number) => void = null!;
+
     _wl_scene_get_active_views: (ptr: number, count: number) => number = null!;
     _wl_scene_ray_cast: (
         x: number,
@@ -762,9 +796,17 @@ export class WASM {
     _wl_scene_reserve_objects: (objectCount: number, _tempMem: number) => void = null!;
     _wl_scene_set_clearColor: (r: number, g: number, b: number, a: number) => void = null!;
     _wl_scene_enableColorClear: (b: boolean) => void = null!;
-    _wl_load_scene: (ptr: number) => void = null!;
-    _wl_append_scene: (ptr: number, loadGltfExtensions: boolean, callback: number) => void =
+    _wl_set_loading_screen_progress: (ratio: number) => void = null!;
+    _wl_load_scene_bin: (binData: number, binSize: number, scenePath: number) => void =
         null!;
+    _wl_append_scene_bin: (binData: number, binSize: number, callback: number) => void =
+        null!;
+    _wl_append_scene_gltf: (
+        gltfData: number,
+        gltfSize: number,
+        loadExtensions: boolean,
+        callback: number
+    ) => void = null!;
     _wl_scene_reset: () => void = null!;
     _wl_component_get_object: (manager: number, id: number) => number = null!;
     _wl_component_setActive: (manager: number, id: number, active: boolean) => void = null!;
@@ -808,6 +850,24 @@ export class WASM {
     _wl_light_component_get_color: (id: number) => number = null!;
     _wl_light_component_get_type: (id: number) => number = null!;
     _wl_light_component_set_type: (id: number, type: number) => void = null!;
+    _wl_light_component_get_intensity: (id: number) => number = null!;
+    _wl_light_component_set_intensity: (id: number, intensity: number) => void = null!;
+    _wl_light_component_get_outerAngle: (id: number) => number = null!;
+    _wl_light_component_set_outerAngle: (id: number, angle: number) => void = null!;
+    _wl_light_component_get_innerAngle: (id: number) => number = null!;
+    _wl_light_component_set_innerAngle: (id: number, angle: number) => void = null!;
+    _wl_light_component_get_shadows: (id: number) => number = null!;
+    _wl_light_component_set_shadows: (id: number, shadows: boolean) => void = null!;
+    _wl_light_component_get_shadowRange: (id: number) => number = null!;
+    _wl_light_component_set_shadowRange: (id: number, range: number) => void = null!;
+    _wl_light_component_get_shadowBias: (id: number) => number = null!;
+    _wl_light_component_set_shadowBias: (id: number, bias: number) => void = null!;
+    _wl_light_component_get_shadowNormalBias: (id: number) => number = null!;
+    _wl_light_component_set_shadowNormalBias: (id: number, bias: number) => void = null!;
+    _wl_light_component_get_shadowTexelSize: (id: number) => number = null!;
+    _wl_light_component_set_shadowTexelSize: (id: number, size: number) => void = null!;
+    _wl_light_component_get_cascadeCount: (id: number) => number = null!;
+    _wl_light_component_set_cascadeCount: (id: number, count: number) => void = null!;
     _wl_animation_component_get_animation: (id: number) => number = null!;
     _wl_animation_component_set_animation: (id: number, animId: number) => void = null!;
     _wl_animation_component_get_playCount: (id: number) => number = null!;
@@ -915,7 +975,6 @@ export class WASM {
     ) => void = null!;
     _wl_physx_component_addCallback: (id: number, otherId: number) => number = null!;
     _wl_physx_component_removeCallback: (id: number, callbackId: number) => number = null!;
-    _wl_physx_update: (delta: number) => void = null!;
     _wl_physx_update_global_pose: (object: number, component: number) => void = null!;
     _wl_physx_ray_cast: (
         x: number,
@@ -934,7 +993,7 @@ export class WASM {
         indicesSize: number,
         indexType: number,
         vertexCount: number,
-        skinned: boolean
+        skinningType: number
     ) => number = null!;
     _wl_mesh_get_vertexData: (id: number, outPtr: number) => number = null!;
     _wl_mesh_get_vertexCount: (id: number) => number = null!;
@@ -966,8 +1025,6 @@ export class WASM {
     _wl_material_definition_get_count: (id: number) => number = null!;
     _wl_material_definition_get_param_name: (id: number, index: number) => number = null!;
     _wl_material_definition_get_param_type: (id: number, index: number) => number = null!;
-    /** @deprecated */
-    _wl_material_get_shader: (id: number) => number = null!;
     _wl_material_get_pipeline: (id: number) => number = null!;
     _wl_material_clone: (id: number) => number = null!;
     _wl_material_get_param_index: (id: number, namePtr: number) => number = null!;
@@ -1075,6 +1132,10 @@ export class WASM {
     _wl_object_trans_world_to_local: (id: number) => number = null!;
     _wl_object_scaling_local: (id: number) => number = null!;
     _wl_object_scaling_world: (id: number) => number = null!;
+    _wl_object_set_scaling_local: (id: number, x: number, y: number, z: number) => void =
+        null!;
+    _wl_object_set_scaling_world: (id: number, x: number, y: number, z: number) => void =
+        null!;
     _wl_object_scaling_world_to_local: (id: number) => number = null!;
     _wl_object_set_rotation_local: (
         id: number,
