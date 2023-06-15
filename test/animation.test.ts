@@ -1,14 +1,13 @@
-import { expect } from '@esm-bundle/chai';
+import {expect} from '@esm-bundle/chai';
 
-import { Animation } from '..';
-import { init, reset } from './setup.js';
+import {Animation} from '..';
+import {init, reset, WL} from './setup.js';
 
 before(init);
 beforeEach(reset);
 
-describe('Animation', function() {
-
-    it('equals', function() {
+describe('Animation', function () {
+    it('equals', function () {
         const anim1 = new Animation(WL, 1);
         const anim2 = new Animation(WL, 2);
         const anim3 = new Animation(WL, 1);
@@ -20,5 +19,4 @@ describe('Animation', function() {
         expect(anim1.equals(anim3)).to.be.true;
         expect(anim3.equals(anim1)).to.be.true;
     });
-
 });

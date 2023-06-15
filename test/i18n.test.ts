@@ -1,19 +1,18 @@
-import { expect } from '@esm-bundle/chai';
+import {expect} from '@esm-bundle/chai';
 
-import { init } from './setup.js';
+import {init, WL} from './setup.js';
 
 before(init);
 
-describe('I18N', function() {
-
-    it('defaults', async function() {
+describe('I18N', function () {
+    it('defaults', async function () {
         const langCount = WL.i18n.languageCount();
         expect(langCount).to.equal(0);
 
-        const langIndex = WL.i18n.languageIndex("non-existing-code");
+        const langIndex = WL.i18n.languageIndex('non-existing-code');
         expect(langIndex).to.equal(-1);
 
-        const translation = WL.i18n.translate("non-existing-term");
+        const translation = WL.i18n.translate('non-existing-term');
         expect(translation).to.equal(null);
 
         const lang = WL.i18n.language;
@@ -25,5 +24,4 @@ describe('I18N', function() {
         const langName = WL.i18n.languageName(0);
         expect(langName).to.equal(null);
     });
-
 });

@@ -1,5 +1,5 @@
 /**
- * Component parameter type enum
+ * Component property type.
  */
 export enum Type {
     /**
@@ -57,10 +57,14 @@ export enum Type {
      * The property value is resolved to an **index** into the `values` array.
      *
      * Initial value is the first element in `values`, unless overridden by
-     * the `default` property.
+     * the `default` property. The `default` value can be a string or an index
+     * into `values`.
      *
      * @example
+     *
+     * ```js
      *     camera: {type: Type.Enum, values: ['auto', 'back', 'front'], default: 'auto'},
+     * ```
      */
     Enum = 1 << 5,
 
@@ -131,17 +135,17 @@ export enum Type {
 }
 
 /**
- * Custom component parameter.
+ * Custom component property.
  *
  * For more information about component properties, have a look
  * at the {@link Component.Properties} attribute.
  */
 export interface ComponentProperty {
-    /** Parameter type. */
+    /** Property type. */
     type: Type;
     /** Default value, depending on type. */
     default?: any;
-    /** Values for {@link Type} */
+    /** Values for {@link Type.Enum} */
     values?: string[];
 }
 
@@ -206,12 +210,10 @@ export const Property = {
      * Create an enumeration property.
      *
      * @param values The list of values.
-     * @param defaultValue The index of the default value. If not provided,
-     *     defaults to the first element.
+     * @param defaultValue The default value. Can be a string or an index into
+     *     `values`. If not provided, defaults to the first element.
      */
-    enum(values: string[], defaultValue?: unknown): ComponentProperty {
-        values = values ?? [];
-        defaultValue = defaultValue ?? values.at(0);
+    enum(values: string[], defaultValue?: string | number): ComponentProperty {
         return {type: Type.Enum, values, default: defaultValue};
     },
 

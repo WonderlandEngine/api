@@ -47,15 +47,13 @@ export function enumerable() {
  * ```
  */
 export function nativeProperty() {
-    return function <Type extends Component, Key extends keyof Type & string>(
-        target: Type,
-        propertyKey: Key,
+    return function (
+        target: Component,
+        propertyKey: string,
         descriptor: PropertyDescriptor
     ) {
         enumerable()(target, propertyKey, descriptor);
-        const ctor = target.constructor as ComponentConstructor;
-        ctor.Properties = ctor.Properties ?? {};
-        ctor.Properties[propertyKey] = {type: Type.Native};
+        propertyDecorator({type: Type.Native})(target, propertyKey);
     };
 }
 

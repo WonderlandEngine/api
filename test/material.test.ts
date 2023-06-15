@@ -1,67 +1,72 @@
-import { expect, use } from '@esm-bundle/chai';
-import { chaiAlmost } from './chai/almost.js';
+import {expect, use} from '@esm-bundle/chai';
+import {chaiAlmost} from './chai/almost.js';
 
-import { init } from './setup.js';
-import { Material, MaterialParamType, Texture } from '..';
+import {init, WL} from './setup.js';
+import {Material, MaterialParamType, Texture} from '..';
 
 use(chaiAlmost());
-
 before(init);
 /* We intentionally don't reset such that the 'Phong Opaque' pipeline
  * from the loading screen is available to create materials from */
 
-describe('Material Definition', function() {
+interface PhongMaterial extends Material {
+    color: Float32Array | number[];
+    diffuseColor: Float32Array | number[];
+    shininess: number;
+    alphaTextureThreshold: number;
+    alphaMaskTexture: Texture;
+}
 
-    it('Phong Opaque', function() {
+describe('Material Definition', function () {
+    it('Phong Opaque', function () {
         const mat = new Material(WL, {pipeline: 'Phong Opaque'});
-        const definition = WL.wasm._materialDefinitions[mat._definition];
+        const definition = WL.wasm._materialDefinitions[mat['_definition']];
 
-        const ambientColor = definition.get('ambientColor');
+        const ambientColor = definition.get('ambientColor')!;
         expect(ambientColor.type.type).to.equal(MaterialParamType.Float);
         expect(ambientColor.type.componentCount).to.equal(4);
 
-        const diffuseColor = definition.get('diffuseColor');
+        const diffuseColor = definition.get('diffuseColor')!;
         expect(diffuseColor.type.type).to.equal(MaterialParamType.Float);
         expect(diffuseColor.type.componentCount).to.equal(4);
 
-        const specularColor = definition.get('specularColor');
+        const specularColor = definition.get('specularColor')!;
         expect(specularColor.type.type).to.equal(MaterialParamType.Float);
         expect(specularColor.type.componentCount).to.equal(4);
 
-        const ambientFactor = definition.get('ambientFactor');
-        expect(ambientFactor.type.type).to.equal(MaterialParamType.Float);
-        expect(ambientFactor.type.componentCount).to.equal(1);
-
-        const shininess = definition.get('shininess');
+        const shininess = definition.get('shininess')!;
         expect(shininess.type.type).to.equal(MaterialParamType.UnsignedInt);
         expect(shininess.type.componentCount).to.equal(1);
 
-        const alphaTexture = definition.get('alphaMaskTexture');
+        const alphaTexture = definition.get('alphaMaskTexture')!;
         expect(alphaTexture.type.type).to.equal(MaterialParamType.Sampler);
         expect(alphaTexture.type.componentCount).to.equal(1);
 
-        const alphaTextureThreshold = definition.get('alphaMaskThreshold');
+        const alphaTextureThreshold = definition.get('alphaMaskThreshold')!;
         expect(alphaTextureThreshold.type.type).to.equal(MaterialParamType.Float);
         expect(alphaTextureThreshold.type.componentCount).to.equal(1);
     });
-
 });
 
-describe('Material', function() {
+describe('Material', function () {
+    it('constructor', function () {
+        expect(() => new Material(WL, undefined as any)).to.throw(
+            Error,
+            "Missing parameter 'pipeline'"
+        );
+        expect(() => new Material(WL, {pipeline: 'Northstream'})).to.throw(
+            Error,
+            "No such pipeline 'Northstream'"
+        );
 
-    it('constructor', function() {
-        expect(() => new Material(WL)).to.throw(Error, "Missing parameter 'pipeline'");
-        expect(() => new Material(WL, {pipeline: 'Northstream'}))
-            .to.throw(Error, "No such pipeline 'Northstream'");
-
-        const mat = new Material(WL, {pipeline: 'Phong Opaque'});
+        const mat = new Material(WL, {pipeline: 'Phong Opaque'}) as PhongMaterial;
         expect(mat.color).to.be.undefined;
         expect(mat.diffuseColor).to.deep.equal(new Float32Array([0, 0, 0, 1]));
         expect(mat.pipeline).to.equal('Phong Opaque');
     });
 
-    it('parameters', function() {
-        const mat = new Material(WL, {pipeline: 'Phong Opaque'});
+    it('parameters', function () {
+        const mat = new Material(WL, {pipeline: 'Phong Opaque'}) as PhongMaterial;
 
         expect(mat.diffuseColor).to.deep.equal(new Float32Array([0, 0, 0, 1]));
         mat.diffuseColor = [1.0, 0.0, 0.0, 1.0];
@@ -75,7 +80,7 @@ describe('Material', function() {
         expect(mat.alphaMaskTexture).to.be.an.instanceOf(Texture);
     });
 
-    it('equals', function() {
+    it('equals', function () {
         const mat1 = new Material(WL, {pipeline: 'Phong Opaque'});
         const mat2 = new Material(WL, {pipeline: 'Phong Opaque'});
         const mat3 = new Material(WL, mat1._index);
@@ -87,5 +92,4 @@ describe('Material', function() {
         expect(mat1.equals(mat3)).to.be.true;
         expect(mat3.equals(mat1)).to.be.true;
     });
-
 });

@@ -2,10 +2,15 @@ import {simd, threads} from 'wasm-feature-detect';
 import {WonderlandEngine} from './engine.js';
 import {WASM} from './wasm.js';
 
+import {APIVersion, Version} from './version.js';
+
 export * from './utils/event.js';
 export * from './wonderland.js';
 export * from './engine.js';
+export * from './scene.js';
 export * from './property.js';
+export * from './texture-manager.js';
+export * from './version.js';
 export * from './wasm.js';
 
 function loadScript(scriptURL: string): Promise<void> {
@@ -90,6 +95,17 @@ export interface LoadRuntimeOptions {
      * requires an enterprise license, please reach out for more information.
      */
     loadingScreen: string;
+
+    /**
+     * Default framebuffer scale factor. This can later be changed using
+     * {@link WonderlandEngine.xrFramebufferScaleFactor}
+     */
+    xrFramebufferScaleFactor: number;
+
+    /**
+     * Canvas id or element. If this is `undefined`, looks for a canvas with id 'canvas'.
+     */
+    canvas: string;
 }
 
 /* Global boolean to check if AR/VR is supported. */
@@ -124,6 +140,42 @@ function checkXRSupport(): Promise<{ar: boolean; vr: boolean}> {
 }
 
 /**
+ * Ensures that this API is compatible with the given
+ * runtime version.
+ *
+ * We only enforce compatibility for major and minor components, i.e.,
+ * the runtime and the API must both be of the form `x.y.*`.
+ *
+ * @throws If the major or the minor components are different.
+ *
+ * @param version The target version
+ */
+export function checkRuntimeCompatibility(version: Version) {
+    const {major, minor} = version;
+
+    let majorDiff = major - APIVersion.major;
+    let minorDiff = minor - APIVersion.minor;
+    /* Same version, so perfectly compatible. */
+    if (!majorDiff && !minorDiff) return;
+
+    const error =
+        'checkRuntimeCompatibility(): Version compatibility mismatch:\n' +
+        '\t→ API and runtime compatibility is enforced on a patch level (versions x.y.*)\n';
+
+    const isRuntimeOlder = majorDiff < 0 || (!majorDiff && minorDiff < 0);
+    if (isRuntimeOlder) {
+        /* Runtime is out of date. */
+        throw new Error(
+            `${error}\t→ Please use a Wonderland Engine editor version >= ${APIVersion.major}.${APIVersion.minor}.*`
+        );
+    }
+    /* API is out of date. */
+    throw new Error(
+        `${error}\t→ Please use a new API version >= ${version.major}.${version.minor}.*`
+    );
+}
+
+/**
  * Load the runtime using the WASM and JS files.
  *
  * @param runtime The runtime base string, e.g,: `WonderlandRuntime-loader-physx`.
@@ -143,7 +195,9 @@ export async function loadRuntime(
         threads = threadsSupported,
         physx = false,
         loader = false,
+        xrFramebufferScaleFactor = 1.0,
         loadingScreen = 'WonderlandRuntime-LoadingScreen.bin',
+        canvas = 'canvas',
     } = options;
 
     const variant = [];
@@ -174,9 +228,18 @@ export async function loadRuntime(
         download(loadingScreen, 'Failed to fetch loading screen file').catch((_) => null),
     ]);
 
+    const glCanvas = document.getElementById(canvas) as HTMLCanvasElement;
+    if (!glCanvas) {
+        throw new Error(`loadRuntime(): Failed to find canvas with id '${canvas}'`);
+    }
+    if (!(glCanvas instanceof HTMLCanvasElement)) {
+        throw new Error(`loadRuntime(): HTML element '${canvas}' must be a canvas`);
+    }
+
     const wasm = new WASM(threads);
     (wasm.worker as string) = `${filename}.worker.js`;
     (wasm.wasm as ArrayBuffer) = wasmData;
+    (wasm.canvas as HTMLCanvasElement) = glCanvas;
     const engine = new WonderlandEngine(wasm, loadingScreenData);
 
     if (!window._WL) {
@@ -194,12 +257,17 @@ export async function loadRuntime(
     }
     await runtimes[runtimeGlobalId](wasm);
 
+    /* Throws if the runtime isn't compatible with the API. */
+    checkRuntimeCompatibility(engine.runtimeVersion);
+
     engine._init();
 
     const xr = await xrPromise;
     (engine.arSupported as boolean) = xr.ar;
     (engine.vrSupported as boolean) = xr.vr;
+    engine.xrFramebufferScaleFactor = xrFramebufferScaleFactor;
 
+    engine.autoResizeCanvas = true;
     engine.start();
 
     return engine;
