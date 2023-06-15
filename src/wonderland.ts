@@ -4681,7 +4681,7 @@ export class Object3D {
      * @warning This method will currently return at most 341 components.
      * @overload
      */
-    getComponents<T extends Component>(typeClass: ComponentConstructor<T>): T[];
+    getComponents<T extends Component>(typeOrClass: ComponentConstructor<T>): T[];
 
     getComponents<T extends Component>(
         typeOrClass?: string | ComponentConstructor<T> | null
