@@ -4145,9 +4145,6 @@ export class Object3D {
     getComponents(type: 'physx'): PhysXComponent[];
     /** @overload */
     getComponents(type?: string | null): Component[];
-    /** @overload */
-    getComponents<T extends Component>(typeClass: ComponentConstructor<T>): T[];
-
     /**
      * @param typeOrClass Type name, pass a falsey value (`undefined` or `null`) to retrieve all.
      *     It's also possible to give a class definition. In this case, the method will use the `class.TypeName` field to
@@ -4157,7 +4154,10 @@ export class Object3D {
      * @note As this function is non-trivial, avoid using it in `update()` repeatedly,
      *      but rather store its result in `init()` or `start()`
      * @warning This method will currently return at most 341 components.
+     * @overload
      */
+    getComponents<T extends Component>(typeClass: ComponentConstructor<T>): T[];
+
     getComponents<T extends Component>(
         typeOrClass?: string | ComponentConstructor<T> | null
     ): T[] {
