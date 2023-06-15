@@ -4146,7 +4146,7 @@ export class Object3D {
     /** @overload */
     getComponents(type?: string | null): Component[];
     /** @overload */
-    getComponents<T extends Component>(clazz: ComponentConstructor<T>): T[];
+    getComponents<T extends Component>(typeClass: ComponentConstructor<T>): T[];
 
     /**
      * @param typeOrClass Type name, pass a falsey value (`undefined` or `null`) to retrieve all.
