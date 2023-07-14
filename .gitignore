@@ -114,3 +114,7 @@ dist
 
 # TernJS port file
 .tern-port
+
+# Sublime Text project/workspace files
+*.sublime-project
+*.sublime-workspace
