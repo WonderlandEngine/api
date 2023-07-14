@@ -4740,7 +4740,7 @@ export class Object3D {
     addComponent(
         type: 'collision',
         params?: Record<string, any>
-    ): CollisionComponent | null;
+    ): CollisionComponent;
     /** @overload */
     addComponent(type: 'text', params?: Record<string, any>): TextComponent;
     /** @overload */
@@ -4755,7 +4755,7 @@ export class Object3D {
     addComponent(
         type: 'animation',
         params?: Record<string, any>
-    ): AnimationComponent | null;
+    ): AnimationComponent;
     /** @overload */
     addComponent(type: 'physx', params?: Record<string, any>): PhysXComponent;
     /** @overload */
