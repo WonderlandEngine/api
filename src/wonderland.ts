@@ -4742,24 +4742,24 @@ export class Object3D {
         params?: Record<string, any>
     ): CollisionComponent | null;
     /** @overload */
-    addComponent(type: 'text', params?: Record<string, any>): TextComponent | null;
+    addComponent(type: 'text', params?: Record<string, any>): TextComponent;
     /** @overload */
-    addComponent(type: 'view', params?: Record<string, any>): ViewComponent | null;
+    addComponent(type: 'view', params?: Record<string, any>): ViewComponent;
     /** @overload */
-    addComponent(type: 'mesh', params?: Record<string, any>): MeshComponent | null;
+    addComponent(type: 'mesh', params?: Record<string, any>): MeshComponent;
     /** @overload */
-    addComponent(type: 'input', params?: Record<string, any>): InputComponent | null;
+    addComponent(type: 'input', params?: Record<string, any>): InputComponent;
     /** @overload */
-    addComponent(type: 'light', params?: Record<string, any>): LightComponent | null;
+    addComponent(type: 'light', params?: Record<string, any>): LightComponent;
     /** @overload */
     addComponent(
         type: 'animation',
         params?: Record<string, any>
     ): AnimationComponent | null;
     /** @overload */
-    addComponent(type: 'physx', params?: Record<string, any>): PhysXComponent | null;
+    addComponent(type: 'physx', params?: Record<string, any>): PhysXComponent;
     /** @overload */
-    addComponent(type: string, params?: Record<string, any>): Component | null;
+    addComponent(type: string, params?: Record<string, any>): Component;
     /**
      * Add component of given type to the object.
      *
@@ -4782,16 +4782,17 @@ export class Object3D {
      * @param params Parameters to initialize properties of the new component,
      *      can be another component to copy properties from.
      *
-     * @returns The component or `null` if the type was not found
+     * @throws TypeError if typeOrClass is not a registered component type
+     * @returns The component
      */
     addComponent<T extends Component>(
         typeClass: ComponentConstructor<T>,
         params?: Record<string, any>
-    ): T | null;
+    ): T;
     addComponent(
         typeOrClass: ComponentConstructor | string,
         params?: Record<string, any>
-    ): Component | null {
+    ): Component {
         const wasm = this._engine.wasm;
 
         const type = isString(typeOrClass) ? typeOrClass : typeOrClass.TypeName;
