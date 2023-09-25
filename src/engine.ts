@@ -13,6 +13,10 @@ import {
     Physics,
     I18N,
     XR,
+    Texture,
+    DestroyedObjectInstance,
+    DestroyedComponentInstance,
+    DestroyedTextureInstance,
 } from './wonderland.js';
 
 import {Emitter, RetainEmitter} from './utils/event.js';
@@ -109,11 +113,76 @@ export class WonderlandEngine {
      */
     readonly xr: XR | null = null;
 
-    /* Component class instances per type to avoid GC */
-    private _componentCache: Record<string, Component[]> = {};
+    /**
+     * If `true`, {@link Texture}, {@link Object3D}, and {@link Component}
+     * instances have their prototype erased upon destruction.
+     *
+     * #### Object
+     *
+     * ```js
+     * engine.erasePrototypeOnDestroy = true;
+     *
+     * const obj = engine.scene.addObject();
+     * obj.name = 'iamalive';
+     * console.log(obj.name); // Prints 'iamalive'
+     *
+     * obj.destroy();
+     * console.log(obj.name); // Throws an error
+     * ```
+     *
+     * #### Component
+     *
+     * Components will also be affected:
+     *
+     * ```js
+     * class MyComponent extends Component {
+     *     static TypeName = 'my-component';
+     *     static Properties = {
+     *         alive: Property.bool(true)
+     *     };
+     *
+     *     start() {
+     *         this.destroy();
+     *         console.log(this.alive) // Throws an error
+     *     }
+     * }
+     * ```
+     *
+     * A component is also destroyed if its ancestor gets destroyed:
+     *
+     * ```js
+     * class MyComponent extends Component {
+     *     ...
+     *     start() {
+     *         this.object.parent.destroy();
+     *         console.log(this.alive) // Throws an error
+     *     }
+     * }
+     * ```
+     *
+     * @note Native components will not be erased if destroyed via object destruction:
+     *
+     * ```js
+     * const mesh = obj.addComponent('mesh');
+     * obj.destroy();
+     * console.log(mesh.active) // Doesn't throw even if the mesh is destroyed
+     * ```
+     *
+     * @since 1.1.1
+     */
+    erasePrototypeOnDestroy = false;
 
-    /* Object class instances per type to avoid GC */
-    private readonly _objectCache: Object3D[] = [];
+    /**
+     * Component class instances per type to avoid GC.
+     *
+     * @note Maps the manager index to the list of components.
+     *
+     * @hidden
+     */
+    _componentCache: Record<string, (Component | null)[]> = {};
+
+    /** Object class instances to avoid GC. @hidden */
+    _objectCache: (Object3D | null)[] = [];
 
     /**
      * WebAssembly bridge.
@@ -545,5 +614,64 @@ export class WonderlandEngine {
         (component._id as number) = componentId;
         c[componentId] = component;
         return component;
+    }
+
+    /**
+     * Perform cleanup upon object destruction.
+     *
+     * @param instance The instance to destroy.
+     *
+     * @hidden
+     */
+    _destroyObject(instance: Object3D) {
+        const id = instance.objectId;
+        (instance._objectId as number) = -1;
+
+        /* Destroy the prototype of this instance to avoid using a dangling object */
+        if (this.erasePrototypeOnDestroy && instance) {
+            Object.setPrototypeOf(instance, DestroyedObjectInstance);
+        }
+
+        /* Remove from the cache to avoid side-effects when
+         * re-creating an object with the same id. */
+        this._objectCache[id] = null;
+    }
+
+    /**
+     * Perform cleanup upon component destruction.
+     *
+     * @param instance The instance to destroy.
+     *
+     * @hidden
+     */
+    _destroyComponent(instance: Component) {
+        const id = instance._id;
+        const manager = instance._manager;
+        (instance._id as number) = -1;
+        (instance._manager as number) = -1;
+
+        /* Destroy the prototype of this instance to avoid using a dangling component */
+        if (this.erasePrototypeOnDestroy && instance) {
+            Object.setPrototypeOf(instance, DestroyedComponentInstance);
+        }
+
+        /* Remove from the cache to avoid side-effects when
+         * re-creating a component with the same id. */
+        const cache = this._componentCache[manager];
+        if (cache) cache[id] = null;
+    }
+
+    /**
+     * Perform cleanup upon texture destruction.
+     *
+     * @param texture The instance to destroy.
+     *
+     * @hidden
+     */
+    _destroyTexture(texture: Texture) {
+        this.textures._destroy(texture);
+        if (this.erasePrototypeOnDestroy) {
+            Object.setPrototypeOf(texture, DestroyedTextureInstance);
+        }
     }
 }

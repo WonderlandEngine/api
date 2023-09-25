@@ -1,0 +1,14 @@
+{
+  "name": "test-js-components",
+  "version": "1.0.0",
+  "description": "My Wonderland project",
+  "main": "js/index.js",
+  "type": "module",
+  "module": "js/index.js",
+  "scripts": {
+    "build": "echo \"The 'build' script is run by the editor and should produce your application bundle\""
+  },
+  "keywords": [
+    "wonderland-engine"
+  ]
+}

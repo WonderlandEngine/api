@@ -147,6 +147,7 @@ export interface ComponentProperty {
     default?: any;
     /** Values for {@link Type.Enum} */
     values?: string[];
+    required?: boolean;
 }
 
 /**
@@ -218,33 +219,33 @@ export const Property = {
     },
 
     /** Create an {@link Object3D} reference property. */
-    object(): ComponentProperty {
-        return {type: Type.Object, default: null};
+    object(opts?: PropertyReferenceOptions): ComponentProperty {
+        return {type: Type.Object, default: null, required: opts?.required ?? false};
     },
 
     /** Create a {@link Mesh} reference property. */
-    mesh(): ComponentProperty {
-        return {type: Type.Mesh, default: null};
+    mesh(opts?: PropertyReferenceOptions): ComponentProperty {
+        return {type: Type.Mesh, default: null, required: opts?.required ?? false};
     },
 
     /** Create a {@link Texture} reference property. */
-    texture(): ComponentProperty {
-        return {type: Type.Texture, default: null};
+    texture(opts?: PropertyReferenceOptions): ComponentProperty {
+        return {type: Type.Texture, default: null, required: opts?.required ?? false};
     },
 
     /** Create a {@link Material} reference property. */
-    material(): ComponentProperty {
-        return {type: Type.Material, default: null};
+    material(opts?: PropertyReferenceOptions): ComponentProperty {
+        return {type: Type.Material, default: null, required: opts?.required ?? false};
     },
 
     /** Create an {@link Animation} reference property. */
-    animation(): ComponentProperty {
-        return {type: Type.Animation, default: null};
+    animation(opts?: PropertyReferenceOptions): ComponentProperty {
+        return {type: Type.Animation, default: null, required: opts?.required ?? false};
     },
 
     /** Create a {@link Skin} reference property. */
-    skin(): ComponentProperty {
-        return {type: Type.Skin, default: null};
+    skin(opts?: PropertyReferenceOptions): ComponentProperty {
+        return {type: Type.Skin, default: null, required: opts?.required ?? false};
     },
 
     /**
@@ -259,6 +260,15 @@ export const Property = {
         return {type: Type.Color, default: [r, g, b, a]};
     },
 };
+
+/**
+ * Options to create a reference property, i.e.,
+ * object, mesh, animation, skin, etc...
+ */
+export interface PropertyReferenceOptions {
+    /** If `true`, the component will throw if the property isn't initialized. */
+    required?: boolean;
+}
 
 /** All the keys that exists on the {@link Property} object. */
 export type PropertyKeys = keyof typeof Property;

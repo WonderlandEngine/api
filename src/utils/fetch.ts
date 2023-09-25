@@ -32,3 +32,13 @@ export function fetchWithProgress(
         xhr.send();
     });
 }
+
+/**
+ * Get parent path from a URL.
+ *
+ * @param url URL to get the parent from.
+ * @returns Parent URL without trailing slash.
+ */
+export function getBaseUrl(url: string): string {
+    return url.substring(0, url.lastIndexOf('/'));
+}

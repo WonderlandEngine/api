@@ -2,11 +2,26 @@ import {expect, use} from '@esm-bundle/chai';
 import {chaiAlmost} from './chai/almost.js';
 
 import {init, reset, WL} from './setup.js';
+import {Object3D} from '..';
 
 before(init);
 beforeEach(reset);
 
 use(chaiAlmost());
+
+/**
+ * Comparator to use when sorting on an array of `Object3D`.
+ *
+ * @param a The first object to compare.
+ * @param b The second object to compare.
+ */
+function objectSort(a: Object3D, b: Object3D) {
+    return a.objectId - b.objectId;
+}
+
+function objectsToIds(objects: Object3D[]): number[] {
+    return objects.map((o) => o.objectId).sort();
+}
 
 describe('Object', function () {
     it('get and set name', function () {
@@ -45,7 +60,7 @@ describe('Object', function () {
         expect(b.changed).to.be.true;
     });
 
-    it('destroy', function () {
+    it('.destroy() without prototype destruction', function () {
         const x = WL.scene.addObject();
         const a = WL.scene.addObject(x);
         const b = WL.scene.addObject(x);
@@ -56,6 +71,29 @@ describe('Object', function () {
         expect(a.objectId).to.equal(-1);
         expect(x.children.length).to.equal(1);
         expect(x.children[0].equals(b)).to.be.true;
+        expect(a.isDestroyed).to.be.true;
+    });
+
+    it('.destroy() with prototype destruction', function () {
+        WL.erasePrototypeOnDestroy = true;
+
+        const a = WL.scene.addObject();
+        const b = WL.scene.addObject();
+        const bId = b.objectId;
+
+        a.destroy();
+        expect(() => a.translateLocal([1, 1, 1])).to.throw(
+            `Canno't read 'translateLocal' of destroyed object`
+        );
+        expect(() => (a.active = false)).to.throw(
+            `Canno't write 'active' of destroyed object`
+        );
+        expect(() => ((a as Record<string, any>).test = 5)).to.throw(
+            `Canno't write 'test' of destroyed object`
+        );
+
+        /* Ensure destroying `a` didn't destroy `b` as well */
+        expect(b.objectId).to.equal(bId);
     });
 
     it('(set|get)Position(World|Local)', function () {
@@ -185,6 +223,177 @@ describe('Object', function () {
         expect(obj.parent.objectId).to.equal(objB.objectId);
         expect(objB.children.length).to.equal(1);
         expect(objB.children[0].objectId).to.equal(obj.objectId);
+    });
+
+    it('.findByNameDirect()', function () {
+        const NAME = 'target';
+        const expected: Object3D[] = [];
+        const parent = WL.scene.addObject();
+
+        expect(parent.findByNameDirect('toto')).to.eql([]);
+
+        /* Add dummy objects */
+        for (let i = 0; i < 32; ++i) {
+            const obj = WL.scene.addObject(parent);
+            obj.name = `target-${i}`;
+        }
+
+        /* No children with target name */
+        expect(parent.findByNameDirect(NAME)).to.eql([]);
+
+        /* Add a single child with the target name */
+        expected.push(WL.scene.addObject(parent));
+        expected[0].name = NAME;
+        expect(parent.findByNameDirect(NAME)).to.eql(expected);
+
+        /* Add more dummy objects to ensure it works on sparsed data */
+        const d = WL.scene.addObject(parent);
+        d.name = 'dummy';
+        const dummy = WL.scene.addObject(parent);
+        dummy.name = 'hello';
+
+        /* Ensure only direct descendants are accounted */
+        const childA = WL.scene.addObject(dummy);
+        childA.name = NAME;
+        const childB = WL.scene.addObject(expected[0]);
+        childB.name = NAME;
+        expect(parent.findByNameDirect(NAME)).to.eql(expected);
+
+        /* Ensures targets count > half temporary works */
+        const count = 140;
+        WL.wasm.allocateTempMemory(256);
+        for (let i = 0; i < count; ++i) {
+            const obj = WL.scene.addObject(parent);
+            obj.name = NAME;
+            expected.push(obj);
+            const dummy = WL.scene.addObject(parent);
+            dummy.name = `dummy-${i}`;
+        }
+        expect(objectsToIds(parent.findByNameDirect(NAME))).to.eql(objectsToIds(expected));
+    });
+
+    it('.findByNameRecursive()', function () {
+        const NAME = 'target';
+        const expected: Object3D[] = [];
+        const parent = WL.scene.addObject();
+
+        expect(parent.findByNameRecursive('toto')).to.eql([]);
+
+        /* Add chain of dummies */
+        let dummy = WL.scene.addObject(parent);
+        for (let i = 0; i < 5; ++i) {
+            const obj = WL.scene.addObject(dummy);
+            obj.name = `target dummy-${i}`;
+            dummy = obj;
+        }
+
+        expect(parent.findByNameRecursive(NAME)).to.eql([]);
+
+        /* Ensure direct descendant are found */
+        expected.push(WL.scene.addObject(parent));
+        expected[0].name = NAME;
+        expect(parent.findByNameRecursive(NAME)).to.eql(expected);
+
+        /* Ensure deep objects are found */
+        expected.push(WL.scene.addObject(dummy));
+        expected[1].name = NAME;
+        expect(parent.findByNameRecursive(NAME).sort(objectSort)).to.eql(
+            expected.sort(objectSort)
+        );
+
+        /* Ensures targets count > MAX_COUNT works */
+        const child = WL.scene.addObject(parent);
+        const count = 140;
+        WL.wasm.allocateTempMemory(256);
+        for (let i = 0; i < count; ++i) {
+            const obj = WL.scene.addObject(child);
+            obj.name = NAME;
+            expected.push(obj);
+            const dummy = WL.scene.addObject(child);
+            dummy.name = `new-dummy-${i}`;
+        }
+        expect(objectsToIds(parent.findByNameRecursive(NAME))).to.eql(
+            objectsToIds(expected)
+        );
+    });
+
+    describe('Object3D.clone()', function () {
+        it('scene graph structure and names', function () {
+            /*
+             * parent
+             *     |-> child0
+             *         |-> chilchild0
+             *     |-> child1
+             */
+            const src = WL.scene.addObject();
+            src.name = 'parent';
+            {
+                const child = WL.scene.addObject(src);
+                child.name = 'child0';
+                const childchild = WL.scene.addObject(child);
+                childchild.name = 'childchild0';
+                const child1 = WL.scene.addObject(src);
+                child1.name = 'child1';
+            }
+
+            const dst = src.clone();
+            expect(dst.name).to.equal('parent');
+            expect(dst.children).to.have.lengthOf(2);
+
+            const child = dst.findByNameDirect('child0')[0];
+            expect(child).to.not.be.undefined;
+            expect(child.children).to.have.lengthOf(1);
+            const childchild = child.findByNameDirect('childchild0')[0];
+            expect(childchild).to.not.be.undefined;
+
+            const child1 = dst.findByNameDirect('child1')[0];
+            expect(child1).to.not.be.undefined;
+            expect(child1.children).to.have.lengthOf(0);
+        });
+
+        it('clone into specific parent', function () {
+            const src = WL.scene.addObject();
+            src.name = 'source';
+            const child = WL.scene.addObject(src);
+            child.name = 'child';
+
+            const parent = WL.scene.addObject();
+
+            const clone = src.clone(parent);
+            expect(clone.parent).to.equal(parent);
+            expect(clone.name).to.equal('source');
+            expect(clone.children).to.have.lengthOf(1);
+            expect(clone.children[0].name).to.equal('child');
+        });
+
+        it('native components cloned', function () {
+            /*
+             * parent
+             *     |-> child
+             *         |-> child
+             */
+            const src = WL.scene.addObject();
+            const child = WL.scene.addObject(src);
+            child.name = 'child';
+            const childcomp = child.addComponent('light')!;
+            childcomp.color = [0.1, 0.2, 0.3];
+
+            const childchild = WL.scene.addObject(child);
+            childchild.name = 'child';
+            const childchildcomp = childchild.addComponent('light')!;
+            childchildcomp.color = [0.4, 0.5, 0.6];
+
+            const dst = src.clone();
+            const dstChild = dst.findByNameDirect('child')[0];
+            expect(dstChild).to.not.be.undefined;
+            expect(dstChild.getComponent('light')?.color).to.deep.almost([0.1, 0.2, 0.3]);
+
+            const dstChildChild = dstChild.findByNameDirect('child')[0];
+            expect(dstChildChild).to.not.be.undefined;
+            expect(dstChildChild.getComponent('light')?.color).to.deep.almost([
+                0.4, 0.5, 0.6,
+            ]);
+        });
     });
 
     describe('Object Transform', function () {

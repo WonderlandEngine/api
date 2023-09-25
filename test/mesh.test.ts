@@ -33,7 +33,7 @@ const MeshLayoutFlags = {
     Slug: 1 << 9,
 };
 
-before(init);
+before(() => init({loader: true}));
 beforeEach(reset);
 
 describe('Mesh', function () {
@@ -49,6 +49,8 @@ describe('Mesh', function () {
     });
 
     describe('MeshAttribute', function () {
+        this.timeout(30000);
+
         it('import only scene attributes', async function () {
             /* Scene layout without tangents */
             WL.wasm._wl_renderer_set_mesh_layout(

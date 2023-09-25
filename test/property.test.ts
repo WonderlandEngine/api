@@ -1,4 +1,4 @@
-import {expect, should, use} from '@esm-bundle/chai';
+import {expect, use} from '@esm-bundle/chai';
 import {chaiAlmost} from './chai/almost.js';
 
 import {
@@ -11,6 +11,8 @@ import {
     Material,
     Texture,
     Mesh,
+    inheritProperties,
+    PropertyKeys,
 } from '..';
 import {property} from '../dist/decorators.js';
 
@@ -259,6 +261,198 @@ class TestComponentPropertiesDecorator extends Component {
 }
 
 describe('Properties', function () {
+    it('Component.resetProperties()', function () {
+        class TestComponent extends TestComponentProperties {
+            static TypeName = 'test-component';
+            static Properties = TestComponentProperties.createLiteralProperties(true);
+        }
+        WL.registerComponent(TestComponent);
+        const comp = WL.scene.addObject().addComponent(TestComponent)!;
+        for (const name in TestComponent.Properties) {
+            (comp as any)[name] = null;
+        }
+        comp.resetProperties();
+        TestComponentProperties.assertDefaults(comp);
+    });
+
+    for (const prop of [
+        'object',
+        'skin',
+        'texture',
+        'mesh',
+        'material',
+        'animation',
+    ] as PropertyKeys[]) {
+        it('Component.validateProperties() - ' + prop, function () {
+            class TestOptionalProperty extends Component {
+                static TypeName = 'test-optional-property';
+                static Properties = {
+                    prop: (Property[prop] as typeof Property.object)({required: false}),
+                };
+            }
+            class TestRequiredProperty extends Component {
+                static TypeName = 'test-required-property';
+                static Properties = {
+                    prop: (Property[prop] as typeof Property.object)({required: true}),
+                };
+            }
+            WL.registerComponent(TestOptionalProperty, TestRequiredProperty);
+
+            const optionalPropComp = new TestOptionalProperty(WL);
+            const requiredPropComp = new TestRequiredProperty(WL);
+
+            expect(() => optionalPropComp.validateProperties()).to.not.throw;
+            /* `validateProperties` only check for non-null references for now.
+             * Thus, there is no need to set the good type of reference (texture, etc...). */
+            expect(() => requiredPropComp.validateProperties()).to.throw(
+                `Property 'prop' is required but was not initialized`
+            );
+        });
+    }
+
+    it('required property should deactivate component if validation fails', function () {
+        class TestComponent extends Component {
+            static TypeName = 'test-component';
+            static Properties = {
+                notRequired: Property.object(),
+                obj: Property.object({required: true}),
+            };
+        }
+        class TestDecorator extends Component {
+            static TypeName = 'test-decorator';
+
+            @property.object()
+            notRequired: Object3D = null!;
+
+            @property.object({required: true})
+            obj: Object3D = null!;
+        }
+        WL.registerComponent(TestComponent, TestDecorator);
+
+        const obj = WL.scene.addObject();
+        for (const CompClass of [TestComponent, TestDecorator]) {
+            const failed = obj.addComponent(CompClass, {active: true})!;
+            expect(failed.active).to.be.false;
+
+            const success = obj.addComponent(CompClass, {active: true, obj})!;
+            expect(success.active).to.be.true;
+        }
+    });
+
+    it('property decorator should not modify parent constructor', function () {
+        class ParentComponent extends Component {
+            static TypeName = 'parent';
+            @property.string('parent')
+            parentProp: string = '';
+        }
+        class _ extends ParentComponent {
+            static TypeName = 'child';
+            @property.string('child')
+            childProp: string = '';
+        }
+        expect(Object.keys(ParentComponent.Properties)).to.have.lengthOf(1);
+        expect(ParentComponent.Properties.childProp).to.be.undefined;
+    });
+
+    describe('Merge Properties', function () {
+        class GrandParent extends Component {
+            static TypeName = 'grand-parent';
+
+            @property.string('grand-parent')
+            grandParentProp: string = '';
+        }
+        class Parent extends GrandParent {
+            static TypeName = 'parent';
+
+            @property.string('parent')
+            parentProp: string = '';
+        }
+
+        it('inheritProperties() direct parenting', function () {
+            class Child extends Parent {
+                static TypeName = 'child';
+
+                @property.string('child')
+                childProp: string = '';
+            }
+            inheritProperties(Child);
+
+            expect(Object.keys(Child.Properties)).to.have.lengthOf(3);
+            expect(Child.Properties.grandParentProp.default).to.equal('grand-parent');
+            expect(Child.Properties.parentProp.default).to.equal('parent');
+            expect(Child.Properties.childProp.default).to.equal('child');
+        });
+
+        it('inheritProperties() override', function () {
+            class Child extends Parent {
+                static TypeName = 'child';
+
+                @property.string('42')
+                grandParentProp: string = '';
+
+                @property.string('43')
+                parentProp: string = '';
+            }
+            inheritProperties(Child);
+            expect(Object.keys(Child.Properties)).to.have.lengthOf(2);
+            expect(Child.Properties.grandParentProp.default).to.equal('42');
+            expect(Child.Properties.parentProp.default).to.equal('43');
+        });
+
+        it('inheritProperties() stops at first InheritProperties = false encountered', function () {
+            class ParentStop extends GrandParent {
+                static TypeName = 'parent-stop';
+                static InheritProperties = false;
+
+                @property.string('parent')
+                parentProp: string = '';
+            }
+            class Child extends ParentStop {
+                static TypeName = 'child';
+            }
+
+            inheritProperties(Child);
+            expect(Object.keys(Child.Properties)).to.deep.equal(['parentProp']);
+        });
+
+        it('registerComponent() with InheritProperties = true', function () {
+            class Child extends Parent {
+                static TypeName = 'child';
+                static InheritProperties = true;
+
+                @property.string('child')
+                childProp: string = '';
+            }
+            WL.registerComponent(Child);
+            expect(Object.keys(Child.Properties)).to.have.lengthOf(3);
+            expect(Child.Properties.childProp.default).to.equal('child');
+            expect(Child.Properties.parentProp.default).to.equal('parent');
+            expect(Child.Properties.grandParentProp.default).to.equal('grand-parent');
+
+            WL.registerComponent(Parent);
+            expect(Object.keys(Parent.Properties)).to.have.lengthOf(2);
+            expect(Parent.Properties.parentProp.default).to.equal('parent');
+            expect(Parent.Properties.grandParentProp.default).to.equal('grand-parent');
+        });
+
+        it('Component.InheritProperties = false', function () {
+            class Parent extends Component {
+                static TypeName = 'parent';
+                @property.string('parent')
+                parentProp: string = '';
+            }
+            class Child extends Parent {
+                static TypeName = 'child';
+                static InheritProperties = false;
+                @property.string('child')
+                childProp: string = '';
+            }
+            WL.registerComponent(Child);
+            expect(Object.keys(Child.Properties)).to.have.lengthOf(1);
+            expect(Child.Properties.parentProp).to.be.undefined;
+        });
+    });
+
     describe('Component Instantiation', function () {
         it('defaults when constructor define properties (#1341)', function () {
             class TestComponent extends Component {

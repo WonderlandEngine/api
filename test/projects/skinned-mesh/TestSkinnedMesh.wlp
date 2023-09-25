@@ -12,6 +12,23 @@
                         "material": "38"
                     }
                 }
+            ],
+            "parent": "60",
+            "translation": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "rotation": [
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "scaling": [
+                1.0,
+                1.0,
+                1.0
             ]
         },
         "35": {
@@ -19,7 +36,24 @@
                 "name": "object_1",
                 "file": "assets\\SimpleSkin.glb"
             },
-            "skin": "33"
+            "skin": "33",
+            "parent": "60",
+            "translation": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "rotation": [
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "scaling": [
+                1.0,
+                1.0,
+                1.0
+            ]
         },
         "36": {
             "link": {
@@ -42,6 +76,37 @@
                 {
                     "type": "view"
                 }
+            ]
+        },
+        "57": {
+            "name": "Dummy",
+            "components": [
+                {
+                    "type": "mesh",
+                    "mesh": {
+                        "material": "58"
+                    }
+                }
+            ]
+        },
+        "60": {
+            "name": "Skinned",
+            "parent": null,
+            "translation": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "rotation": [
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "scaling": [
+                1.0,
+                1.0,
+                1.0
             ]
         }
     },
@@ -106,8 +171,50 @@
                     1.0,
                     0.9867882,
                     1.0
+                ],
+                "emissiveColor": [
+                    0.0179372,
+                    1.0,
+                    0.9867882,
+                    1.0
                 ]
             }
+        },
+        "58": {
+            "name": "textured",
+            "Phong": {
+                "ambientColor": [
+                    0.0179372,
+                    1.0,
+                    0.9867882,
+                    1.0
+                ],
+                "emissiveColor": [
+                    0.0179372,
+                    1.0,
+                    0.9867882,
+                    1.0
+                ]
+            },
+            "pipeline": "15"
+        },
+        "59": {
+            "name": "sky",
+            "Phong": {
+                "ambientColor": [
+                    0.0179372,
+                    1.0,
+                    0.9867882,
+                    1.0
+                ],
+                "emissiveColor": [
+                    0.0179372,
+                    1.0,
+                    0.9867882,
+                    1.0
+                ]
+            },
+            "pipeline": "30"
         }
     },
     "shaders": {
@@ -200,6 +307,96 @@
                 "name": "Particle.frag",
                 "file": "default"
             }
+        },
+        "40": {
+            "link": {
+                "name": "lib\\Color.glsl",
+                "file": "default"
+            }
+        },
+        "41": {
+            "link": {
+                "name": "lib\\Compatibility.frag",
+                "file": "default"
+            }
+        },
+        "42": {
+            "link": {
+                "name": "lib\\CoordinateSystems.glsl",
+                "file": "default"
+            }
+        },
+        "43": {
+            "link": {
+                "name": "lib\\GI.frag",
+                "file": "default"
+            }
+        },
+        "44": {
+            "link": {
+                "name": "lib\\Inputs.frag",
+                "file": "default"
+            }
+        },
+        "45": {
+            "link": {
+                "name": "lib\\Lights.frag",
+                "file": "default"
+            }
+        },
+        "46": {
+            "link": {
+                "name": "lib\\Materials.frag",
+                "file": "default"
+            }
+        },
+        "47": {
+            "link": {
+                "name": "lib\\Math.glsl",
+                "file": "default"
+            }
+        },
+        "48": {
+            "link": {
+                "name": "lib\\Packing.frag",
+                "file": "default"
+            }
+        },
+        "49": {
+            "link": {
+                "name": "lib\\Quaternion.glsl",
+                "file": "default"
+            }
+        },
+        "50": {
+            "link": {
+                "name": "lib\\Slug.frag",
+                "file": "default"
+            }
+        },
+        "51": {
+            "link": {
+                "name": "lib\\Slug.vert",
+                "file": "default"
+            }
+        },
+        "52": {
+            "link": {
+                "name": "lib\\Surface.frag",
+                "file": "default"
+            }
+        },
+        "53": {
+            "link": {
+                "name": "lib\\Textures.frag",
+                "file": "default"
+            }
+        },
+        "55": {
+            "link": {
+                "name": "lib\\Uniforms.glsl",
+                "file": "default"
+            }
         }
     },
     "animations": {
@@ -257,12 +454,19 @@
             "link": {
                 "name": "Phong Opaque",
                 "file": "default"
+            },
+            "features": {
+                "DEPRECATED_LIGHT_ATTENUATION": true,
+                "WITH_EMISSIVE": true
             }
         },
         "15": {
             "link": {
                 "name": "Phong Opaque Textured",
                 "file": "default"
+            },
+            "features": {
+                "DEPRECATED_LIGHT_ATTENUATION": true
             }
         },
         "17": {
@@ -287,18 +491,27 @@
             "link": {
                 "name": "Phong Normalmapped",
                 "file": "default"
+            },
+            "features": {
+                "DEPRECATED_LIGHT_ATTENUATION": true
             }
         },
         "27": {
             "link": {
                 "name": "Phong Lightmapped",
                 "file": "default"
+            },
+            "features": {
+                "DEPRECATED_LIGHT_ATTENUATION": true
             }
         },
         "28": {
             "link": {
                 "name": "Foliage",
                 "file": "default"
+            },
+            "features": {
+                "DEPRECATED_LIGHT_ATTENUATION": true
             }
         },
         "29": {
@@ -311,6 +524,16 @@
             "link": {
                 "name": "Sky",
                 "file": "default"
+            },
+            "features": {
+                "GRADIENT": true,
+                "TEXTURED": false
+            }
+        },
+        "54": {
+            "link": {
+                "name": "TileFeedback",
+                "file": "default"
             }
         }
     },
@@ -319,9 +542,9 @@
         "project": {
             "name": "TestSkinnedMesh",
             "version": [
-                0,
-                9,
-                5
+                1,
+                1,
+                0
             ]
         },
         "vr": {
@@ -329,10 +552,22 @@
         },
         "scripting": {
             "bundlingType": "none",
-            "autoManageEntryPoint": false
+            "libraryPaths": [
+                "/js/lib/"
+            ]
+        },
+        "rendering": {
+            "sky": {
+                "enabled": true,
+                "material": "59"
+            }
         }
     },
-    "files": [
-        "assets/SimpleSkin.glb"
-    ]
+    "files": {
+        "56": {
+            "fileName": "assets/SimpleSkin.glb",
+            "importerName": ""
+        }
+    },
+    "fonts": {}
 }

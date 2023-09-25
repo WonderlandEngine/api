@@ -13,7 +13,7 @@ export type Version = {major: number, minor: number, patch: number, rc: number};
 /** Version of this API. */
 export const APIVersion: Version = {
     major: 1,
-    minor: 0,
-    patch: 1,
+    minor: 1,
+    patch: 2,
     rc: 0
 };
