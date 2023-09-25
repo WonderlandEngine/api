@@ -65,6 +65,8 @@ describe('Engine', function () {
     });
 
     it('multiple instances', async function () {
+        this.timeout(20000);
+
         class TestComponent extends Component {
             static TypeName = 'test-component';
         }
@@ -85,6 +87,9 @@ describe('Engine', function () {
 
     describe('Runtime <> API compatibility', function () {
         /* Helper function to load a runtime. */
+
+        this.timeout(10000);
+
         function load() {
             return loadRuntime('deploy/WonderlandRuntime', {
                 simd: false,

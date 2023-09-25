@@ -3,6 +3,7 @@ import {WonderlandEngine} from './engine.js';
 import {WASM} from './wasm.js';
 
 import {APIVersion, Version} from './version.js';
+import {getBaseUrl} from './utils/fetch.js';
 
 export * from './utils/event.js';
 export * from './wonderland.js';
@@ -12,6 +13,9 @@ export * from './property.js';
 export * from './texture-manager.js';
 export * from './version.js';
 export * from './wasm.js';
+
+/** Relative default path for the loading screen. */
+const LOADING_SCREEN_PATH = 'WonderlandRuntime-LoadingScreen.bin';
 
 function loadScript(scriptURL: string): Promise<void> {
     return new Promise((res: () => void, rej) => {
@@ -189,6 +193,8 @@ export async function loadRuntime(
 ): Promise<WonderlandEngine> {
     const xrPromise = checkXRSupport();
 
+    const baseURL = getBaseUrl(runtime);
+
     const {simdSupported, threadsSupported} = await detectFeatures();
     const {
         simd = simdSupported,
@@ -196,7 +202,7 @@ export async function loadRuntime(
         physx = false,
         loader = false,
         xrFramebufferScaleFactor = 1.0,
-        loadingScreen = 'WonderlandRuntime-LoadingScreen.bin',
+        loadingScreen = baseURL ? `${baseURL}/${LOADING_SCREEN_PATH}` : LOADING_SCREEN_PATH,
         canvas = 'canvas',
     } = options;
 
@@ -225,7 +231,7 @@ export async function loadRuntime(
 
     const [wasmData, loadingScreenData] = await Promise.all([
         download(`${filename}.wasm`, 'Failed to fetch runtime .wasm file'),
-        download(loadingScreen, 'Failed to fetch loading screen file').catch((_) => null),
+        download(loadingScreen, 'Failed to fetch loading screen file'),
     ]);
 
     const glCanvas = document.getElementById(canvas) as HTMLCanvasElement;
@@ -256,11 +262,10 @@ export async function loadRuntime(
         window.instantiateWonderlandRuntime = undefined;
     }
     await runtimes[runtimeGlobalId](wasm);
+    engine._init();
 
     /* Throws if the runtime isn't compatible with the API. */
     checkRuntimeCompatibility(engine.runtimeVersion);
-
-    engine._init();
 
     const xr = await xrPromise;
     (engine.arSupported as boolean) = xr.ar;

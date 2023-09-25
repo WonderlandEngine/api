@@ -1,7 +1,7 @@
 import {expect, use} from '@esm-bundle/chai';
 import {chaiAlmost} from './chai/almost.js';
 
-import {init, reset, WL} from './setup.js';
+import {init, projectURL, reset, WL} from './setup.js';
 import {
     Component,
     Type,
@@ -25,14 +25,15 @@ import {
     ComponentConstructor,
     WonderlandEngine,
     Object3D,
+    Property,
 } from '..';
+import {property} from '../dist/decorators.js';
 
 use(chaiAlmost());
 
 before(init);
 /* We only reset after the MeshComponents scope such that the 'Phong Opaque'
  * pipeline from the loading screen is available to create materials from */
-
 describe('MeshComponent', function () {
     it('properties', function () {
         expect(MeshComponent.Properties).to.have.keys(['material', 'mesh', 'skin']);
@@ -63,20 +64,57 @@ describe('MeshComponent', function () {
         expect(comp.skin).to.equal(null);
     });
 
-    it('cloning', function () {
+    function assertClone(cloner: (comp: MeshComponent) => MeshComponent) {
         const obj = WL.scene.addObject();
         const comp = obj.addComponent('mesh')!;
         comp.material = new Material(WL, 1);
         comp.mesh = new Mesh(WL, 2);
-        comp.skin = new Skin(WL, 3);
 
-        const clone = obj.addComponent('mesh', comp)!;
+        const clone = cloner(comp);
         expect(clone).to.be.instanceof(MeshComponent);
         expect(clone._manager).to.equal(comp._manager);
         expect(clone._id).to.not.equal(comp._id);
         expect(clone.material!.equals(comp.material)).to.be.true;
         expect(clone.mesh!.equals(comp.mesh)).to.be.true;
+    }
+
+    it('clone via object.clone()', function () {
+        assertClone((comp) => comp.object.clone().getComponent('mesh')!);
+    });
+
+    it('clone via addComponent()', function () {
+        assertClone((comp) => comp.object.addComponent('mesh', comp)!);
+    });
+
+    it('clone skin via addComponent()', function () {
+        const obj = WL.scene.addObject();
+        const comp = obj.addComponent('mesh')!;
+        comp.skin = new Skin(WL, 3);
+
+        const clone = obj.addComponent('mesh', comp)!;
         expect(clone.skin!.equals(comp.skin)).to.be.true;
+    });
+
+    it('clone skin via object.clone()', async function () {
+        /* This test ensures that skins are properly duplicated and re-targeted.
+         * When cloning an object containing a skin in its hierarchy, all meshes insides
+         * the hierarchy must point to the newly copied skin. */
+        await WL.scene.load(projectURL('TestSkinnedMesh.bin'));
+
+        const root = new Object3D(WL, 0);
+        const skinnedObject = root.findByName('Skinned')[0];
+        expect(skinnedObject).to.not.be.undefined;
+        const mesh = skinnedObject.findByName('object_0')[0].getComponent('mesh')!;
+        expect(mesh).to.not.be.null;
+        expect(mesh.skin?._index).to.not.be.NaN;
+
+        const clone = skinnedObject.clone();
+        const meshObjectClone = clone.findByName('object_0')[0];
+        expect(meshObjectClone).to.not.be.undefined;
+        const meshClone = meshObjectClone.getComponent('mesh')!;
+        expect(meshClone).to.not.be.null;
+        expect(meshClone.skin?._index).to.not.be.NaN;
+        expect(meshClone.skin!._index).to.equal(mesh.skin!._index + 1);
     });
 });
 
@@ -233,10 +271,29 @@ describe('Components', function () {
         expect(obj.getComponents('light').length).to.equal(2);
 
         light.destroy();
-        expect(light._id).to.equal(-1);
-        expect(light._manager).to.equal(-1);
         expect(obj.getComponents('light').length).to.equal(1);
         expect(obj.getComponents('light')[0].equals(light2)).to.be.true;
+        expect(light.isDestroyed).to.be.true;
+    });
+
+    it('destroy / re-create updates the object reference (#1354)', function () {
+        /* Case 1: Destroy component */
+        const objA = WL.scene.addObject();
+        const objB = WL.scene.addObject();
+        {
+            const comp = objA.addComponent('mesh')!;
+            expect(comp._object?.equals(objA));
+            comp.destroy();
+        }
+        {
+            const comp = objB.addComponent('mesh')!;
+            expect(comp._object?.equals(objB));
+        }
+
+        /* Case 2: Destroy object */
+        objB.destroy();
+        const comp = objA.addComponent('mesh')!;
+        expect(comp._object?.equals(objA));
     });
 
     it('getComponent with string', function () {
@@ -361,6 +418,41 @@ describe('Components', function () {
         ]);
     });
 
+    /* https://github.com/WonderlandEngine/api/issues/9 */
+    it('addComponent() with reset() that throws', function () {
+        class DummyComponent extends Component {
+            static TypeName = 'my-first-dummy-class-component';
+            static Properties = {
+                str: Property.string('Hello'),
+            };
+            str: string = 'error';
+
+            reset(): this {
+                super.reset();
+                throw new Error('You lose!');
+            }
+        }
+        WL.registerComponent(DummyComponent);
+        const obj = WL.scene.addObject();
+        const comp = obj.addComponent(DummyComponent)!;
+        expect(comp.str).to.equal('Hello');
+    });
+
+    it('object cloned with active and inactive components', function () {
+        const parent = WL.scene.addObject();
+        parent.addComponent('collision', {active: false});
+        parent.addComponent('mesh');
+        const child = WL.scene.addObject(parent);
+        child.addComponent('text', {active: false});
+        child.addComponent('light');
+
+        const cloned = parent.clone();
+        expect(cloned.getComponent('collision')?.active).to.be.false;
+        expect(cloned.getComponent('mesh')?.active).to.be.true;
+        expect(cloned.children[0].getComponent('text')?.active).to.be.false;
+        expect(cloned.children[0].getComponent('light')?.active).to.be.true;
+    });
+
     describe('lifecycle', function () {
         class TestLifecycle extends Component {
             static TypeName = 'test-lifecycle';
@@ -392,32 +484,6 @@ describe('Components', function () {
         }
 
         beforeEach(() => WL.registerComponent(TestLifecycle));
-
-        /* @deprecated Remove at 1.1 */
-        it('dependencies-deprecated', function () {
-            class DependencyA extends Component {
-                static TypeName = 'dependency-a';
-            }
-            class DependencyB extends Component {
-                static TypeName = 'dependency-b';
-            }
-            class DependencyC extends Component {
-                static TypeName = 'dependency-c';
-                static Dependencies = [DependencyB];
-            }
-            class MyComponent extends Component {
-                static TypeName = 'my-component';
-                static Dependencies = [DependencyA, DependencyC];
-            }
-
-            expect(WL.isRegistered(DependencyA)).to.be.false;
-            expect(WL.isRegistered(DependencyB)).to.be.false;
-            expect(WL.isRegistered(DependencyC)).to.be.false;
-            WL.registerComponent(MyComponent);
-            expect(WL.isRegistered(DependencyA)).to.be.true;
-            expect(WL.isRegistered(DependencyB)).to.be.true;
-            expect(WL.isRegistered(DependencyC)).to.be.true;
-        });
 
         it('onRegister', function () {
             class DependencyA extends Component {
@@ -531,68 +597,6 @@ describe('Components', function () {
         });
     });
 
-    describe('add Components', function () {
-        it('type', function () {
-            /* Registers a simple component and ensure its methods are called */
-            class TestComponent extends Component {
-                static TypeName = 'custom';
-                static Properties = {
-                    customParam: {type: Type.Int},
-                };
-                customParam = Number.NEGATIVE_INFINITY;
-                initCalled = false;
-                paramDefined = false;
-                unknownParamDefined: boolean = undefined!;
-                init() {
-                    this.initCalled = true;
-                    this.paramDefined = this.customParam !== undefined;
-                    this.unknownParamDefined = (this as any).unknownParam !== undefined;
-                }
-            }
-            WL.registerComponent(TestComponent);
-            const obj = WL.scene.addObject();
-            const light = obj.addComponent('light')!;
-            expect(light._id).to.equal(0);
-            expect(light).to.be.an.instanceof(LightComponent);
-
-            const view = obj.addComponent('view')!;
-            expect(view._id).to.equal(0);
-            expect(view).to.be.an.instanceof(ViewComponent);
-
-            const text = obj.addComponent('text')!;
-            expect(text._id).to.equal(0);
-            expect(text).to.be.an.instanceof(TextComponent);
-
-            const mesh = obj.addComponent('mesh')!;
-            expect(mesh._id).to.equal(0);
-            expect(mesh).to.be.an.instanceof(MeshComponent);
-
-            const input = obj.addComponent('input')!;
-            expect(input._id).to.equal(0);
-            expect(input).to.be.an.instanceof(InputComponent);
-
-            const collision = obj.addComponent('collision')!;
-            expect(collision._id).to.equal(0);
-            expect(collision).to.be.an.instanceof(CollisionComponent);
-
-            const custom = obj.addComponent('custom', {
-                customParam: 42,
-                unknownParam: 12,
-            })! as TestComponent;
-            expect(custom).to.exist;
-            expect(custom).to.be.an.instanceof(Component);
-            expect(custom.initCalled).to.be.true;
-            expect(custom.paramDefined).to.be.true;
-            /* Only properties listed in Properties are cloned */
-            expect(custom.unknownParamDefined).to.be.false;
-            try {
-                obj.addComponent('this-type-does-not-exist');
-            } catch (e) {
-                expect(e).to.be.instanceof(TypeError);
-            }
-        });
-    });
-
     describe('CollisionComponent', function () {
         it('properties', function () {
             expect(CollisionComponent.Properties).to.have.keys([
@@ -613,6 +617,21 @@ describe('Components', function () {
             expect(compA.collider).to.equal(Collider.Sphere);
             expect(compA.extents[0]).to.equal(1);
             expect(compA.group).to.equal(1);
+
+            compA.radius = 2;
+            expect(compA.radius).to.equal(2);
+
+            compA.collider = Collider.AxisAlignedBox;
+            compA.radius = 2;
+            const aproxlen = 2.3094;
+            expect(compA.extents).to.deep.almost([aproxlen, aproxlen, aproxlen]);
+
+            compA.collider = Collider.Box;
+            compA.extents = [2.0, 2.0, 2.0];
+            expect(compA.radius).to.almost(1.732);
+
+            compA.radius = 2;
+            expect(compA.radius).to.almost(2, 0.00001);
         });
 
         it('overlaps query', function () {
@@ -649,20 +668,37 @@ describe('Components', function () {
             expect(c.group).to.equal(2);
         });
 
-        it('cloning', function () {
+        function assertClone(cloner: (comp: CollisionComponent) => CollisionComponent) {
             const obj = WL.scene.addObject();
             const comp = obj.addComponent('collision')!;
             comp.extents = [1, 3, 9];
             comp.collider = Collider.Sphere;
             comp.group = 1;
 
-            const clone = obj.addComponent('collision', comp)!;
+            const clone = cloner(comp);
             expect(clone).to.be.instanceof(CollisionComponent);
             expect(clone._manager).to.equal(comp._manager);
             expect(clone._id).to.not.equal(comp._id);
             expect(clone.extents).to.deep.equal(comp.extents);
             expect(clone.collider).to.equal(comp.collider);
             expect(clone.group).to.equal(comp.group);
+        }
+
+        it('clone via addComponent()', function () {
+            assertClone((comp) => comp.object.addComponent('collision', comp)!);
+        });
+
+        it('.destroy() with prototype destruction', function () {
+            WL.erasePrototypeOnDestroy = true;
+            const comp = WL.scene.addObject().addComponent('collision')!;
+            comp.destroy();
+            expect(() => comp.active).to.throw(
+                `Canno't read 'active' of destroyed component`
+            );
+        });
+
+        it('clone via object.clone()', function () {
+            assertClone((comp) => comp.object.clone().getComponent('collision')!);
         });
     });
 
@@ -723,7 +759,7 @@ describe('Components', function () {
             expect(comp.text).to.equal('[object Object]');
         });
 
-        it('cloning', function () {
+        function assertClone(cloner: (comp: TextComponent) => TextComponent) {
             const obj = WL.scene.addObject();
             const comp = obj.addComponent('text')!;
             comp.text = 'Initial Text';
@@ -735,7 +771,7 @@ describe('Components', function () {
             comp.lineSpacing = 2.0;
             comp.effect = TextEffect.Outline;
 
-            const clone = obj.addComponent('text', comp)!;
+            const clone = cloner(comp);
             expect(clone).to.be.instanceof(TextComponent);
             expect(clone._manager).to.equal(comp._manager);
             expect(clone._id).to.not.equal(comp._id);
@@ -746,6 +782,23 @@ describe('Components', function () {
             expect(clone.characterSpacing).to.equal(comp.characterSpacing);
             expect(clone.lineSpacing).to.equal(comp.lineSpacing);
             expect(clone.effect).to.equal(comp.effect);
+        }
+
+        it('clone via addComponent()', function () {
+            assertClone((comp) => comp.object.addComponent('text', comp)!);
+        });
+
+        it('.destroy() with prototype destruction', function () {
+            WL.erasePrototypeOnDestroy = true;
+            const comp = WL.scene.addObject().addComponent('text')!;
+            comp.destroy();
+            expect(() => comp.active).to.throw(
+                `Canno't read 'active' of destroyed component`
+            );
+        });
+
+        it('clone via object.clone()', function () {
+            assertClone((comp) => comp.object.clone().getComponent('text')!);
         });
     });
 
@@ -790,6 +843,15 @@ describe('Components', function () {
             expect(clone.far).to.equal(comp.far);
             expect(clone.fov).to.equal(comp.fov);
         });
+
+        it('.destroy() with prototype destruction', function () {
+            WL.erasePrototypeOnDestroy = true;
+            const comp = WL.scene.addObject().addComponent('view')!;
+            comp.destroy();
+            expect(() => comp.active).to.throw(
+                `Canno't read 'active' of destroyed component`
+            );
+        });
     });
 
     describe('InputComponent', function () {
@@ -810,16 +872,33 @@ describe('Components', function () {
             expect(comp.handedness).to.equal('left');
         });
 
-        it('cloning', function () {
+        function assertClone(cloner: (comp: InputComponent) => InputComponent) {
             const obj = WL.scene.addObject();
             const comp = obj.addComponent('input')!;
             comp.inputType = InputType.ControllerRight;
 
-            const clone = obj.addComponent('input', comp)!;
+            const clone = cloner(comp);
             expect(clone).to.be.instanceof(InputComponent);
             expect(clone._manager).to.equal(comp._manager);
             expect(clone._id).to.not.equal(comp._id);
             expect(clone.inputType).to.equal(comp.inputType);
+        }
+
+        it('clone via addComponent()', function () {
+            assertClone((comp) => comp.object.addComponent('input', comp)!);
+        });
+
+        it('clone via object.clone()', function () {
+            assertClone((comp) => comp.object.clone().getComponent('input')!);
+        });
+
+        it('.destroy() with prototype destruction', function () {
+            WL.erasePrototypeOnDestroy = true;
+            const comp = WL.scene.addObject().addComponent('input')!;
+            comp.destroy();
+            expect(() => comp.active).to.throw(
+                `Canno't read 'active' of destroyed component`
+            );
         });
     });
 
@@ -893,7 +972,7 @@ describe('Components', function () {
             expect(comp.getColor()).to.eql(out);
         });
 
-        it('cloning', function () {
+        function assertClone(cloner: (comp: LightComponent) => LightComponent) {
             const obj = WL.scene.addObject();
             const comp = obj.addComponent('light')!;
             comp.lightType = LightType.Sun;
@@ -908,7 +987,7 @@ describe('Components', function () {
             comp.shadowTexelSize = 1.5;
             comp.cascadeCount = 5;
 
-            const clone = obj.addComponent('light', comp)!;
+            const clone = cloner(comp);
             expect(clone).to.be.instanceof(LightComponent);
             expect(clone._manager).to.equal(comp._manager);
             expect(clone._id).to.not.equal(comp._id);
@@ -923,6 +1002,23 @@ describe('Components', function () {
             expect(clone.shadowTexelSize).to.equal(comp.shadowTexelSize);
             expect(clone.shadowTexelSize).to.equal(comp.shadowTexelSize);
             expect(clone.cascadeCount).to.equal(comp.cascadeCount);
+        }
+
+        it('clone via addComponent()', function () {
+            assertClone((comp) => comp.object.addComponent('light', comp)!);
+        });
+
+        it('.destroy() with prototype destruction', function () {
+            WL.erasePrototypeOnDestroy = true;
+            const comp = WL.scene.addObject().addComponent('light')!;
+            comp.destroy();
+            expect(() => comp.active).to.throw(
+                `Canno't read 'active' of destroyed component`
+            );
+        });
+
+        it('clone via object.clone()', function () {
+            assertClone((comp) => comp.object.clone().getComponent('light')!);
         });
     });
 
@@ -966,19 +1062,36 @@ describe('Components', function () {
             expect(comp.state).to.equal(AnimationState.Stopped);
         });
 
-        it('cloning', function () {
+        function assertClone(cloner: (comp: AnimationComponent) => AnimationComponent) {
             const obj = WL.scene.addObject();
             const comp = obj.addComponent('animation')!;
             // TODO: animation
             comp.playCount = 4;
             comp.speed = 2.25;
 
-            const clone = obj.addComponent('animation', comp)!;
+            const clone = cloner(comp);
             expect(clone).to.be.instanceof(AnimationComponent);
             expect(clone._manager).to.equal(comp._manager);
             expect(clone._id).to.not.equal(comp._id);
             expect(clone.playCount).to.equal(comp.playCount);
             expect(clone.speed).to.equal(comp.speed);
+        }
+
+        it('clone via addComponent()', function () {
+            assertClone((comp) => comp.object.addComponent('animation', comp)!);
+        });
+
+        it('.destroy() with prototype destruction', function () {
+            WL.erasePrototypeOnDestroy = true;
+            const comp = WL.scene.addObject().addComponent('animation')!;
+            comp.destroy();
+            expect(() => comp.active).to.throw(
+                `Canno't read 'active' of destroyed component`
+            );
+        });
+
+        it('clone via object.clone()', function () {
+            assertClone((comp) => comp.object.clone().getComponent('animation')!);
         });
     });
 
@@ -1174,7 +1287,9 @@ describe('Components', function () {
             const comp = obj.addComponent(CustomComponent)!;
             comp.active = false;
 
-            const cloneDefault = obj.addComponent(CustomComponent, {aProperty: 2.0})!;
+            const cloneDefault = obj.addComponent(CustomComponent, {
+                aProperty: 2.0,
+            })!;
             expect(cloneDefault.active).to.equal(true);
             expect(cloneDefault.aProperty).to.equal(2.0);
 
@@ -1184,6 +1299,64 @@ describe('Components', function () {
             })!;
             expect(cloneExplicit.active).to.equal(false);
             expect(cloneDefault.aProperty).to.equal(2.0);
+        });
+
+        it('.destroy() with prototype destruction', function () {
+            WL.erasePrototypeOnDestroy = true;
+
+            let destroyed = false;
+
+            class TestComponent extends Component {
+                static TypeName = 'test';
+                onDestroy(): void {
+                    /* Allows to check that `onDestroy` is called first */
+                    destroyed = true;
+                }
+            }
+            WL.registerComponent(TestComponent);
+
+            const obj = WL.scene.addObject();
+            const a = obj.addComponent(TestComponent)!;
+            const b = obj.addComponent(TestComponent)!;
+
+            expect(destroyed).to.be.false;
+            a.destroy();
+            expect(destroyed).to.be.true;
+
+            expect(() => a.equals(a)).to.throw(
+                `Canno't read 'equals' of destroyed component`
+            );
+            expect(() => a.active).to.throw(`Canno't read 'active' of destroyed component`);
+            expect(() => (a.active = false)).to.throw(
+                `Canno't write 'active' of destroyed component`
+            );
+
+            /* Ensure destroying `a` didn't destroy `b` as well */
+            expect(b.active).to.be.true;
+        });
+
+        it('cloning via object.clone()', function () {
+            class CustomComponent extends Component {
+                static TypeName = 'custom';
+
+                @property.float()
+                aFloat: number = 0.0;
+
+                @property.object()
+                anObject: Object3D | null = null;
+            }
+            WL.registerComponent(CustomComponent);
+
+            const target = WL.scene.addObject();
+            const obj = WL.scene.addObject();
+            const comp = obj.addComponent(CustomComponent)!;
+            comp.aFloat = 42;
+            comp.anObject = target;
+
+            const clone = obj.clone().getComponent(CustomComponent)!;
+            expect(clone).to.not.be.null;
+            expect(clone.aFloat).to.almost(42);
+            expect(clone.anObject).to.equal(target);
         });
     });
 });

@@ -1,5 +1,5 @@
-import {symlinkSync, existsSync, unlinkSync, lstatSync, rmdirSync} from 'fs';
-import { fileURLToPath } from 'url';
+import {symlinkSync, existsSync, unlinkSync, lstatSync} from 'fs';
+import {fileURLToPath} from 'url';
 import {resolve} from 'path';
 
 import {chromeLauncher} from '@web/test-runner';
@@ -17,14 +17,28 @@ if (existsSync('deploy') && lstatSync('deploy').isSymbolicLink()) {
 console.log(`[TestRunner]: Creating symlink 'deploy' to '${deployRoot}'`);
 symlinkSync(deployRoot, 'deploy', 'junction');
 
-export default {
-    concurrency: 10,
+/* When running in docker on Ubuntu, headless set to `true` always forces the
+ * browser to use the SwiftShader backend which we don't want.
+ *
+ * The 'new' mode also create animation loop issues, we do not use it. */
+const headless = process.argv.indexOf('--no-headless') === -1;
+
+/* Using a concurrency > 1 with `headless: false` will create focusing issues.
+ * Some tests would be running in an unfocused tab, causing the
+ * animation loop to be stuck (an so our job system). */
+const concurrency = !headless ? 1 : null;
+
+const Config = {
     nodeResolve: true,
-    files: ['test/**/*.test.js', 'test/**/*.test.ts'],
+    files: ['test/**/*.test.ts'],
 
     browsers: [
         chromeLauncher({
-            launchOptions: {args: ['--no-sandbox', '--use-gl=angle']},
+            launchOptions: {
+                headless,
+                devtools: false,
+                args: ['--no-sandbox', '--use-gl=angle', '--ignore-gpu-blocklist']
+            },
         }),
     ],
 
@@ -33,6 +47,7 @@ export default {
         config: {
             ui: 'bdd',
             timeout: '15000',
+            allowUncaught: false,
         },
     },
 
@@ -43,3 +58,9 @@ export default {
         })
     ],
 };
+
+/* The test runner defaults to hardware threads divided by two.
+ * We can't simply assign a random value. */
+if (concurrency !== null) Config.concurrency = concurrency;
+
+export default Config;

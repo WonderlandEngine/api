@@ -2,13 +2,14 @@ import {expect} from '@esm-bundle/chai';
 
 import {Texture} from '..';
 import {init, reset, WL} from './setup.js';
+import {dummyImage} from './utils';
 
 before(init);
 beforeEach(reset);
 
 describe('Texture', function () {
-    it('create from Image', function () {
-        const testImage = new Image(20, 30);
+    it('create from Image', async function () {
+        const testImage = await dummyImage(20, 30);
         const tex = new Texture(WL, testImage);
         expect(tex.width).to.equal(20);
         expect(tex.height).to.equal(30);
@@ -21,8 +22,8 @@ describe('Texture', function () {
         expect(WL.textures.get(0)?.id).to.equal(texture.id);
     });
 
-    it('.equals()', function () {
-        const testImage = new Image(20, 30);
+    it('.equals()', async function () {
+        const testImage = await dummyImage(20, 30);
         const tex1 = new Texture(WL, testImage);
         const tex2 = new Texture(WL, testImage);
         const tex3 = new Texture(WL, tex1['_id']);
@@ -35,9 +36,14 @@ describe('Texture', function () {
         expect(tex3.equals(tex1)).to.be.true;
     });
 
-    it('.destroy()', function () {
-        const tex1 = new Texture(WL, new Image(2, 4));
-        const tex2 = new Texture(WL, new Image(6, 8));
+    it('.destroy()', async function () {
+        const images = await Promise.all([
+            dummyImage(2, 4),
+            dummyImage(6, 8),
+            dummyImage(10, 12),
+        ]);
+        const tex1 = new Texture(WL, images[0]);
+        const tex2 = new Texture(WL, images[1]);
         expect(tex1.id).to.equal(0);
         expect(tex2.id).to.equal(1);
 
@@ -47,9 +53,24 @@ describe('Texture', function () {
         expect(WL.textures.get(tex2.id)?.width).to.equal(6);
         expect(WL.textures.get(tex2.id)?.height).to.equal(8);
 
-        const tex3 = new Texture(WL, new Image(10, 12));
+        const tex3 = new Texture(WL, images[2]);
         expect(tex3.id).to.equal(0);
         expect(WL.textures.get(tex3.id)?.width).to.equal(10);
         expect(WL.textures.get(tex3.id)?.height).to.equal(12);
+    });
+
+    it('.destroy() with prototype destruction', async function () {
+        WL.erasePrototypeOnDestroy = true;
+
+        const image = await dummyImage(2, 2);
+        const a = new Texture(WL, image);
+        const b = new Texture(WL, image);
+
+        a.destroy();
+        expect(() => a.equals(b)).to.throw(`Canno't read 'equals' of destroyed texture`);
+        expect(() => a.valid).to.throw(`Canno't read 'valid' of destroyed texture`);
+
+        /* Ensure destroying `a` didn't destroy `b` as well */
+        expect(b.id).to.exist;
     });
 });

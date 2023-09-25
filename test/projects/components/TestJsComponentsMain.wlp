@@ -1,42 +1,34 @@
 {
     "objects": {
-        "32": {
-            "name": "Mesh",
+        "47": {
+            "name": "Test",
             "components": [
                 {
-                    "type": "mesh",
-                    "mesh": {
-                        "mesh": "p1",
-                        "material": "33"
+                    "type": "test-component",
+                    "test-component": {
+                        "param": 42
                     }
                 }
             ]
         },
-        "57": {
-            "name": "MeshCompressedTexture",
-            "translation": [
-                2.0,
-                0.0,
-                2.0
-            ],
-            "rotation": [
-                0.0,
-                0.0,
-                0.0,
-                1.0
-            ],
-            "scaling": [
-                1.0,
-                1.0,
-                1.0
-            ],
+        "48": {
+            "name": "Views"
+        },
+        "49": {
+            "name": "Left",
+            "parent": "48",
             "components": [
                 {
-                    "type": "mesh",
-                    "mesh": {
-                        "mesh": "p1",
-                        "material": "58"
-                    }
+                    "type": "view"
+                }
+            ]
+        },
+        "50": {
+            "name": "Right",
+            "parent": "48",
+            "components": [
+                {
+                    "type": "view"
                 }
             ]
         }
@@ -79,78 +71,14 @@
             }
         }
     },
-    "textures": {
-        "51": {
-            "link": {
-                "name": "image.png",
-                "file": "image.png"
-            }
-        },
-        "55": {
-            "link": {
-                "name": "4x4.png",
-                "file": "4x4.png"
-            }
-        }
-    },
-    "images": {
-        "50": {
-            "link": {
-                "name": "image.png",
-                "file": "image.png"
-            },
-            "compression": "none"
-        },
-        "54": {
-            "link": {
-                "name": "4x4.png",
-                "file": "4x4.png"
-            }
-        }
-    },
+    "textures": {},
+    "images": {},
     "materials": {
         "DefaultFontMaterial": {
             "link": {
                 "name": "DefaultFontMaterial",
                 "file": "default"
             }
-        },
-        "33": {
-            "name": "PhongMaterial",
-            "Phong": {
-                "emissiveColor": [
-                    0.2,
-                    0.2,
-                    0.2,
-                    1.0
-                ],
-                "ambientColor": [
-                    0.05,
-                    0.05,
-                    0.05,
-                    1.0
-                ]
-            }
-        },
-        "58": {
-            "name": "PhongTextureMaterial",
-            "Phong": {
-                "emissiveColor": [
-                    1.0,
-                    1.0,
-                    1.0,
-                    1.0
-                ],
-                "ambientColor": [
-                    0.05,
-                    0.05,
-                    0.05,
-                    1.0
-                ],
-                "diffuseTexture": "55",
-                "emissiveTexture": "55"
-            },
-            "pipeline": "15"
         }
     },
     "shaders": {
@@ -162,181 +90,175 @@
         },
         "2": {
             "link": {
-                "name": "Depth.frag",
-                "file": "default"
-            }
-        },
-        "4": {
-            "link": {
-                "name": "DistanceFieldVector.frag",
-                "file": "default"
-            }
-        },
-        "6": {
-            "link": {
-                "name": "Dynamic.vert",
-                "file": "default"
-            }
-        },
-        "7": {
-            "link": {
-                "name": "Flat.frag",
-                "file": "default"
-            }
-        },
-        "10": {
-            "link": {
-                "name": "FullScreenTriangle.vert",
-                "file": "default"
-            }
-        },
-        "11": {
-            "link": {
-                "name": "MeshVisualizer.frag",
-                "file": "default"
-            }
-        },
-        "13": {
-            "link": {
-                "name": "Phong.frag",
-                "file": "default"
-            }
-        },
-        "16": {
-            "link": {
-                "name": "Physical.frag",
-                "file": "default"
-            }
-        },
-        "19": {
-            "link": {
-                "name": "Skinning.vert",
-                "file": "default"
-            }
-        },
-        "20": {
-            "link": {
-                "name": "Sky.frag",
-                "file": "default"
-            }
-        },
-        "21": {
-            "link": {
-                "name": "Text.frag",
-                "file": "default"
-            }
-        },
-        "23": {
-            "link": {
-                "name": "Text.vert",
-                "file": "default"
-            }
-        },
-        "24": {
-            "link": {
-                "name": "TileFeedback.frag",
-                "file": "default"
-            }
-        },
-        "25": {
-            "link": {
-                "name": "Particle.frag",
-                "file": "default"
-            }
-        },
-        "34": {
-            "link": {
                 "name": "lib\\Color.glsl",
                 "file": "default"
             }
         },
-        "35": {
+        "3": {
             "link": {
                 "name": "lib\\Compatibility.frag",
                 "file": "default"
             }
         },
-        "36": {
+        "4": {
             "link": {
                 "name": "lib\\CoordinateSystems.glsl",
                 "file": "default"
             }
         },
-        "37": {
+        "5": {
+            "link": {
+                "name": "Depth.frag",
+                "file": "default"
+            }
+        },
+        "7": {
+            "link": {
+                "name": "DistanceFieldVector.frag",
+                "file": "default"
+            }
+        },
+        "9": {
+            "link": {
+                "name": "Dynamic.vert",
+                "file": "default"
+            }
+        },
+        "10": {
+            "link": {
+                "name": "Flat.frag",
+                "file": "default"
+            }
+        },
+        "13": {
+            "link": {
+                "name": "FullScreenTriangle.vert",
+                "file": "default"
+            }
+        },
+        "14": {
             "link": {
                 "name": "lib\\GI.frag",
                 "file": "default"
             }
         },
-        "38": {
+        "15": {
             "link": {
                 "name": "lib\\Inputs.frag",
                 "file": "default"
             }
         },
-        "39": {
+        "16": {
             "link": {
                 "name": "lib\\Lights.frag",
                 "file": "default"
             }
         },
-        "40": {
+        "17": {
             "link": {
                 "name": "lib\\Materials.frag",
                 "file": "default"
             }
         },
-        "41": {
+        "18": {
             "link": {
                 "name": "lib\\Math.glsl",
                 "file": "default"
             }
         },
-        "42": {
+        "19": {
+            "link": {
+                "name": "MeshVisualizer.frag",
+                "file": "default"
+            }
+        },
+        "21": {
             "link": {
                 "name": "lib\\Packing.frag",
                 "file": "default"
             }
         },
-        "43": {
+        "22": {
+            "link": {
+                "name": "Phong.frag",
+                "file": "default"
+            }
+        },
+        "25": {
+            "link": {
+                "name": "Physical.frag",
+                "file": "default"
+            }
+        },
+        "28": {
             "link": {
                 "name": "lib\\Quaternion.glsl",
                 "file": "default"
             }
         },
-        "44": {
+        "29": {
             "link": {
                 "name": "lib\\ShaderType.glsl",
                 "file": "default"
             }
         },
-        "45": {
+        "30": {
+            "link": {
+                "name": "Skinning.vert",
+                "file": "default"
+            }
+        },
+        "31": {
+            "link": {
+                "name": "Sky.frag",
+                "file": "default"
+            }
+        },
+        "32": {
             "link": {
                 "name": "lib\\Slug.frag",
                 "file": "default"
             }
         },
-        "46": {
+        "33": {
             "link": {
                 "name": "lib\\Slug.vert",
                 "file": "default"
             }
         },
-        "47": {
+        "34": {
             "link": {
                 "name": "lib\\Surface.frag",
                 "file": "default"
             }
         },
-        "48": {
+        "35": {
+            "link": {
+                "name": "Text.frag",
+                "file": "default"
+            }
+        },
+        "37": {
+            "link": {
+                "name": "Text.vert",
+                "file": "default"
+            }
+        },
+        "38": {
             "link": {
                 "name": "lib\\Textures.frag",
                 "file": "default"
             }
         },
-        "49": {
+        "39": {
             "link": {
                 "name": "lib\\Uniforms.glsl",
+                "file": "default"
+            }
+        },
+        "40": {
+            "link": {
+                "name": "Particle.frag",
                 "file": "default"
             }
         }
@@ -344,121 +266,99 @@
     "animations": {},
     "skins": {},
     "pipelines": {
-        "3": {
+        "6": {
             "link": {
                 "name": "Depth",
                 "file": "default"
             }
         },
-        "5": {
+        "8": {
             "link": {
                 "name": "DistanceFieldVector",
                 "file": "default"
             }
         },
-        "8": {
+        "11": {
             "link": {
                 "name": "Flat Opaque",
                 "file": "default"
             }
         },
-        "9": {
+        "12": {
             "link": {
                 "name": "Flat Opaque Textured",
                 "file": "default"
             }
         },
-        "12": {
+        "20": {
             "link": {
                 "name": "MeshVisualizer",
                 "file": "default"
             }
         },
-        "14": {
+        "23": {
             "link": {
                 "name": "Phong Opaque",
                 "file": "default"
-            },
-            "features": {
-                "DEPRECATED_LIGHT_ATTENUATION": true,
-                "WITH_EMISSIVE": true
             }
         },
-        "15": {
+        "24": {
             "link": {
                 "name": "Phong Opaque Textured",
-                "file": "default"
-            },
-            "features": {
-                "DEPRECATED_LIGHT_ATTENUATION": true
-            }
-        },
-        "17": {
-            "link": {
-                "name": "Physical Opaque",
-                "file": "default"
-            }
-        },
-        "18": {
-            "link": {
-                "name": "Physical Opaque Textured",
-                "file": "default"
-            }
-        },
-        "22": {
-            "link": {
-                "name": "Text",
                 "file": "default"
             }
         },
         "26": {
             "link": {
-                "name": "Phong Normalmapped",
+                "name": "Physical Opaque",
                 "file": "default"
-            },
-            "features": {
-                "DEPRECATED_LIGHT_ATTENUATION": true
             }
         },
         "27": {
             "link": {
-                "name": "Phong Lightmapped",
+                "name": "Physical Opaque Textured",
                 "file": "default"
-            },
-            "features": {
-                "DEPRECATED_LIGHT_ATTENUATION": true
             }
         },
-        "28": {
+        "36": {
+            "link": {
+                "name": "Text",
+                "file": "default"
+            }
+        },
+        "41": {
+            "link": {
+                "name": "Phong Normalmapped",
+                "file": "default"
+            }
+        },
+        "42": {
+            "link": {
+                "name": "Phong Lightmapped",
+                "file": "default"
+            }
+        },
+        "43": {
             "link": {
                 "name": "Foliage",
                 "file": "default"
-            },
-            "features": {
-                "DEPRECATED_LIGHT_ATTENUATION": true
             }
         },
-        "29": {
+        "44": {
             "link": {
                 "name": "Particle",
                 "file": "default"
             }
         },
-        "30": {
+        "45": {
             "link": {
                 "name": "Sky",
-                "file": "default"
-            }
-        },
-        "53": {
-            "link": {
-                "name": "TileFeedback",
                 "file": "default"
             }
         }
     },
     "fonts": {
-        "31": {
+        "46": {
             "link": {
                 "name": "DejaVuSans.ttf",
                 "file": "default"
@@ -468,29 +368,22 @@
     "languages": {},
     "settings": {
         "project": {
-            "name": "TestStreaming",
+            "name": "TestJsComponentsMain",
             "version": [
                 1,
                 0,
                 4
-            ],
-            "packageForStreaming": true
+            ]
         },
         "scripting": {
-            "bundlingType": "none",
-            "libraryPaths": [
-                "/js/lib/"
+            "sourcePaths": [
+                "js"
             ]
-        }
-    },
-    "files": {
-        "52": {
-            "fileName": "image.png",
-            "importerName": ""
         },
-        "56": {
-            "fileName": "4x4.png",
-            "importerName": ""
+        "vr": {
+            "leftEyeObject": "49",
+            "rightEyeObject": "50",
+            "enable": false
         }
     }
 }

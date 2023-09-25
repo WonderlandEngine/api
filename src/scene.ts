@@ -1,8 +1,9 @@
 import {WonderlandEngine} from './engine.js';
 import {Emitter} from './utils/event.js';
-import {fetchWithProgress} from './utils/fetch.js';
+import {fetchWithProgress, getBaseUrl} from './utils/fetch.js';
+import {clamp, timeout} from './utils/misc.js';
 import {isString} from './utils/object.js';
-import {NumberArray, Object3D, RayHit, ViewComponent} from './wonderland.js';
+import {Material, NumberArray, Object3D, RayHit, ViewComponent} from './wonderland.js';
 
 /** Extension data obtained from glTF files. */
 export interface GLTFExtensions {
@@ -26,6 +27,7 @@ export interface GLTFExtensions {
 export interface SceneAppendParameters {
     /** Whether to load glTF extension data */
     loadGltfExtensions: boolean;
+    baseURL: string | undefined;
 }
 
 /**
@@ -40,6 +42,22 @@ export type SceneAppendResultWithExtensions = {
  * Result obtained when appending a scene with {@link Scene.append}.
  */
 export type SceneAppendResult = (Object3D | null) | SceneAppendResultWithExtensions;
+
+/**
+ * Constants
+ */
+
+/** Magic number for .bin */
+const MAGIC_BIN = 'WLEV';
+
+/** Scene loading options. */
+export interface SceneLoadOptions {
+    /** An in-memory buffer, containing the bytes of a `.bin` file. */
+    buffer: ArrayBuffer;
+
+    /** Path from which resources are resolved (images, languages, etc...). */
+    baseURL: string;
+}
 
 /**
  * Provides global scene functionality like raycasting.
@@ -57,11 +75,22 @@ export class Scene {
     private _rayHit: number;
     /** Ray hit. @hidden */
     private _hit: RayHit;
+    /**
+     * Relative directory of the scene that was loaded with {@link Scene.load}
+     * Used for loading any files relative to the main scene.
+     *
+     * We need this for the tests that load bin files since we aren't loading
+     * from the deploy folder directly. (test/resources/projects/*.bin)
+     *
+     * @hidden
+     */
+    private _baseURL: string;
 
     constructor(engine: WonderlandEngine) {
         this._engine = engine;
         this._rayHit = engine.wasm._malloc(4 * (3 * 4 + 3 * 4 + 4 + 2) + 4);
         this._hit = new RayHit(this._engine, this._rayHit);
+        this._baseURL = '';
     }
 
     /**
@@ -87,6 +116,16 @@ export class Scene {
     }
 
     /**
+     * Relative directory of the scene that was loaded with {@link Scene.load}
+     * Used for loading any files relative to the main scene.
+     *
+     * @hidden
+     */
+    get baseURL(): string {
+        return this._baseURL;
+    }
+
+    /**
      * Cast a ray through the scene and find intersecting objects.
      *
      * The resulting ray hit will contain up to **4** closest ray hits,
@@ -96,12 +135,18 @@ export class Scene {
      * @param d Ray direction.
      * @param group Collision group to filter by: only objects that are
      *        part of given group are considered for raycast.
+     * @param maxDistance Maximum **inclusive** hit distance. Defaults to `100`.
      *
      * @returns The scene cached {@link RayHit} instance.
      * @note The returned object is owned by the Scene instance
      *   will be reused with the next {@link Scene#rayCast} call.
      */
-    rayCast(o: Readonly<NumberArray>, d: Readonly<NumberArray>, group: number): RayHit {
+    rayCast(
+        o: Readonly<NumberArray>,
+        d: Readonly<NumberArray>,
+        group: number,
+        maxDistance = 100.0
+    ): RayHit {
         this._engine.wasm._wl_scene_ray_cast(
             o[0],
             o[1],
@@ -110,7 +155,8 @@ export class Scene {
             d[1],
             d[2],
             group,
-            this._rayHit
+            this._rayHit,
+            maxDistance
         );
         return this._hit;
     }
@@ -185,7 +231,7 @@ export class Scene {
     reserveObjects(objectCount: number, componentCountPerType: Record<string, number>) {
         const wasm = this._engine.wasm;
         componentCountPerType = componentCountPerType || {};
-        const jsManagerIndex = wasm._typeIndexFor('js');
+        const jsManagerIndex = wasm._jsManagerIndex;
         let countsPerTypeIndex = wasm._tempMemInt.subarray();
         countsPerTypeIndex.fill(0);
         for (const e of Object.entries(componentCountPerType)) {
@@ -234,35 +280,70 @@ export class Scene {
      * Once the scene is loaded successfully and initialized,
      * {@link WonderlandEngine.onSceneLoaded} is notified.
      *
-     * @param filename Path to the .bin file.
+     * #### ArrayBuffer
+     *
+     * The `load()` method accepts an in-memory buffer:
+     *
+     * ```js
+     * scene.load({
+     *     buffer: new ArrayBuffer(...),
+     *     baseURL: 'https://my-website/assets'
+     * })
+     * ```
+     *
+     * @note The `baseURL` is mandatory. It's used to fetch images and languages.
+     *
+     * Use {@link Scene.setLoadingProgress} to update the loading progress bar
+     * when using an ArrayBuffer.
+     *
+     * @param opts Path to the file to load, or an option object.
+     *     For more information about the options, see the {@link SceneLoadOptions} documentation.
      * @returns Promise that resolves when the scene was loaded.
      */
-    async load(filename: string): Promise<void> {
+    async load(options: string | SceneLoadOptions): Promise<void> {
+        let buffer: ArrayBuffer | null = null;
+        let baseURL: string | null = null;
+        let filename: string = null!;
+        if (isString(options)) {
+            filename = options;
+            buffer = await fetchWithProgress(filename, (bytes, size) => {
+                console.log(`Scene downloading: ${bytes} / ${size}`);
+                this.setLoadingProgress(bytes / size);
+            });
+            baseURL = getBaseUrl(filename);
+            console.log(`Scene download of ${buffer.byteLength} bytes successful.`);
+        } else {
+            ({buffer, baseURL} = options);
+            filename = baseURL ? `${baseURL}/scene.bin` : 'scene.bin';
+        }
+
+        if (!buffer) {
+            throw new Error('Failed to load scene, buffer not provided');
+        }
+        if (!isString(baseURL)) {
+            throw new Error('Failed to load scene, baseURL not provided');
+        }
+
+        this._baseURL = baseURL;
+
         const wasm = this._engine.wasm;
 
-        const buffer = await fetchWithProgress(filename, (bytes, size) => {
-            console.log(`Scene downloading: ${bytes} / ${size}`);
-            wasm._wl_set_loading_screen_progress(bytes / size);
-        });
-
         const size = buffer.byteLength;
-        console.log(`Scene download of ${size} bytes successful.`);
-
         const ptr = wasm._malloc(size);
         new Uint8Array(wasm.HEAPU8.buffer, ptr, size).set(new Uint8Array(buffer));
 
         try {
+            /** @todo: Remove third parameter at 1.2.0 */
             wasm._wl_load_scene_bin(ptr, size, wasm.tempUTF8(filename));
         } finally {
             /* Catch calls to abort(), e.g. via asserts */
             wasm._free(ptr);
         }
 
-        const binQueue = wasm._queuedBinFiles;
-        if (binQueue.length > 0) {
-            wasm._queuedBinFiles = [];
-            await Promise.all(binQueue.map((path) => this.append(path)));
-        }
+        const i18n = this._engine.i18n;
+        const langPromise = i18n.setLanguage(i18n.languageCode(0));
+
+        await Promise.all([langPromise, this._flushAppend(this._baseURL)]);
 
         this._engine.onSceneLoaded.notify();
     }
@@ -299,6 +380,16 @@ export class Scene {
      * });
      * ```
      *
+     * If the file to be loaded is located in a subfolder, it might be useful
+     * to define the `baseURL` option. This will ensure any bin files
+     * referenced by the loaded bin file are loaded at the correct path.
+     *
+     * ```js
+     * WL.scene.append(filename, { baseURL: 'scenes' }).then(({root, extensions}) => {
+     *     // do stuff
+     * });
+     * ```
+     *
      * @param file The .bin, .gltf or .glb file to append. Should be a URL or
      *   an `ArrayBuffer` with the file content.
      * @param options Additional options for loading.
@@ -306,55 +397,59 @@ export class Scene {
      */
     async append(
         file: string | ArrayBuffer,
-        options?: Partial<SceneAppendParameters>
+        options: Partial<SceneAppendParameters> = {}
     ): Promise<SceneAppendResult> {
-        const buffer = isString(file) ? await fetchWithProgress(file) : file;
+        const {
+            loadGltfExtensions = false,
+            baseURL = isString(file) ? getBaseUrl(file) : this._baseURL,
+        } = options;
 
         const wasm = this._engine.wasm;
+        const buffer = isString(file) ? await fetchWithProgress(file) : file;
 
-        let callback!: number;
-        const promise = new Promise<SceneAppendResult>((resolve, reject) => {
-            callback = wasm.addFunction(
-                (objectId: number, extensionData: number, extensionDataSize: number) => {
-                    if (objectId < 0) {
-                        reject();
-                        return;
-                    }
-                    const root = objectId ? this._engine.wrapObject(objectId) : null;
-                    if (extensionData && extensionDataSize) {
-                        const marshalled = new Uint32Array(
-                            wasm.HEAPU32.buffer,
-                            extensionData,
-                            extensionDataSize / 4
-                        );
-                        const extensions = this._unmarshallGltfExtensions(marshalled);
-                        resolve({root, extensions});
-                    } else {
-                        resolve(root);
-                    }
-                },
-                'viii'
-            );
-        }).finally(() => wasm.removeFunction(callback));
+        let error: Error | null = null;
+        let result: SceneAppendResult | undefined = undefined;
+
+        let callback = wasm.addFunction(
+            (objectId: number, extensionData: number, extensionDataSize: number) => {
+                if (objectId < 0) {
+                    error = new Error(
+                        `Scene.append(): Internal runtime error, found root id = ${objectId}`
+                    );
+                    return;
+                }
+                const root = objectId ? this._engine.wrapObject(objectId) : null;
+                result = root;
+
+                if (!extensionData || !extensionDataSize) return;
+
+                const marshalled = new Uint32Array(
+                    wasm.HEAPU32.buffer,
+                    extensionData,
+                    extensionDataSize / 4
+                );
+                const extensions = this._unmarshallGltfExtensions(marshalled);
+                result = {root, extensions};
+            },
+            'viii'
+        );
 
         const size = buffer.byteLength;
         const ptr = wasm._malloc(size);
         const data = new Uint8Array(wasm.HEAPU8.buffer, ptr, size);
         data.set(new Uint8Array(buffer));
 
-        const MAGIC = 'WLEV';
         const isBinFile =
-            data.byteLength > MAGIC.length &&
+            data.byteLength > MAGIC_BIN.length &&
             data
-                .subarray(0, MAGIC.length)
-                .every((value, i) => value === MAGIC.charCodeAt(i));
+                .subarray(0, MAGIC_BIN.length)
+                .every((value, i) => value === MAGIC_BIN.charCodeAt(i));
 
         try {
             if (isBinFile) {
                 wasm._wl_append_scene_bin(ptr, size, callback);
             } else {
-                const loadExtensions = options?.loadGltfExtensions ?? false;
-                wasm._wl_append_scene_gltf(ptr, size, loadExtensions, callback);
+                wasm._wl_append_scene_gltf(ptr, size, loadGltfExtensions, callback);
             }
         } catch (e) {
             wasm.removeFunction(callback);
@@ -363,15 +458,83 @@ export class Scene {
             wasm._free(ptr);
         }
 
-        const result = await promise;
+        /* Debounce this call to allow the animation loop to be scheduled.
+         * Without this, the promise might hang forever. */
+        while (result === undefined && !error) await timeout(4);
 
-        const binQueue = wasm._queuedBinFiles;
-        if (isBinFile && binQueue.length > 0) {
-            wasm._queuedBinFiles = [];
-            await Promise.all(binQueue.map((path) => this.append(path, options)));
-        }
+        wasm.removeFunction(callback);
 
-        return result;
+        if (error) throw error;
+
+        if (isBinFile) await this._flushAppend(baseURL);
+
+        return result!;
+    }
+
+    /**
+     * Update the loading screen progress bar.
+     *
+     * @param value Current loading percentage, in the range [0; 1].
+     */
+    setLoadingProgress(percentage: number) {
+        const wasm = this.engine.wasm;
+        wasm._wl_set_loading_screen_progress(clamp(percentage, 0, 1));
+    }
+
+    /**
+     * Set the current material to render the sky.
+     *
+     * @note The sky needs to be enabled in the editor when creating the scene.
+     * For more information, please refer to the background [tutorial](https://wonderlandengine.com/tutorials/background-effect/).
+     */
+    set skyMaterial(material: Material | null) {
+        this._engine.wasm._wl_scene_set_sky_material(material?._index ?? 0);
+    }
+
+    /** Current sky material, or `null` if no sky is set. */
+    get skyMaterial(): Material | null {
+        const id = this._engine.wasm._wl_scene_get_sky_material();
+        return id > 0 ? new Material(this._engine, id) : null;
+    }
+
+    /**
+     * Load all currently queued bin files.
+     *
+     * Used by {@link Scene.append} and {@link Scene.load}
+     * to load all delay-load bins.
+     *
+     * Used by {@link I18N.language} to trigger loading the
+     * associated language bin, after it was queued.
+     *
+     * @param baseURL Url that is added to each path.
+     * @param options Additional options for loading.
+     *
+     * @hidden
+     */
+    _flushAppend(baseURL: string) {
+        const wasm = this._engine.wasm;
+        const count = wasm._wl_scene_queued_bin_count();
+        if (!count) return Promise.resolve();
+
+        const urls = new Array(count).fill(0).map((_, i: number) => {
+            const ptr = wasm._wl_scene_queued_bin_path(i);
+            return wasm.UTF8ToString(ptr);
+        });
+
+        wasm._wl_scene_clear_queued_bin_list();
+
+        const promises = urls.map((path: string) =>
+            this.append(baseURL.length ? `${baseURL}/${path}` : path)
+        );
+
+        return Promise.all(promises).then((data) => {
+            const i18n = this._engine.i18n;
+            this._engine.i18n.onLanguageChanged.notify(
+                i18n.previousIndex,
+                i18n.currentIndex
+            );
+            return data;
+        });
     }
 
     /**
@@ -430,5 +593,6 @@ export class Scene {
      */
     reset() {
         this._engine.wasm._wl_scene_reset();
+        this._baseURL = '';
     }
 }

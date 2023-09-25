@@ -295,6 +295,22 @@ describe('PhysX', function () {
         expect(p2.angularDamping).to.almost(1.5);
     });
 
+    it('get/set offsetTranslation', function () {
+        const obj = WL.scene.addObject();
+        const comp = obj.addComponent('physx', {shape: Shape.Box})!;
+        expect(comp.translationOffset).to.deep.almost([0, 0, 0]);
+        comp.translationOffset = [1, 2, 3];
+        expect(comp.translationOffset).to.deep.almost([1, 2, 3]);
+    });
+
+    it('get/set offsetRotation', function () {
+        const obj = WL.scene.addObject();
+        const comp = obj.addComponent('physx', {shape: Shape.Box})!;
+        expect(comp.rotationOffset).to.deep.almost([0, 0, 0, 1]);
+        comp.rotationOffset = [1, 0, 0, 1];
+        expect(comp.rotationOffset).to.deep.almost([0.707, 0, 0, 0.707], 0.01);
+    });
+
     describe('Flags', function () {
         it('static', function () {
             const obj = WL.scene.addObject();

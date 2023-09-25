@@ -11,7 +11,7 @@ import {Property, PropertyArgs, PropertyKeys, ComponentProperty, Type} from './p
 function propertyDecorator(data: ComponentProperty) {
     return function (target: Component, propertyKey: string): void {
         const ctor = target.constructor as ComponentConstructor;
-        ctor.Properties = ctor.Properties ?? {};
+        ctor.Properties = ctor.hasOwnProperty('Properties') ? ctor.Properties : {};
         ctor.Properties[propertyKey] = data;
     };
 }
