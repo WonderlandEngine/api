@@ -70,7 +70,7 @@ export class Scene {
     readonly onPostRender = new Emitter();
 
     /** Wonderland Engine instance. @hidden */
-    protected _engine: WonderlandEngine;
+    protected readonly _engine: WonderlandEngine;
 
     /** Ray hit pointer in WASM heap. @hidden */
     private _rayHit: number;

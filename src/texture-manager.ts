@@ -17,7 +17,7 @@ import {Texture} from './wonderland.js';
  */
 export class TextureManager {
     /** Wonderland Engine instance. @hidden */
-    protected _engine: WonderlandEngine;
+    protected readonly _engine: WonderlandEngine;
 
     /** Texture cache. @hidden */
     readonly #cache: (Texture | null)[] = [];
@@ -25,6 +25,11 @@ export class TextureManager {
     /** @hidden */
     constructor(engine: WonderlandEngine) {
         this._engine = engine;
+    }
+
+    /** Hosting engine instance. */
+    get engine() {
+        return this._engine;
     }
 
     /**
@@ -54,8 +59,8 @@ export class TextureManager {
                 if (!texture.valid) {
                     reject(
                         'Failed to add image ' +
-                            image.src +
-                            ' to texture atlas. Probably incompatible format.'
+                        image.src +
+                        ' to texture atlas. Probably incompatible format.'
                     );
                 }
                 resolve(texture);
