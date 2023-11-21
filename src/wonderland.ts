@@ -5744,13 +5744,11 @@ export class RayHit {
      * 
      * Distances of array hits to ray origin.
      *
-     * @param out Destination array of numbers, expected to have at least this.hitCount elements.
+     * @param out Destination array/vector, expected to have at least this.hitCount elements.
      * @returns The `out` parameter.
      */
-    getDistances<T extends Float32Array>(out: T): T;
-    getDistances(out?: Float32Array): Float32Array {
-        if (!out) out = new Float32Array(this.hitCount);
-
+    getDistances<T extends NumberArray>(out: T): T;
+    getDistances(out: NumberArray = new Float32Array(this.hitCount)): NumberArray {
         const wasm = this._engine.wasm;
         const alignedPtr = (this._ptr + 48 * 2) / 4; /* Align F32 */
         for (let i = 0; i < this.hitCount; ++i) {
@@ -5777,13 +5775,11 @@ export class RayHit {
     /**
      * Hit objects
      *
-     * @param out Destination array of objects, expected to have at least this.hitCount elements.
+     * @param out Destination array/vector, expected to have at least this.hitCount elements.
      * @returns The `out` parameter.
      */
     getObjects<T extends (Object3D | null)[]>(out: T): T;
-    getObjects(out?: (Object3D | null)[]): (Object3D | null)[] {
-        if (!out) out = new Array(this.hitCount);
-
+    getObjects(out: (Object3D | null)[] = new Array(this.hitCount)): (Object3D | null)[] {
         const HEAPU16 = this._engine.wasm.HEAPU16;
         const alignedPtr = (this._ptr + (48 * 2 + 16)) >> 1;
         for (let i = 0; i < this.hitCount; ++i) {
