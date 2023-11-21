@@ -1187,6 +1187,27 @@ export class CollisionComponent extends Component {
         );
     }
 
+    /** @overload */
+    getExtents(): Float32Array;
+    /**
+     * Collision component extents.
+     *
+     * If {@link collider} returns {@link Collider.Sphere}, only the first
+     * component of the returned vector is used.
+     *
+     * @param out Destination array/vector, expected to have at least 3 elements.
+     * @returns The `out` parameter.
+     */
+    getExtents<T extends NumberArray>(out: T): T;
+    getExtents(out: NumberArray = new Float32Array(3)): NumberArray {
+        const wasm = this._engine.wasm;
+        const ptr = wasm._wl_collision_component_get_extents(this._id) / 4; /* Align F32 */
+        for (let i = 0; i < 3; ++i) {
+            out[i] = wasm.HEAPF32[ptr + i];
+        }
+        return out;
+    }
+
     /**
      * Set collision component extents.
      *
@@ -1474,6 +1495,24 @@ export class ViewComponent extends Component {
             wasm._wl_view_component_get_projection_matrix(this._id),
             16
         );
+    }
+
+    /** @overload */
+    getProjectionMatrix(): Float32Array;
+    /**
+     * Projection matrix.
+     *
+     * @param out Destination array/vector, expected to have at least 16 elements.
+     * @returns The `out` parameter.
+     */
+    getProjectionMatrix<T extends NumberArray>(out: T): T;
+    getProjectionMatrix(out: NumberArray = new Float32Array(16)): NumberArray {
+        const wasm = this._engine.wasm;
+        const ptr = wasm._wl_view_component_get_projection_matrix(this._id) / 4; /* Align F32 */
+        for (let i = 0; i < 16; ++i) {
+            out[i] = wasm.HEAPF32[ptr + i];
+        }
+        return out;
     }
 
     /** ViewComponent near clipping plane value. */
@@ -2369,6 +2408,24 @@ export class PhysXComponent extends Component {
         return new Float32Array(wasm.HEAPF32.buffer, ptr, 3);
     }
 
+    /** @overload */
+    getExtents(): Float32Array;
+    /**
+     * The shape extents for collision detection.
+     *
+     * @param out Destination array/vector, expected to have at least 3 elements.
+     * @returns The `out` parameter.
+     */
+    getExtents<T extends NumberArray>(out: T): T;
+    getExtents(out: NumberArray = new Float32Array(3)): NumberArray {
+        const wasm = this._engine.wasm;
+        const ptr = wasm._wl_physx_component_get_extents(this._id) / 4; /* Align F32 */
+        for (let i = 0; i < 3; ++i) {
+            out[i] = wasm.HEAPF32[ptr + i];
+        }
+        return out;
+    }
+
     /**
      * Get staticFriction.
      */
@@ -2475,6 +2532,25 @@ export class PhysXComponent extends Component {
         return new Float32Array(wasm.HEAPF32.buffer, wasm._tempMem, 3);
     }
 
+    /** @overload */
+    getLinearVelocity(): Float32Array;
+    /**
+     * Linear velocity or `[0, 0, 0]` if the component is not active.
+     *
+     * @param out Destination array/vector, expected to have at least 3 elements.
+     * @returns The `out` parameter.
+     */
+    getLinearVelocity<T extends NumberArray>(out: T): T;
+    getLinearVelocity(out: NumberArray = new Float32Array(3)): NumberArray {
+        const wasm = this._engine.wasm;
+        const tempMemFloat = wasm._tempMemFloat;
+        wasm._wl_physx_component_get_linearVelocity(this._id, wasm._tempMem); /* Align F32 */
+        for (let i = 0; i < 3; ++i) {
+            out[i] = tempMemFloat[i];
+        }
+        return out;
+    }
+
     /**
      * Set angular velocity
      *
@@ -2499,6 +2575,25 @@ export class PhysXComponent extends Component {
         const wasm = this._engine.wasm;
         wasm._wl_physx_component_get_angularVelocity(this._id, wasm._tempMem);
         return new Float32Array(wasm.HEAPF32.buffer, wasm._tempMem, 3);
+    }
+
+    /** @overload */
+    getAngularVelocity(): Float32Array;
+    /**
+     * Angular velocity or `[0, 0, 0]` if the component is not active.
+     *
+     * @param out Destination array/vector, expected to have at least 3 elements.
+     * @returns The `out` parameter.
+     */
+    getAngularVelocity<T extends NumberArray>(out: T): T;
+    getAngularVelocity(out: NumberArray = new Float32Array(3)): NumberArray {
+        const wasm = this._engine.wasm;
+        const tempMemFloat = wasm._tempMemFloat;
+        wasm._wl_physx_component_get_angularVelocity(this._id, wasm._tempMem); /* Align F32 */
+        for (let i = 0; i < 3; ++i) {
+            out[i] = tempMemFloat[i];
+        }
+        return out;
     }
 
     /**
@@ -5609,6 +5704,24 @@ export class Skin {
         );
     }
 
+    /** @overload */
+    getJointIds(): Uint16Array;
+    /**
+     * Joints object ids for this skin
+     *
+     * @param out Destination array/vector, expected to have at least this.jointCount elements.
+     * @returns The `out` parameter.
+     */
+    getJointIds<T extends NumberArray>(out: T): T;
+    getJointIds(out: NumberArray = new Uint16Array(this.jointCount)): NumberArray {
+        const wasm = this._engine.wasm;
+        const ptr = wasm._wl_skin_joint_ids(this._index) / 2; /* Align U16 */
+        for (let i = 0; i < this.jointCount; ++i) {
+            out[i] = wasm.HEAPU16[ptr + i];
+        }
+        return out;
+    }
+
     /**
      * Dual quaternions in a flat array of size 8 times {@link jointCount}.
      *
@@ -5623,6 +5736,26 @@ export class Skin {
         );
     }
 
+    /** @overload */
+    getInverseBindTransforms(): Float32Array;
+    /**
+     * Dual quaternions in a flat array of size 8 times {@link jointCount}.
+     *
+     * Inverse bind transforms of the skin.
+     *
+     * @param out Destination array/vector, expected to have at least this.jointCount * 8 elements.
+     * @returns The `out` parameter.
+     */
+    getInverseBindTransforms<T extends NumberArray>(out: T): T;
+    getInverseBindTransforms(out: NumberArray = new Float32Array(this.jointCount * 8)): NumberArray {
+        const wasm = this._engine.wasm;
+        const ptr = wasm._wl_skin_inverse_bind_transforms(this._index) / 4; /* Align F32 */
+        for (let i = 0; i < this.jointCount * 8; ++i) {
+            out[i] = wasm.HEAPF32[ptr + i];
+        }
+        return out;
+    }
+
     /**
      * Vectors in a flat array of size 3 times {@link jointCount}.
      *
@@ -5635,6 +5768,26 @@ export class Skin {
             wasm._wl_skin_inverse_bind_scalings(this._index),
             3 * this.jointCount
         );
+    }
+
+    /** @overload */
+    getInverseBindScalings(): Float32Array;
+    /**
+     * Vectors in a flat array of size 3 times {@link jointCount}.
+     *
+     * Inverse bind scalings of the skin.
+     *
+     * @param out Destination array/vector, expected to have at least this.jointCount * 3 elements.
+     * @returns The `out` parameter.
+     */
+    getInverseBindScalings<T extends NumberArray>(out: T): T;
+    getInverseBindScalings(out: NumberArray = new Float32Array(this.jointCount * 3)): NumberArray {
+        const wasm = this._engine.wasm;
+        const ptr = wasm._wl_skin_inverse_bind_scalings(this._index) / 4; /* Align F32 */
+        for (let i = 0; i < this.jointCount * 3; ++i) {
+            out[i] = wasm.HEAPF32[ptr + i];
+        }
+        return out;
     }
 
     /**
