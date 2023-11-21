@@ -5669,6 +5669,30 @@ export class RayHit {
         return l;
     }
 
+    /** @overload */
+    getLocations(): Float32Array[];
+    /**
+     * Array of ray hit locations.
+     *
+     * @param out Destination array of arrays/vectors, expected to have at least this.hitCount elements,
+     *            and each array/vector is expected to have at least 3 elements.
+     * @returns The `out` parameter.
+     */
+    getLocations<T extends NumberArray[]>(out: T): T;
+    getLocations(out?: NumberArray[]): NumberArray[] {
+        if (!out) out = Array.from({ length: this.hitCount }, () => new Float32Array(3));
+
+        const wasm = this._engine.wasm;
+        let alignedPtr = this._ptr / 4; /* Align F32 */
+        for (let i = 0; i < this.hitCount; ++i) {
+            let locationPtr = alignedPtr + 3 * i;
+            out[i][0] = wasm.HEAPF32[locationPtr];
+            out[i][1] = wasm.HEAPF32[locationPtr + 1];
+            out[i][2] = wasm.HEAPF32[locationPtr + 2];
+        }
+        return out;
+    }
+
     /** Array of ray hit normals (only when using {@link Physics#rayCast}. */
     get normals(): Float32Array[] {
         let p = this._ptr + 48;
@@ -5677,6 +5701,30 @@ export class RayHit {
             l.push(new Float32Array(this._engine.wasm.HEAPF32.buffer, p + 12 * i, 3));
         }
         return l;
+    }
+
+    /** @overload */
+    getNormals(): Float32Array[];
+    /**
+     * Array of ray hit normals (only when using {@link Physics#rayCast}.
+     *
+     * @param out Destination array of arrays/vectors, expected to have at least this.hitCount elements,
+     *            and each array/vector is expected to have at least 3 elements.
+     * @returns The `out` parameter.
+     */
+    getNormals<T extends NumberArray[]>(out: T): T;
+    getNormals(out?: NumberArray[]): NumberArray[] {
+        if (!out) out = Array.from({ length: this.hitCount }, () => new Float32Array(3));
+
+        const wasm = this._engine.wasm;
+        let alignedPtr = (this._ptr + 48) / 4; /* Align F32 */
+        for (let i = 0; i < this.hitCount; ++i) {
+            let normalPtr = alignedPtr + 3 * i;
+            out[i][0] = wasm.HEAPF32[normalPtr];
+            out[i][1] = wasm.HEAPF32[normalPtr + 1];
+            out[i][2] = wasm.HEAPF32[normalPtr + 2];
+        }
+        return out;
     }
 
     /**
@@ -5689,6 +5737,29 @@ export class RayHit {
         return new Float32Array(this._engine.wasm.HEAPF32.buffer, p, this.hitCount);
     }
 
+    /** @overload */
+    getDistances(): Float32Array;
+    /**
+     * Prefer these to recalculating the distance from locations.
+     * 
+     * Distances of array hits to ray origin.
+     *
+     * @param out Destination array of numbers, expected to have at least this.hitCount elements.
+     * @returns The `out` parameter.
+     */
+    getDistances<T extends Float32Array>(out: T): T;
+    getDistances(out?: Float32Array): Float32Array {
+        if (!out) out = new Float32Array(this.hitCount);
+
+        const wasm = this._engine.wasm;
+        let alignedPtr = (this._ptr + 48 * 2) / 4; /* Align F32 */
+        for (let i = 0; i < this.hitCount; ++i) {
+            let distancePtr = alignedPtr + i;
+            out[i] = wasm.HEAPF32[distancePtr];
+        }
+        return out;
+    }
+
     /** Hit objects */
     get objects(): (Object3D | null)[] {
         const HEAPU16 = this._engine.wasm.HEAPU16;
@@ -5699,6 +5770,27 @@ export class RayHit {
             objects[i] = this._engine.wrapObject(HEAPU16[p + i]);
         }
         return objects;
+    }
+
+    /** @overload */
+    getObjects(): (Object3D | null)[];
+    /**
+     * Hit objects
+     *
+     * @param out Destination array of objects, expected to have at least this.hitCount elements.
+     * @returns The `out` parameter.
+     */
+    getObjects<T extends (Object3D | null)[]>(out: T): T;
+    getObjects(out?: (Object3D | null)[]): (Object3D | null)[] {
+        if (!out) out = new Array(this.hitCount);
+
+        const HEAPU16 = this._engine.wasm.HEAPU16;
+        let alignedPtr = (this._ptr + (48 * 2 + 16)) >> 1;
+        for (let i = 0; i < this.hitCount; ++i) {
+            let objectPtr = alignedPtr + i;
+            out[i] = this._engine.wrapObject(HEAPU16[objectPtr + i]);
+        }
+        return out;
     }
 
     /** Number of hits (max 4) */
