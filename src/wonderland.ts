@@ -3137,6 +3137,51 @@ export class Mesh {
         return this._engine.wasm._wl_mesh_get_vertexCount(this._index);
     }
 
+    /** Number of indices in this mesh, or 0 if the mesh is not indexed.  */
+    get indexCount(): number {
+        const wasm = this._engine.wasm;
+        const tempMem = wasm._tempMem;
+        const ptr = wasm._wl_mesh_get_indexData(this._index, tempMem, tempMem + 4);
+        if (ptr === null) return 0;
+
+        return wasm.HEAPU32[tempMem / 4];
+    }
+
+    /** The mesh index number type, or `null` if the mesh is not indexed.  */
+    get meshIndexType(): number | null {
+        const wasm = this._engine.wasm;
+        const tempMem = wasm._tempMem;
+        const ptr = wasm._wl_mesh_get_indexData(this._index, tempMem, tempMem + 4);
+        if (ptr === null) return null;
+
+        return wasm.HEAPU32[tempMem / 4 + 1];
+    }
+
+    /**
+     * Creates a mesh index array of the give mesh index type
+     *
+     * @param meshIndexType Mesh index type which specify the kind of array to create
+     * @param indexCount Size of the array
+     * @returns The newly created array, or `null` if the mesh is not indexed.
+     */
+    static createMeshIndexArray(meshIndexType: MeshIndexType, indexCount: number): Uint8Array | Uint16Array | Uint32Array {
+        let indexArray: Uint8Array | Uint16Array | Uint32Array;
+
+        switch (meshIndexType) {
+            case MeshIndexType.UnsignedByte:
+                indexArray = new Uint8Array(indexCount);
+                break;
+            case MeshIndexType.UnsignedShort:
+                indexArray = new Uint16Array(indexCount);
+                break;
+            case MeshIndexType.UnsignedInt:
+                indexArray = new Uint32Array(indexCount);
+                break;
+        }
+
+        return indexArray;
+    }
+
     /** Index data (read-only) or `null` if the mesh is not indexed. */
     get indexData(): Uint8Array | Uint16Array | Uint32Array | null {
         const wasm = this._engine.wasm;
@@ -3155,6 +3200,55 @@ export class Mesh {
                 return new Uint32Array(wasm.HEAPU32.buffer, ptr, indexCount);
         }
         return null;
+    }
+
+    /** @overload */
+    getIndexData(): Uint8Array | Uint16Array | Uint32Array | null;
+    /**
+     * Index data (read-only) or `null` if the mesh is not indexed.
+     *
+     * @param out Destination array/vector, expected to have at least indexCount elements.
+     *            The array type must match the MeshIndexType.
+     * @returns The `out` parameter.
+     */
+    getIndexData<T extends Uint8Array | Uint16Array | Uint32Array | null>(out: T): T;
+    getIndexData(out?: Uint8Array | Uint16Array | Uint32Array | null): Uint8Array | Uint16Array | Uint32Array | null {
+        const wasm = this._engine.wasm;
+        const tempMem = wasm._tempMem;
+        const ptr = wasm._wl_mesh_get_indexData(this._index, tempMem, tempMem + 4);
+        if (ptr === null) return null;
+
+        const indexCount = wasm.HEAPU32[tempMem / 4];
+        const indexSize = wasm.HEAPU32[tempMem / 4 + 1];
+
+        if (!out) out = Mesh.createMeshIndexArray(indexSize, indexCount);
+
+        switch (indexSize) {
+            case MeshIndexType.UnsignedByte: {
+                const alignedPtr = ptr;
+                for (let i = 0; i < indexCount; ++i) {
+                    out[i] = wasm.HEAPU8[alignedPtr + i];
+                }
+                break;
+            }
+            case MeshIndexType.UnsignedShort: {
+                const alignedPtr = ptr / 2;
+                for (let i = 0; i < indexCount; ++i) {
+                    out[i] = wasm.HEAPU16[alignedPtr + i];
+                }
+                break;
+            }
+            case MeshIndexType.UnsignedInt: {
+                const alignedPtr = ptr / 4;
+                for (let i = 0; i < indexCount; ++i) {
+                    out[i] = wasm.HEAPU32[alignedPtr + i];
+                }
+
+                break;
+            }
+        }
+
+        return out;
     }
 
     /** Hosting engine instance. */
@@ -3624,26 +3718,26 @@ export class Material {
                             return type.componentCount == 1
                                 ? wasm._tempMemUint32[0]
                                 : new Uint32Array(
-                                      wasm.HEAPU32.buffer,
-                                      wasm._tempMem,
-                                      type.componentCount
-                                  );
+                                    wasm.HEAPU32.buffer,
+                                    wasm._tempMem,
+                                    type.componentCount
+                                );
                         case MaterialParamType.Int:
                             return type.componentCount == 1
                                 ? wasm._tempMemInt[0]
                                 : new Int32Array(
-                                      wasm.HEAP32.buffer,
-                                      wasm._tempMem,
-                                      type.componentCount
-                                  );
+                                    wasm.HEAP32.buffer,
+                                    wasm._tempMem,
+                                    type.componentCount
+                                );
                         case MaterialParamType.Float:
                             return type.componentCount == 1
                                 ? wasm._tempMemFloat[0]
                                 : new Float32Array(
-                                      wasm.HEAPF32.buffer,
-                                      wasm._tempMem,
-                                      type.componentCount
-                                  );
+                                    wasm.HEAPF32.buffer,
+                                    wasm._tempMem,
+                                    type.componentCount
+                                );
                         case MaterialParamType.Sampler:
                             return engine.textures.wrap(wasm._tempMemInt[0]);
                         default:
@@ -3972,9 +4066,9 @@ export class Animation {
         if (newTargets.length != this.trackCount) {
             throw Error(
                 'Expected ' +
-                    this.trackCount.toString() +
-                    ' targets, but got ' +
-                    newTargets.length.toString()
+                this.trackCount.toString() +
+                ' targets, but got ' +
+                newTargets.length.toString()
             );
         }
         const ptr = wasm._malloc(2 * newTargets.length);
