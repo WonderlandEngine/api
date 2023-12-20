@@ -3560,6 +3560,7 @@ export class Material {
      * Get the value of the material parameter
      *
      * @param name name of the material parameter
+     * @param out destination of the material parameter value, its type and size depend on the parameter definition
      * @returns The `out` parameter, undefined if the parameter does not exists
      */
     getParam(name: string, out: any = null): any {
@@ -3625,6 +3626,7 @@ export class Material {
      * Set the value of the material parameter
      *
      * @param name name of the material parameter
+     * @param value the value to set on the parameter, its type and size depend on the parameter definition
      * @returns true if the value has been set, false otherwise
      */
     setParam(name: string, value: any) {
