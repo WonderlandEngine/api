@@ -3963,9 +3963,9 @@ export class Object3D {
     /**
      * Children of this object.
      * The returned array might have more elements than the actual childre count, so you should rely
-     * on the this.getChildrenCount() value when iterating on it
+     * on the this.getChildrenCount() value when iterating on it.
      * 
-     * @param out Destination array/vector, expected to have at least this.getChildrenCount() elements.
+     * @param out Destination array, expected to have at least this.getChildrenCount() elements.
      * @returns The `out` parameter.
      */
     getChildren(out: Object3D[] = new Array(this.getChildrenCount())): Object3D[] {
