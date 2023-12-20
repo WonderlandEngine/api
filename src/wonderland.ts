@@ -3533,10 +3533,10 @@ export class Material {
     }
 
     /**
-     * Get the definition of the material parameter, which includes it's type and the amount of values
+     * Get the definition of the material parameter, which includes it's type and the amount of values.
      *
-     * @param name name of the material parameter
-     * @returns The parameter definition, or undefined if the requested material parameter does not exists 
+     * @param name name of the material parameter.
+     * @returns The parameter definition, or undefined if the requested material parameter does not exists. 
      */
     getParamDefinition(name: string): MaterialDefinition | undefined {
         const wasm = this._engine.wasm;
@@ -3546,10 +3546,10 @@ export class Material {
     }
 
     /**
-     * If the param exists on the material or not
+     * If the param exists on the material or not.
      *
-     * @param name name of the material parameter
-     * @returns true if the parameter exists on the material, false otherwise
+     * @param name name of the material parameter.
+     * @returns true if the parameter exists on the material, false otherwise.
      */
     hasParam(name: string): boolean {
         const materialParamDefinition = this.getParamDefinition(name);
@@ -3557,11 +3557,11 @@ export class Material {
     }
 
     /**
-     * Get the value of the material parameter
+     * Get the value of the material parameter.
      *
-     * @param name name of the material parameter
-     * @param out destination of the material parameter value, its type and size depend on the parameter definition
-     * @returns The `out` parameter, undefined if the parameter does not exists
+     * @param name name of the material parameter.
+     * @param out destination of the material parameter value, its type and size depend on the parameter definition.
+     * @returns The `out` parameter, undefined if the parameter does not exists.
      */
     getParam(name: string, out: any = null): any {
         const materialParamDefinition = this.getParamDefinition(name);
@@ -3623,11 +3623,11 @@ export class Material {
     }
 
     /**
-     * Set the value of the material parameter
+     * Set the value of the material parameter.
      *
-     * @param name name of the material parameter
-     * @param value the value to set on the parameter, its type and size depend on the parameter definition
-     * @returns true if the value has been set, false otherwise
+     * @param name name of the material parameter.
+     * @param value the value to set on the parameter, its type and size depend on the parameter definition.
+     * @returns true if the value has been set, false otherwise.
      */
     setParam(name: string, value: any) {
         const materialParamDefinition = this.getParamDefinition(name);
