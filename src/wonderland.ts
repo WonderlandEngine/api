@@ -7,7 +7,7 @@ import {WonderlandEngine} from './engine.js';
 import {isNumber, isString} from './utils/object.js';
 import {Emitter} from './utils/event.js';
 import {ComponentProperty} from './property.js';
-import {WASM} from './wasm.js';
+import { MaterialDefinition, WASM } from './wasm.js';
 
 /** Element that can be used as an image in the engine. */
 export type ImageLike = HTMLImageElement | HTMLVideoElement | HTMLCanvasElement;
@@ -3486,26 +3486,26 @@ export class Material {
                             return type.componentCount == 1
                                 ? wasm._tempMemUint32[0]
                                 : new Uint32Array(
-                                      wasm.HEAPU32.buffer,
-                                      wasm._tempMem,
-                                      type.componentCount
-                                  );
+                                    wasm.HEAPU32.buffer,
+                                    wasm._tempMem,
+                                    type.componentCount
+                                );
                         case MaterialParamType.Int:
                             return type.componentCount == 1
                                 ? wasm._tempMemInt[0]
                                 : new Int32Array(
-                                      wasm.HEAP32.buffer,
-                                      wasm._tempMem,
-                                      type.componentCount
-                                  );
+                                    wasm.HEAP32.buffer,
+                                    wasm._tempMem,
+                                    type.componentCount
+                                );
                         case MaterialParamType.Float:
                             return type.componentCount == 1
                                 ? wasm._tempMemFloat[0]
                                 : new Float32Array(
-                                      wasm.HEAPF32.buffer,
-                                      wasm._tempMem,
-                                      type.componentCount
-                                  );
+                                    wasm.HEAPF32.buffer,
+                                    wasm._tempMem,
+                                    type.componentCount
+                                );
                         case MaterialParamType.Sampler:
                             return engine.textures.wrap(wasm._tempMemInt[0]);
                         default:
@@ -3524,42 +3524,116 @@ export class Material {
                     (target as Record<string | symbol, any>)[prop] = value;
                     return true;
                 }
-                const type = param.type;
-                switch (type.type) {
-                    case MaterialParamType.UnsignedInt:
-                    case MaterialParamType.Int:
-                    case MaterialParamType.Sampler:
-                        const v = value.id ?? value;
-                        wasm._wl_material_set_param_value_uint(
-                            target._index,
-                            param.index,
-                            v
-                        );
-                        break;
-                    case MaterialParamType.Float:
-                        let count = 1;
-                        if (typeof value === 'number') {
-                            wasm._tempMemFloat[0] = value;
-                        } else {
-                            count = value.length;
-                            for (let i = 0; i < count; ++i)
-                                wasm._tempMemFloat[i] = value[i];
-                        }
-                        wasm._wl_material_set_param_value_float(
-                            target._index,
-                            param.index,
-                            wasm._tempMem,
-                            count
-                        );
-                        break;
-                    case MaterialParamType.Font:
-                        throw new Error(
-                            'Setting font properties is currently unsupported.'
-                        );
-                }
+
+                target._setMaterialParamValue(param, value);
+
                 return true;
             },
         });
+    }
+
+    /**
+     * Get the definition of the material parameter, which includes it's type and the amount of values
+     *
+     * @param name name of the material parameter
+     * @returns The parameter definition, or undefined if the requested material parameter does not exists 
+     */
+    getParamDefinition(name: string): MaterialDefinition | undefined {
+        const wasm = this._engine.wasm;
+        const definition = wasm._materialDefinitions[this._definition];
+        const materialParamDefinition = definition.get(name);
+        return materialParamDefinition;
+    }
+
+    /**
+     * If the param exists on the material or not
+     *
+     * @param name name of the material parameter
+     * @returns true if the parameter exists on the material, false otherwise
+     */
+    hasParam(name: string): boolean {
+        const materialParamDefinition = this.getParamDefinition(name);
+        return materialParamDefinition !== undefined;
+    }
+
+    /**
+     * Get the value of the material parameter
+     *
+     * @param name name of the material parameter
+     * @returns The `out` parameter, undefined if the parameter does not exists
+     */
+    getParam(name: string, out: any = null): any {
+        const materialParamDefinition = this.getParamDefinition(name);
+
+        if (materialParamDefinition) {
+            const engine = this._engine;
+            const wasm = engine.wasm;
+
+            if (wasm._wl_material_get_param_value(this._index, materialParamDefinition.index, wasm._tempMem)) {
+                const type = materialParamDefinition.type;
+                switch (type.type) {
+                    case MaterialParamType.UnsignedInt:
+                        if (type.componentCount == 1) {
+                            out = wasm._tempMemUint32[0];
+                        } else {
+                            out = out || new Uint32Array(type.componentCount);
+
+                            for (let i = 0; i < type.componentCount; ++i) {
+                                out[i] = wasm._tempMemUint32[i];
+                            }
+                        }
+
+                        return out;
+                    case MaterialParamType.Int:
+                        if (type.componentCount == 1) {
+                            out = wasm._tempMemInt[0];
+                        } else {
+                            out = out || new Int32Array(type.componentCount);
+
+                            for (let i = 0; i < type.componentCount; ++i) {
+                                out[i] = wasm._tempMemInt[i];
+                            }
+                        }
+
+                        return out;
+                    case MaterialParamType.Float:
+                        if (type.componentCount == 1) {
+                            out = wasm._tempMemFloat[0];
+                        } else {
+                            out = out || new Float32Array(type.componentCount);
+
+                            for (let i = 0; i < type.componentCount; ++i) {
+                                out[i] = wasm._tempMemInt[i];
+                            }
+                        }
+
+                        return out;
+                    case MaterialParamType.Sampler:
+                        out = engine.textures.wrap(wasm._tempMemInt[0]);
+                        return out;
+                    default:
+                        throw new Error(`Invalid type ${type.type} on parameter ${materialParamDefinition.index} for material ${this._index}`);
+                }
+            }
+        }
+
+        /* @todo: should it throws an error in this case? The current proxy version just return undefined */
+        return undefined;
+    }
+
+    /**
+     * Set the value of the material parameter
+     *
+     * @param name name of the material parameter
+     * @returns true if the value has been set, false otherwise
+     */
+    setParam(name: string, value: any) {
+        const materialParamDefinition = this.getParamDefinition(name);
+        if (materialParamDefinition) {
+            return this._setMaterialParamValue(materialParamDefinition, value);
+        }
+
+        return false;
     }
 
     /** @deprecated Use {@link #pipeline} instead. */
@@ -3614,6 +3688,42 @@ export class Material {
     static wrap(engine: WonderlandEngine, index: number): Material | null {
         /** @todo: this propagate nullable in the entire codebase. Remove. */
         return index > 0 ? new Material(engine, index) : null;
+    }
+
+    _setMaterialParamValue(materialParamDefinition: MaterialDefinition, value: any): any {
+        const engine = this._engine;
+        const wasm = engine.wasm;
+
+        const type = materialParamDefinition.type;
+        switch (type.type) {
+            case MaterialParamType.UnsignedInt:
+            case MaterialParamType.Int:
+            case MaterialParamType.Sampler:
+                const v = value.id ?? value;
+                wasm._wl_material_set_param_value_uint(this._index, materialParamDefinition.index, v);
+                break;
+            case MaterialParamType.Float:
+                let count = 1;
+                if (typeof value === 'number') {
+                    wasm._tempMemFloat[0] = value;
+                } else {
+                    count = value.length;
+                    for (let i = 0; i < count; ++i) {
+                        wasm._tempMemFloat[i] = value[i];
+                    }
+                }
+                wasm._wl_material_set_param_value_float(
+                    this._index,
+                    materialParamDefinition.index,
+                    wasm._tempMem,
+                    count
+                );
+                break;
+            case MaterialParamType.Font:
+                throw new Error('Setting font properties is currently unsupported.');
+        }
+
+        return false;
     }
 }
 
