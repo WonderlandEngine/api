@@ -3950,10 +3950,27 @@ export class Object3D {
      * a component property.
      */
     get children(): Object3D[] {
-        const childrenCount = this._engine.wasm._wl_object_get_children_count(
-            this.objectId
-        );
-        if (childrenCount === 0) return [];
+        return this.getChildren();
+    }
+
+    /**
+     * The number of children of this object.
+     */
+    getChildrenCount(): number {
+        return this._engine.wasm._wl_object_get_children_count(this.objectId);
+    }
+
+    /**
+     * Children of this object.
+     * The returned array might have more elements than the actual childre count, so you should rely
+     * on the this.getChildrenCount() value when iterating on it
+     * 
+     * @param out Destination array/vector, expected to have at least this.getChildrenCount() elements.
+     * @returns The `out` parameter.
+     */
+    getChildren(out: Object3D[] = new Array(this.getChildrenCount())): Object3D[] {
+        const childrenCount = this.getChildrenCount();
+        if (childrenCount === 0) return out;
 
         const wasm = this._engine.wasm;
         wasm.requireTempMem(childrenCount * 2);
@@ -3964,11 +3981,10 @@ export class Object3D {
             wasm._tempMemSize >> 1
         );
 
-        const children: Object3D[] = new Array(childrenCount);
         for (let i = 0; i < childrenCount; ++i) {
-            children[i] = this._engine.wrapObject(wasm._tempMemUint16[i]);
+            out[i] = this._engine.wrapObject(wasm._tempMemUint16[i]);
         }
-        return children;
+        return out;
     }
 
     /**
