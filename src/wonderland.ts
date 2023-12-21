@@ -3956,20 +3956,20 @@ export class Object3D {
     /**
      * The number of children of this object.
      */
-    getChildrenCount(): number {
+    get childrenCount(): number {
         return this._engine.wasm._wl_object_get_children_count(this.objectId);
     }
 
     /**
      * Children of this object.
      * The returned array might have more elements than the actual childre count, so you should rely
-     * on the this.getChildrenCount() value when iterating on it.
-     * 
-     * @param out Destination array, expected to have at least this.getChildrenCount() elements.
+     * on the this.childrenCount value when iterating on it.
+     *
+     * @param out Destination array, expected to have at least this.childrenCount elements.
      * @returns The `out` parameter.
      */
-    getChildren(out: Object3D[] = new Array(this.getChildrenCount())): Object3D[] {
-        const childrenCount = this.getChildrenCount();
+    getChildren(out: Object3D[] = new Array(this.childrenCount)): Object3D[] {
+        const childrenCount = this.childrenCount;
         if (childrenCount === 0) return out;
 
         const wasm = this._engine.wasm;
