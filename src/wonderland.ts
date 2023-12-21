@@ -3715,7 +3715,7 @@ export class Material {
             case MaterialParamType.UnsignedInt:
             case MaterialParamType.Int:
             case MaterialParamType.Sampler:
-                const v = value.id ?? value;
+                const v = (value as Texture).id ?? value;
                 wasm._wl_material_set_param_value_uint(
                     this._index,
                     materialParamDefinition.index,
@@ -3727,7 +3727,7 @@ export class Material {
                 if (typeof value === 'number') {
                     wasm._tempMemFloat[0] = value;
                 } else {
-                    count = value.length;
+                    count = (value as NumberArray).length;
                     for (let i = 0; i < count; ++i) {
                         wasm._tempMemFloat[i] = value[i];
                     }
