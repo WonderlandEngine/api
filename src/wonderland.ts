@@ -3563,7 +3563,10 @@ export class Material {
      * @param out destination of the material parameter value, its type and size depend on the parameter definition.
      * @returns The `out` parameter, undefined if the parameter does not exists.
      */
-    getParam(name: string, out: any = null): any {
+    getParam(
+        name: string,
+        out: number | NumberArray | Texture | undefined
+    ): number | NumberArray | Texture | undefined {
         const materialParamDefinition = this.getParamDefinition(name);
 
         if (materialParamDefinition) {
@@ -3637,7 +3640,7 @@ export class Material {
      * @param value the value to set on the parameter, its type and size depend on the parameter definition.
      * @returns true if the value has been set, false otherwise.
      */
-    setParam(name: string, value: any) {
+    setParam(name: string, value: number | NumberArray | Texture) {
         const materialParamDefinition = this.getParamDefinition(name);
         if (materialParamDefinition) {
             return this._setMaterialParamValue(materialParamDefinition, value);
@@ -3700,7 +3703,10 @@ export class Material {
         return index > 0 ? new Material(engine, index) : null;
     }
 
-    _setMaterialParamValue(materialParamDefinition: MaterialDefinition, value: any): any {
+    _setMaterialParamValue(
+        materialParamDefinition: MaterialDefinition,
+        value: number | NumberArray | Texture
+    ): boolean {
         const engine = this._engine;
         const wasm = engine.wasm;
 
@@ -3715,7 +3721,7 @@ export class Material {
                     materialParamDefinition.index,
                     v
                 );
-                break;
+                return true;
             case MaterialParamType.Float:
                 let count = 1;
                 if (typeof value === 'number') {
@@ -3732,7 +3738,7 @@ export class Material {
                     wasm._tempMem,
                     count
                 );
-                break;
+                return true;
             case MaterialParamType.Font:
                 throw new Error('Setting font properties is currently unsupported.');
         }
