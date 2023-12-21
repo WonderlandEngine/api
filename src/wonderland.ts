@@ -7,7 +7,7 @@ import {WonderlandEngine} from './engine.js';
 import {isNumber, isString} from './utils/object.js';
 import {Emitter} from './utils/event.js';
 import {ComponentProperty} from './property.js';
-import { MaterialDefinition, WASM } from './wasm.js';
+import {MaterialDefinition, WASM} from './wasm.js';
 
 /** Element that can be used as an image in the engine. */
 export type ImageLike = HTMLImageElement | HTMLVideoElement | HTMLCanvasElement;
@@ -3486,26 +3486,26 @@ export class Material {
                             return type.componentCount == 1
                                 ? wasm._tempMemUint32[0]
                                 : new Uint32Array(
-                                    wasm.HEAPU32.buffer,
-                                    wasm._tempMem,
-                                    type.componentCount
-                                );
+                                      wasm.HEAPU32.buffer,
+                                      wasm._tempMem,
+                                      type.componentCount
+                                  );
                         case MaterialParamType.Int:
                             return type.componentCount == 1
                                 ? wasm._tempMemInt[0]
                                 : new Int32Array(
-                                    wasm.HEAP32.buffer,
-                                    wasm._tempMem,
-                                    type.componentCount
-                                );
+                                      wasm.HEAP32.buffer,
+                                      wasm._tempMem,
+                                      type.componentCount
+                                  );
                         case MaterialParamType.Float:
                             return type.componentCount == 1
                                 ? wasm._tempMemFloat[0]
                                 : new Float32Array(
-                                    wasm.HEAPF32.buffer,
-                                    wasm._tempMem,
-                                    type.componentCount
-                                );
+                                      wasm.HEAPF32.buffer,
+                                      wasm._tempMem,
+                                      type.componentCount
+                                  );
                         case MaterialParamType.Sampler:
                             return engine.textures.wrap(wasm._tempMemInt[0]);
                         default:
@@ -3536,7 +3536,7 @@ export class Material {
      * Get the definition of the material parameter, which includes it's type and the amount of values.
      *
      * @param name name of the material parameter.
-     * @returns The parameter definition, or undefined if the requested material parameter does not exists. 
+     * @returns The parameter definition, or undefined if the requested material parameter does not exists.
      */
     getParamDefinition(name: string): MaterialDefinition | undefined {
         const wasm = this._engine.wasm;
@@ -3570,7 +3570,13 @@ export class Material {
             const engine = this._engine;
             const wasm = engine.wasm;
 
-            if (wasm._wl_material_get_param_value(this._index, materialParamDefinition.index, wasm._tempMem)) {
+            if (
+                wasm._wl_material_get_param_value(
+                    this._index,
+                    materialParamDefinition.index,
+                    wasm._tempMem
+                )
+            ) {
                 const type = materialParamDefinition.type;
                 switch (type.type) {
                     case MaterialParamType.UnsignedInt:
@@ -3613,7 +3619,9 @@ export class Material {
                         out = engine.textures.wrap(wasm._tempMemInt[0]);
                         return out;
                     default:
-                        throw new Error(`Invalid type ${type.type} on parameter ${materialParamDefinition.index} for material ${this._index}`);
+                        throw new Error(
+                            `Invalid type ${type.type} on parameter ${materialParamDefinition.index} for material ${this._index}`
+                        );
                 }
             }
         }
@@ -3702,7 +3710,11 @@ export class Material {
             case MaterialParamType.Int:
             case MaterialParamType.Sampler:
                 const v = value.id ?? value;
-                wasm._wl_material_set_param_value_uint(this._index, materialParamDefinition.index, v);
+                wasm._wl_material_set_param_value_uint(
+                    this._index,
+                    materialParamDefinition.index,
+                    v
+                );
                 break;
             case MaterialParamType.Float:
                 let count = 1;
