@@ -3536,12 +3536,18 @@ export class Material {
      * Get the definition of the material parameter, which includes it's type and the amount of values.
      *
      * @param name name of the material parameter.
-     * @returns The parameter definition, or undefined if the requested material parameter does not exists.
+     * @returns The parameter definition.
+     * @throws When the parameter is not yet supported.
      */
-    getParamDefinition(name: string): MaterialDefinition | undefined {
+    getParamDefinition(name: string): MaterialDefinition {
         const wasm = this._engine.wasm;
         const definition = wasm._materialDefinitions[this._definition];
         const materialParamDefinition = definition.get(name);
+
+        if (!materialParamDefinition) {
+            throw new Error(`Requested parameter '${name}' not yet supported`);
+        }
+
         return materialParamDefinition;
     }
 
@@ -3561,76 +3567,79 @@ export class Material {
      *
      * @param name name of the material parameter.
      * @param out destination of the material parameter value, its type and size depend on the parameter definition.
-     * @returns The `out` parameter, undefined if the parameter does not exists.
+     * @returns The `out` parameter.
+     * @throws When the parameter is not yet supported.
+     * @throws When the parameter type is not valid.
      */
     getParam(
         name: string,
-        out: number | NumberArray | Texture | undefined
-    ): number | NumberArray | Texture | undefined {
+        out: number | NumberArray | Texture
+    ): number | NumberArray | Texture {
         const materialParamDefinition = this.getParamDefinition(name);
 
-        if (materialParamDefinition) {
-            const engine = this._engine;
-            const wasm = engine.wasm;
-
-            if (
-                wasm._wl_material_get_param_value(
-                    this._index,
-                    materialParamDefinition.index,
-                    wasm._tempMem
-                )
-            ) {
-                const type = materialParamDefinition.type;
-                switch (type.type) {
-                    case MaterialParamType.UnsignedInt:
-                        if (type.componentCount == 1) {
-                            out = wasm._tempMemUint32[0];
-                        } else {
-                            out = out || new Uint32Array(type.componentCount);
-
-                            for (let i = 0; i < type.componentCount; ++i) {
-                                out[i] = wasm._tempMemUint32[i];
-                            }
-                        }
-
-                        return out;
-                    case MaterialParamType.Int:
-                        if (type.componentCount == 1) {
-                            out = wasm._tempMemInt[0];
-                        } else {
-                            out = out || new Int32Array(type.componentCount);
-
-                            for (let i = 0; i < type.componentCount; ++i) {
-                                out[i] = wasm._tempMemInt[i];
-                            }
-                        }
-
-                        return out;
-                    case MaterialParamType.Float:
-                        if (type.componentCount == 1) {
-                            out = wasm._tempMemFloat[0];
-                        } else {
-                            out = out || new Float32Array(type.componentCount);
-
-                            for (let i = 0; i < type.componentCount; ++i) {
-                                out[i] = wasm._tempMemInt[i];
-                            }
-                        }
-
-                        return out;
-                    case MaterialParamType.Sampler:
-                        out = engine.textures.wrap(wasm._tempMemInt[0]);
-                        return out;
-                    default:
-                        throw new Error(
-                            `Invalid type ${type.type} on parameter ${materialParamDefinition.index} for material ${this._index}`
-                        );
-                }
-            }
+        if (!materialParamDefinition) {
+            throw new Error(`Reading parameter '${name}' not yet supported`);
         }
 
-        /* @todo: should it throws an error in this case? The current proxy version just return undefined */
-        return undefined;
+        const engine = this._engine;
+        const wasm = engine.wasm;
+
+        if (
+            !wasm._wl_material_get_param_value(
+                this._index,
+                materialParamDefinition.index,
+                wasm._tempMem
+            )
+        ) {
+            throw new Error(`Reading parameter '${name}' not yet supported`);
+        }
+
+        const type = materialParamDefinition.type;
+        switch (type.type) {
+            case MaterialParamType.UnsignedInt:
+                if (type.componentCount == 1) {
+                    out = wasm._tempMemUint32[0];
+                } else {
+                    out = out || new Uint32Array(type.componentCount);
+
+                    for (let i = 0; i < type.componentCount; ++i) {
+                        out[i] = wasm._tempMemUint32[i];
+                    }
+                }
+
+                return out;
+            case MaterialParamType.Int:
+                if (type.componentCount == 1) {
+                    out = wasm._tempMemInt[0];
+                } else {
+                    out = out || new Int32Array(type.componentCount);
+
+                    for (let i = 0; i < type.componentCount; ++i) {
+                        out[i] = wasm._tempMemInt[i];
+                    }
+                }
+
+                return out;
+            case MaterialParamType.Float:
+                if (type.componentCount == 1) {
+                    out = wasm._tempMemFloat[0];
+                } else {
+                    out = out || new Float32Array(type.componentCount);
+
+                    for (let i = 0; i < type.componentCount; ++i) {
+                        out[i] = wasm._tempMemInt[i];
+                    }
+                }
+
+                return out;
+            case MaterialParamType.Sampler:
+                out = engine.textures.wrap(wasm._tempMemInt[0]);
+                return out;
+            default:
+                throw new Error(
+                    `Invalid type ${type.type} on parameter ${materialParamDefinition.index} for material ${this._index}`
+                );
+        }
     }
 
     /**
