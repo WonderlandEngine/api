@@ -3137,12 +3137,12 @@ export class Mesh {
         return this._engine.wasm._wl_mesh_get_vertexCount(this._index);
     }
 
-    /** Number of indices in this mesh, or 0 if the mesh is not indexed.  */
-    get indexCount(): number {
+    /** Number of indices in this mesh, or `null` if the mesh is not indexed.  */
+    get indexCount(): number | null {
         const wasm = this._engine.wasm;
         const tempMem = wasm._tempMem;
         const ptr = wasm._wl_mesh_get_indexData(this._index, tempMem, tempMem + 4);
-        if (ptr === null) return 0;
+        if (ptr === null) return null;
 
         return wasm.HEAPU32[tempMem / 4];
     }
@@ -3164,7 +3164,10 @@ export class Mesh {
      * @param indexCount Size of the array
      * @returns The newly created array, or `null` if the mesh is not indexed.
      */
-    static createMeshIndexArray(meshIndexType: MeshIndexType, indexCount: number): Uint8Array | Uint16Array | Uint32Array {
+    static createMeshIndexArray(
+        meshIndexType: MeshIndexType,
+        indexCount: number
+    ): Uint8Array | Uint16Array | Uint32Array {
         let indexArray: Uint8Array | Uint16Array | Uint32Array;
 
         switch (meshIndexType) {
@@ -3212,7 +3215,9 @@ export class Mesh {
      * @returns The `out` parameter.
      */
     getIndexData<T extends Uint8Array | Uint16Array | Uint32Array | null>(out: T): T;
-    getIndexData(out?: Uint8Array | Uint16Array | Uint32Array | null): Uint8Array | Uint16Array | Uint32Array | null {
+    getIndexData(
+        out?: Uint8Array | Uint16Array | Uint32Array | null
+    ): Uint8Array | Uint16Array | Uint32Array | null {
         const wasm = this._engine.wasm;
         const tempMem = wasm._tempMem;
         const ptr = wasm._wl_mesh_get_indexData(this._index, tempMem, tempMem + 4);
@@ -3718,26 +3723,26 @@ export class Material {
                             return type.componentCount == 1
                                 ? wasm._tempMemUint32[0]
                                 : new Uint32Array(
-                                    wasm.HEAPU32.buffer,
-                                    wasm._tempMem,
-                                    type.componentCount
-                                );
+                                      wasm.HEAPU32.buffer,
+                                      wasm._tempMem,
+                                      type.componentCount
+                                  );
                         case MaterialParamType.Int:
                             return type.componentCount == 1
                                 ? wasm._tempMemInt[0]
                                 : new Int32Array(
-                                    wasm.HEAP32.buffer,
-                                    wasm._tempMem,
-                                    type.componentCount
-                                );
+                                      wasm.HEAP32.buffer,
+                                      wasm._tempMem,
+                                      type.componentCount
+                                  );
                         case MaterialParamType.Float:
                             return type.componentCount == 1
                                 ? wasm._tempMemFloat[0]
                                 : new Float32Array(
-                                    wasm.HEAPF32.buffer,
-                                    wasm._tempMem,
-                                    type.componentCount
-                                );
+                                      wasm.HEAPF32.buffer,
+                                      wasm._tempMem,
+                                      type.componentCount
+                                  );
                         case MaterialParamType.Sampler:
                             return engine.textures.wrap(wasm._tempMemInt[0]);
                         default:
@@ -4066,9 +4071,9 @@ export class Animation {
         if (newTargets.length != this.trackCount) {
             throw Error(
                 'Expected ' +
-                this.trackCount.toString() +
-                ' targets, but got ' +
-                newTargets.length.toString()
+                    this.trackCount.toString() +
+                    ' targets, but got ' +
+                    newTargets.length.toString()
             );
         }
         const ptr = wasm._malloc(2 * newTargets.length);
