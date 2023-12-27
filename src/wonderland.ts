@@ -3496,26 +3496,26 @@ export class Material {
                             return type.componentCount == 1
                                 ? wasm._tempMemUint32[0]
                                 : new Uint32Array(
-                                    wasm.HEAPU32.buffer,
-                                    wasm._tempMem,
-                                    type.componentCount
-                                );
+                                      wasm.HEAPU32.buffer,
+                                      wasm._tempMem,
+                                      type.componentCount
+                                  );
                         case MaterialParamType.Int:
                             return type.componentCount == 1
                                 ? wasm._tempMemInt[0]
                                 : new Int32Array(
-                                    wasm.HEAP32.buffer,
-                                    wasm._tempMem,
-                                    type.componentCount
-                                );
+                                      wasm.HEAP32.buffer,
+                                      wasm._tempMem,
+                                      type.componentCount
+                                  );
                         case MaterialParamType.Float:
                             return type.componentCount == 1
                                 ? wasm._tempMemFloat[0]
                                 : new Float32Array(
-                                    wasm.HEAPF32.buffer,
-                                    wasm._tempMem,
-                                    type.componentCount
-                                );
+                                      wasm.HEAPF32.buffer,
+                                      wasm._tempMem,
+                                      type.componentCount
+                                  );
                         case MaterialParamType.Sampler:
                             return engine.textures.wrap(wasm._tempMemInt[0]);
                         default:
@@ -3844,9 +3844,9 @@ export class Animation {
         if (newTargets.length != this.trackCount) {
             throw Error(
                 'Expected ' +
-                this.trackCount.toString() +
-                ' targets, but got ' +
-                newTargets.length.toString()
+                    this.trackCount.toString() +
+                    ' targets, but got ' +
+                    newTargets.length.toString()
             );
         }
         const ptr = wasm._malloc(2 * newTargets.length);

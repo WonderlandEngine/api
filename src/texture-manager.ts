@@ -59,8 +59,8 @@ export class TextureManager {
                 if (!texture.valid) {
                     reject(
                         'Failed to add image ' +
-                        image.src +
-                        ' to texture atlas. Probably incompatible format.'
+                            image.src +
+                            ' to texture atlas. Probably incompatible format.'
                     );
                 }
                 resolve(texture);
