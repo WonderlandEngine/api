@@ -5680,7 +5680,7 @@ export class RayHit {
      */
     getLocations<T extends NumberArray[]>(out: T): T;
     getLocations(out?: NumberArray[]): NumberArray[] {
-        if (!out) out = Array.from({ length: this.hitCount }, () => new Float32Array(3));
+        if (!out) out = Array.from({length: this.hitCount}, () => new Float32Array(3));
 
         const wasm = this._engine.wasm;
         const alignedPtr = this._ptr / 4; /* Align F32 */
@@ -5714,7 +5714,7 @@ export class RayHit {
      */
     getNormals<T extends NumberArray[]>(out: T): T;
     getNormals(out?: NumberArray[]): NumberArray[] {
-        if (!out) out = Array.from({ length: this.hitCount }, () => new Float32Array(3));
+        if (!out) out = Array.from({length: this.hitCount}, () => new Float32Array(3));
 
         const wasm = this._engine.wasm;
         const alignedPtr = (this._ptr + 48) / 4; /* Align F32 */
@@ -5741,7 +5741,7 @@ export class RayHit {
     getDistances(): Float32Array;
     /**
      * Prefer these to recalculating the distance from locations.
-     * 
+     *
      * Distances of array hits to ray origin.
      *
      * @param out Destination array/vector, expected to have at least this.hitCount elements.
