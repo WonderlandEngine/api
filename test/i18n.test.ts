@@ -34,10 +34,9 @@ describe('I18N', function () {
     it('language', async function () {
         await WL.scene.load('test/resources/projects/LanguageSwitching.bin');
 
-        const root = new Object3D(WL.scene.engine, 0);
-        expect(root.children).to.have.a.lengthOf(2);
+        expect(WL.scene.children).to.have.a.lengthOf(2);
 
-        const textObject = root.children[1];
+        const textObject = WL.scene.children[1];
         expect(textObject).to.not.be.null;
         const text = textObject.getComponent(TextComponent)!;
         expect(text).to.not.be.null;

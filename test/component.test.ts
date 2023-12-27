@@ -99,10 +99,9 @@ describe('MeshComponent', function () {
         /* This test ensures that skins are properly duplicated and re-targeted.
          * When cloning an object containing a skin in its hierarchy, all meshes insides
          * the hierarchy must point to the newly copied skin. */
-        await WL.scene.load(projectURL('TestSkinnedMesh.bin'));
+        await WL.scene.load(projectURL('Advanced.bin'));
 
-        const root = new Object3D(WL, 0);
-        const skinnedObject = root.findByName('Skinned')[0];
+        const skinnedObject = WL.scene.findByName('Skinned')[0];
         expect(skinnedObject).to.not.be.undefined;
         const mesh = skinnedObject.findByName('object_0')[0].getComponent('mesh')!;
         expect(mesh).to.not.be.null;

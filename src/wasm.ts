@@ -1,6 +1,8 @@
+import {LogTag} from './index.js';
 import {WonderlandEngine} from './engine.js';
 import {ComponentProperty, Type} from './property.js';
 import {RetainEmitter} from './utils/event.js';
+import {Logger} from './utils/logger.js';
 import {
     inheritProperties,
     Animation,
@@ -31,7 +33,7 @@ export interface MaterialDefinition {
 
 type XRRequestSessionFunction = (
     mode: XRSessionMode,
-    requiredFeatures: string[],
+    features: string[],
     optionalFeatures: string[]
 ) => Promise<XRSession>;
 
@@ -131,6 +133,13 @@ export class WASM {
     readonly webxr_requestSession: XRRequestSessionFunction = null!;
 
     /**
+     * Emscripten WebXR offer session callback.
+     *
+     * @note This api is meant to be used internally.
+     */
+    readonly webxr_offerSession: XRRequestSessionFunction = null!;
+
+    /**
      * Emscripten WebXR frame.
      *
      * @note This api is meant to be used internally.
@@ -192,6 +201,9 @@ export class WASM {
      * @returns JavaScript string
      */
     UTF8ViewToString: (ptr: number, ptrEnd: number) => string;
+
+    /** Logger instance. */
+    readonly _log: Logger = new Logger();
 
     /** If `true`, logs will not spam the console on error. */
     _deactivate_component_on_error: boolean = false;
@@ -288,9 +300,16 @@ export class WASM {
      * @note Should only be called when tearing down the runtime.
      */
     reset() {
+        /* Cancel in-flight images */
+        for (const img of this._images) {
+            if (!img || !(img as HTMLImageElement).src) continue;
+            (img as HTMLImageElement).src = '';
+            img.onload = null;
+            img.onerror = null;
+        }
+        this._images = [];
         this.allocateTempMemory(1024);
         this._materialDefinitions = [];
-        this._images = [];
         this._components = [];
         this._componentTypes = [];
         this._componentTypeIndices = {};
@@ -358,7 +377,8 @@ export class WASM {
 
         if (ctor === BrokenComponent) return typeIndex;
 
-        console.log(
+        this._log.info(
+            LogTag.Engine,
             'Registered component',
             ctor.TypeName,
             `(class ${ctor.name})`,
@@ -378,7 +398,7 @@ export class WASM {
      * @param size The number of bytes to allocate
      */
     allocateTempMemory(size: number) {
-        console.log('Allocating temp mem:', size);
+        this._log.info(LogTag.Engine, 'Allocating temp mem:', size);
         this._tempMemSize = size;
         if (this._tempMem) this._free(this._tempMem);
         this._tempMem = this._malloc(this._tempMemSize);
@@ -731,7 +751,11 @@ export class WASM {
         try {
             component = new ctor();
         } catch (e) {
-            console.error(`Exception during instantiation of component ${ctor.TypeName}`);
+            this._log.error(
+                LogTag.Component,
+                `Exception during instantiation of component ${ctor.TypeName}`
+            );
+            this._log.error(LogTag.Component, e);
             component = new BrokenComponent(this._engine);
         }
         /* Sets the manager and identifier from the outside, to simplify the user's constructor. */
@@ -744,9 +768,11 @@ export class WASM {
         try {
             component.resetProperties();
         } catch (e) {
-            console.error(
+            this._log.error(
+                LogTag.Component,
                 `Exception during ${component.type} resetProperties() on object ${component.object.name}`
             );
+            this._log.error(LogTag.Component, e);
         }
 
         this._components[index] = component;
@@ -782,9 +808,11 @@ export class WASM {
         try {
             destComp.copy(this._components[src]);
         } catch (e) {
-            console.error(
+            this._log.error(
+                LogTag.Component,
                 `Exception during ${destComp.type} copy() on object ${destComp.object.name}`
             );
+            this._log.error(LogTag.Component, e);
         }
     }
 }
@@ -1004,6 +1032,8 @@ export interface WASM {
         z: number,
         w: number
     ) => void;
+    _wl_physx_component_set_sleepOnActivate: (id: number, flag: boolean) => void;
+    _wl_physx_component_get_sleepOnActivate: (id: number) => number;
     _wl_physx_component_set_massSpaceInertiaTensor: (
         id: number,
         x: number,
@@ -1291,6 +1321,7 @@ function throwInvalidRuntime(version: string) {
     };
 }
 const requireRuntime1_1_1 = throwInvalidRuntime('1.1.1');
+const requireRuntime1_1_5 = throwInvalidRuntime('1.1.5');
 
 /** @todo: Remove at 1.2.0 */
 WASM.prototype._wl_physx_component_get_offsetTranslation = requireRuntime1_1_1;
@@ -1298,3 +1329,6 @@ WASM.prototype._wl_physx_component_set_offsetTranslation = requireRuntime1_1_1;
 WASM.prototype._wl_physx_component_get_offsetTransform = requireRuntime1_1_1;
 WASM.prototype._wl_physx_component_set_offsetRotation = requireRuntime1_1_1;
 WASM.prototype._wl_object_clone = requireRuntime1_1_1;
+WASM.prototype._wl_physx_component_set_sleepOnActivate = requireRuntime1_1_5;
+WASM.prototype._wl_physx_component_get_sleepOnActivate = requireRuntime1_1_5;
+(WASM.prototype.webxr_offerSession as Function) = requireRuntime1_1_5;

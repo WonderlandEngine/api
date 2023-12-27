@@ -29,12 +29,18 @@ type Listener<T extends unknown[]> = ListenerOptions & {
     callback: ListenerCallback<T>;
 };
 
+/** Internal type for transaction. */
+enum TransactionType {
+    Addition = 1,
+    Removal = 2,
+}
+
 /**
  * Event emitter.
  *
  * This class allows to register listeners that will get notified by the emitter.
  *
- * Usage example
+ * Usage example:
  *
  * ```js
  * // `onPreRender` is an `Emitter` instance.
@@ -71,6 +77,24 @@ export class Emitter<T extends unknown[] = void[]> {
     protected readonly _listeners: Listener<T>[] = [];
 
     /**
+     * `true` if the emitter is currently notifying listeners. This
+     * is used to defer addition and removal.
+     *
+     * @hidden
+     */
+    private _notifying = false;
+
+    /**
+     * Pending additions / removals, performed during a notification.
+     *
+     * @hidden
+     */
+    private readonly _transactions: {
+        type: TransactionType;
+        data: Listener<T> | ListenerCallback<T>;
+    }[] = [];
+
+    /**
      * Register a new listener to be triggered on {@link Emitter.notify}.
      *
      * Basic usage:
@@ -99,7 +123,12 @@ export class Emitter<T extends unknown[] = void[]> {
      */
     add(listener: ListenerCallback<T>, opts: Partial<ListenerOptions> = {}): this {
         const {once = false, id = undefined} = opts;
-        this._listeners.push({id, once, callback: listener});
+        const data = {id, once, callback: listener};
+        if (this._notifying) {
+            this._transactions.push({type: TransactionType.Addition, data});
+            return this;
+        }
+        this._listeners.push(data);
         return this;
     }
 
@@ -197,6 +226,11 @@ export class Emitter<T extends unknown[] = void[]> {
      * @returns Reference to self (for method chaining)
      */
     remove(listener: ListenerCallback<T> | any): this {
+        if (this._notifying) {
+            this._transactions.push({type: TransactionType.Removal, data: listener});
+            return this;
+        }
+
         const listeners = this._listeners;
         for (let i = 0; i < listeners.length; ++i) {
             const target = listeners[i];
@@ -211,6 +245,9 @@ export class Emitter<T extends unknown[] = void[]> {
      * Check whether the listener is registered.
      *
      * @note This method performs a linear search.
+     *
+     * * @note Doesn't account for pending listeners, i.e.,
+     * listeners added / removed during a notification.
      *
      * @param listener The registered callback or a value representing the `id`.
      * @returns `true` if the handle is found, `false` otherwise.
@@ -236,6 +273,7 @@ export class Emitter<T extends unknown[] = void[]> {
     notify(...data: T): void {
         const listeners = this._listeners;
 
+        this._notifying = true;
         for (let i = 0; i < listeners.length; ++i) {
             const listener = listeners[i];
             if (listener.once) listeners.splice(i--, 1);
@@ -245,6 +283,10 @@ export class Emitter<T extends unknown[] = void[]> {
                 console.error(e);
             }
         }
+        this._notifying = false;
+
+        /* Process deferred additions & removals */
+        this._flushTransactions();
     }
 
     /**
@@ -264,6 +306,9 @@ export class Emitter<T extends unknown[] = void[]> {
             if (listener.once) listeners.splice(i--, 1);
             listener.callback(...data);
         }
+
+        /* Process deferred additions & removals */
+        this._flushTransactions();
     }
 
     /**
@@ -286,7 +331,12 @@ export class Emitter<T extends unknown[] = void[]> {
         });
     }
 
-    /** Number of listeners. */
+    /**
+     * Number of listeners.
+     *
+     * @note Doesn't account for pending listeners, i.e.,
+     * listeners added / removed during a notification.
+     */
     get listenerCount() {
         return this._listeners.length;
     }
@@ -294,6 +344,23 @@ export class Emitter<T extends unknown[] = void[]> {
     /** `true` if it has no listeners, `false` otherwise. */
     get isEmpty() {
         return this.listenerCount === 0;
+    }
+
+    /**
+     * Flush all pending transactions.
+     *
+     * @hidden
+     */
+    private _flushTransactions() {
+        const listeners = this._listeners;
+        for (const transaction of this._transactions) {
+            if (transaction.type === TransactionType.Addition) {
+                listeners.push(transaction.data as Listener<T>);
+            } else {
+                this.remove(transaction.data as ListenerCallback<T>);
+            }
+        }
+        this._transactions.length = 0;
     }
 }
 

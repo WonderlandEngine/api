@@ -1,4 +1,5 @@
 import {WonderlandEngine} from './engine.js';
+import {LogTag} from './index.js';
 import {Emitter} from './utils/event.js';
 import {fetchWithProgress, getBaseUrl} from './utils/fetch.js';
 import {clamp, timeout} from './utils/misc.js';
@@ -242,6 +243,66 @@ export class Scene {
     }
 
     /**
+     * Top-level objects of this scene.
+     *
+     * See {@link Object3D.children} for more information.
+     *
+     * @since 1.2.0
+     */
+    get children(): Object3D[] {
+        const root = this._engine.wrapObject(0);
+        return root.children;
+    }
+
+    /**
+     * Search for objects matching the name.
+     *
+     * See {@link Object3D.findByName} for more information.
+     *
+     * @param name The name to search for.
+     * @param recursive If `true`, the method will look at all the objects of
+     *     this scene. If `false`, this method will only perform the search in
+     *     root objects.
+     * @returns An array of {@link Object3D} matching the name.
+     *
+     * @since 1.2.0
+     */
+    findByName(name: string, recursive = false): Object3D[] {
+        const root = this._engine.wrapObject(0);
+        return root.findByName(name, recursive);
+    }
+
+    /**
+     * Search for all **top-level** objects matching the name.
+     *
+     * See {@link Object3D.findByNameDirect} for more information.
+     *
+     * @param name The name to search for.
+     * @returns An array of {@link Object3D} matching the name.
+     *
+     * @since 1.2.0
+     */
+    findByNameDirect(name: string): Object3D[] {
+        const root = this._engine.wrapObject(0);
+        return root.findByNameDirect(name);
+    }
+
+    /**
+     * Search for **all objects** matching the name.
+     *
+     * See {@link Object3D.findByNameRecursive} for more information.
+     *
+     * @param name The name to search for.
+     * @returns An array of {@link Object3D} matching the name.
+     *
+     * @since 1.2.0
+     */
+    findByNameRecursive(name: string): Object3D[] {
+        const root = this._engine.wrapObject(0);
+        return root.findByNameRecursive(name);
+    }
+
+    /**
      * Set the background clear color.
      *
      * @param color new clear color (RGBA).
@@ -307,11 +368,14 @@ export class Scene {
         if (isString(options)) {
             filename = options;
             buffer = await fetchWithProgress(filename, (bytes, size) => {
-                console.log(`Scene downloading: ${bytes} / ${size}`);
+                this.engine.log.info(LogTag.Scene, `Scene downloading: ${bytes} / ${size}`);
                 this.setLoadingProgress(bytes / size);
             });
             baseURL = getBaseUrl(filename);
-            console.log(`Scene download of ${buffer.byteLength} bytes successful.`);
+            this.engine.log.info(
+                LogTag.Scene,
+                `Scene download of ${buffer.byteLength} bytes successful.`
+            );
         } else {
             ({buffer, baseURL} = options);
             filename = baseURL ? `${baseURL}/scene.bin` : 'scene.bin';
@@ -322,6 +386,10 @@ export class Scene {
         }
         if (!isString(baseURL)) {
             throw new Error('Failed to load scene, baseURL not provided');
+        }
+
+        if (!this._engine.onLoadingScreenEnd.isDataRetained) {
+            this._engine.onLoadingScreenEnd.notify();
         }
 
         this._baseURL = baseURL;

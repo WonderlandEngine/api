@@ -6,7 +6,7 @@ import {Texture} from './wonderland.js';
  *
  * This manager is accessible on the engine instance using {@link WonderlandEngine.textures}.
  *
- * Usage
+ * Usage:
  *
  * ```js
  * this.engine.load('path/to/texture.png').then((texture) => {

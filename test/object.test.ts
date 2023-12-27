@@ -2,22 +2,13 @@ import {expect, use} from '@esm-bundle/chai';
 import {chaiAlmost} from './chai/almost.js';
 
 import {init, reset, WL} from './setup.js';
+import {objectSort} from './utils';
 import {Object3D} from '..';
 
 before(init);
 beforeEach(reset);
 
 use(chaiAlmost());
-
-/**
- * Comparator to use when sorting on an array of `Object3D`.
- *
- * @param a The first object to compare.
- * @param b The second object to compare.
- */
-function objectSort(a: Object3D, b: Object3D) {
-    return a.objectId - b.objectId;
-}
 
 function objectsToIds(objects: Object3D[]): number[] {
     return objects.map((o) => o.objectId).sort();

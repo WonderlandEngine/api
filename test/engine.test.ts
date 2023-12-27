@@ -2,7 +2,14 @@ import {expect} from '@esm-bundle/chai';
 
 import {init, WL} from './setup.js';
 
-import {checkRuntimeCompatibility, APIVersion, loadRuntime, Component, Version} from '..';
+import {
+    checkRuntimeCompatibility,
+    APIVersion,
+    loadRuntime,
+    Component,
+    Version,
+    LogLevel,
+} from '..';
 import * as promise from './chai/promise.js';
 
 const TestCanvas = '_WL_test_canvas_';
@@ -75,6 +82,7 @@ describe('Engine', function () {
             simd: false,
             threads: false,
             canvas: TestCanvas,
+            logs: [LogLevel.Error],
         });
         expect(engine.scene).to.not.equal(WL.scene);
 
@@ -95,6 +103,7 @@ describe('Engine', function () {
                 simd: false,
                 threads: false,
                 canvas: TestCanvas,
+                logs: [LogLevel.Error],
             });
         }
 

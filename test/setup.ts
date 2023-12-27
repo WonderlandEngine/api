@@ -1,4 +1,4 @@
-import {loadRuntime, LoadRuntimeOptions, WonderlandEngine} from '..';
+import {loadRuntime, LoadRuntimeOptions, LogLevel, WonderlandEngine} from '..';
 
 export let WL: WonderlandEngine = null!;
 
@@ -27,6 +27,7 @@ export async function init(options: Partial<LoadRuntimeOptions> = {}) {
         physx,
         loadingScreen: 'deploy/WonderlandRuntime-LoadingScreen.bin',
         canvas: 'canvas',
+        logs: [LogLevel.Error],
     });
     engine.autoResizeCanvas = false;
     engine.resize(canvas.clientWidth, canvas.clientHeight);
