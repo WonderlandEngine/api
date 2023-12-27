@@ -3535,9 +3535,9 @@ export class Material {
     /**
      * Get the definition of the material parameter, which includes it's type and the amount of values.
      *
-     * @param name name of the material parameter.
+     * @param name Name of the material parameter.
      * @returns The parameter definition.
-     * @throws When the parameter is not yet supported.
+     * @throws When the parameter does not exists on the material.
      */
     getParamDefinition(name: string): MaterialDefinition {
         const wasm = this._engine.wasm;
@@ -3545,31 +3545,31 @@ export class Material {
         const materialParamDefinition = definition.get(name);
 
         if (!materialParamDefinition) {
-            throw new Error(`Requested parameter '${name}' not yet supported`);
+            throw new Error(`Parameter '${name}' does not exist on this material`);
         }
 
         return materialParamDefinition;
     }
 
     /**
-     * If the param exists on the material or not.
+     * Check whether the parameter exists on the material or not.
      *
-     * @param name name of the material parameter.
-     * @returns true if the parameter exists on the material, false otherwise.
+     * @param name Name of the material parameter.
+     * @returns `true` if the parameter exists on the material, `false` otherwise.
      */
     hasParam(name: string): boolean {
-        const materialParamDefinition = this.getParamDefinition(name);
-        return materialParamDefinition !== undefined;
+        const wasm = this._engine.wasm;
+        const definition = wasm._materialDefinitions[this._definition];
+        return definition.has(name);
     }
 
     /**
      * Get the value of the material parameter.
      *
-     * @param name name of the material parameter.
-     * @param out destination of the material parameter value, its type and size depend on the parameter definition.
+     * @param name Name of the material parameter.
+     * @param out Destination of the material parameter value, its type and size depend on the parameter definition.
      * @returns The `out` parameter.
-     * @throws When the parameter is not yet supported.
-     * @throws When the parameter type is not valid.
+     * @throws When the parameter does not exists on the material, when is not yet supported, or when its type is not valid.
      */
     getParam(
         name: string,
@@ -3578,7 +3578,7 @@ export class Material {
         const materialParamDefinition = this.getParamDefinition(name);
 
         if (!materialParamDefinition) {
-            throw new Error(`Reading parameter '${name}' not yet supported`);
+            throw new Error(`Parameter '${name}' does not exist on this material`);
         }
 
         const engine = this._engine;
@@ -3645,17 +3645,18 @@ export class Material {
     /**
      * Set the value of the material parameter.
      *
-     * @param name name of the material parameter.
-     * @param value the value to set on the parameter, its type and size depend on the parameter definition.
-     * @returns true if the value has been set, false otherwise.
+     * @param name Name of the material parameter.
+     * @param value The value to set on the parameter, its type and size depend on the parameter definition and component count.
+     * @throws When the parameter does not exists on the material.
      */
     setParam(name: string, value: number | NumberArray | Texture) {
         const materialParamDefinition = this.getParamDefinition(name);
-        if (materialParamDefinition) {
-            return this._setMaterialParamValue(materialParamDefinition, value);
+
+        if (!materialParamDefinition) {
+            throw new Error(`Parameter '${name}' does not exist on this material`);
         }
 
-        return false;
+        this._setMaterialParamValue(materialParamDefinition, value);
     }
 
     /** @deprecated Use {@link #pipeline} instead. */
@@ -3712,10 +3713,10 @@ export class Material {
         return index > 0 ? new Material(engine, index) : null;
     }
 
-    _setMaterialParamValue(
+    private _setMaterialParamValue(
         materialParamDefinition: MaterialDefinition,
         value: number | NumberArray | Texture
-    ): boolean {
+    ) {
         const engine = this._engine;
         const wasm = engine.wasm;
 
@@ -3730,7 +3731,7 @@ export class Material {
                     materialParamDefinition.index,
                     v
                 );
-                return true;
+                return;
             case MaterialParamType.Float:
                 let count = 1;
                 if (typeof value === 'number') {
@@ -3747,12 +3748,12 @@ export class Material {
                     wasm._tempMem,
                     count
                 );
-                return true;
+                return;
             case MaterialParamType.Font:
                 throw new Error('Setting font properties is currently unsupported.');
+            default:
+                throw new Error(`Parameter type '${name}' not yet supported`);
         }
-
-        return false;
     }
 }
 
