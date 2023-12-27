@@ -3568,13 +3568,11 @@ export class Material {
      *
      * @param name Name of the material parameter.
      * @param out Destination of the material parameter value, its type and size depend on the parameter definition.
+     *            The out parameter is only used for array types.
      * @returns The `out` parameter.
      * @throws When the parameter does not exists on the material, when is not yet supported, or when its type is not valid.
      */
-    getParam(
-        name: string,
-        out: number | NumberArray | Texture
-    ): number | NumberArray | Texture {
+    getParam(name: string, out: NumberArray): number | NumberArray | Texture {
         const materialParamDefinition = this.getParamDefinition(name);
 
         if (!materialParamDefinition) {
@@ -3598,43 +3596,38 @@ export class Material {
         switch (type.type) {
             case MaterialParamType.UnsignedInt:
                 if (type.componentCount == 1) {
-                    out = wasm._tempMemUint32[0];
-                } else {
-                    out = out || new Uint32Array(type.componentCount);
+                    return wasm._tempMemUint32[0];
+                }
 
-                    for (let i = 0; i < type.componentCount; ++i) {
-                        out[i] = wasm._tempMemUint32[i];
-                    }
+                out = out || new Uint32Array(type.componentCount);
+                for (let i = 0; i < type.componentCount; ++i) {
+                    out[i] = wasm._tempMemUint32[i];
                 }
 
                 return out;
             case MaterialParamType.Int:
                 if (type.componentCount == 1) {
-                    out = wasm._tempMemInt[0];
-                } else {
-                    out = out || new Int32Array(type.componentCount);
+                    return wasm._tempMemInt[0];
+                }
 
-                    for (let i = 0; i < type.componentCount; ++i) {
-                        out[i] = wasm._tempMemInt[i];
-                    }
+                out = out || new Int32Array(type.componentCount);
+                for (let i = 0; i < type.componentCount; ++i) {
+                    out[i] = wasm._tempMemInt[i];
                 }
 
                 return out;
             case MaterialParamType.Float:
                 if (type.componentCount == 1) {
-                    out = wasm._tempMemFloat[0];
-                } else {
-                    out = out || new Float32Array(type.componentCount);
-
-                    for (let i = 0; i < type.componentCount; ++i) {
-                        out[i] = wasm._tempMemInt[i];
-                    }
+                    return wasm._tempMemFloat[0];
+                }
+                out = out || new Float32Array(type.componentCount);
+                for (let i = 0; i < type.componentCount; ++i) {
+                    out[i] = wasm._tempMemInt[i];
                 }
 
                 return out;
             case MaterialParamType.Sampler:
-                out = engine.textures.wrap(wasm._tempMemInt[0]);
-                return out;
+                return engine.textures.wrap(wasm._tempMemInt[0]);
             default:
                 throw new Error(
                     `Invalid type ${type.type} on parameter ${materialParamDefinition.index} for material ${this._index}`
