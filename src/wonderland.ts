@@ -5661,12 +5661,7 @@ export class RayHit {
 
     /** Array of ray hit locations. */
     get locations(): Float32Array[] {
-        let p = this._ptr;
-        let l = [];
-        for (let i = 0; i < this.hitCount; ++i) {
-            l.push(new Float32Array(this._engine.wasm.HEAPF32.buffer, p + 12 * i, 3));
-        }
-        return l;
+        return this.getLocations();
     }
 
     /** @overload */
@@ -5695,12 +5690,7 @@ export class RayHit {
 
     /** Array of ray hit normals (only when using {@link Physics#rayCast}. */
     get normals(): Float32Array[] {
-        let p = this._ptr + 48;
-        let l = [];
-        for (let i = 0; i < this.hitCount; ++i) {
-            l.push(new Float32Array(this._engine.wasm.HEAPF32.buffer, p + 12 * i, 3));
-        }
-        return l;
+        return this.getNormals();
     }
 
     /** @overload */
@@ -5733,8 +5723,7 @@ export class RayHit {
      * Distances of array hits to ray origin.
      */
     get distances(): Float32Array {
-        const p = this._ptr + 48 * 2;
-        return new Float32Array(this._engine.wasm.HEAPF32.buffer, p, this.hitCount);
+        return this.getDistances();
     }
 
     /** @overload */
@@ -5760,14 +5749,7 @@ export class RayHit {
 
     /** Hit objects */
     get objects(): (Object3D | null)[] {
-        const HEAPU16 = this._engine.wasm.HEAPU16;
-        const objects: (Object3D | null)[] = [null, null, null, null];
-
-        let p = (this._ptr + (48 * 2 + 16)) >> 1;
-        for (let i = 0; i < this.hitCount; ++i) {
-            objects[i] = this._engine.wrapObject(HEAPU16[p + i]);
-        }
-        return objects;
+        return this.getObjects();
     }
 
     /** @overload */
