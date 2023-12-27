@@ -97,6 +97,47 @@ describe('Emitter', function () {
         expect(count).to.deep.equal({a: 1, b: 0});
     });
 
+    it('.notify() with nested .add()', function () {
+        const emitter = new Emitter();
+
+        const count = {a: 0, b: 0};
+        const a = () => ++count.a;
+        const b = () => ++count.b;
+
+        emitter.add(() => emitter.add(a));
+        emitter.add(() => emitter.add(b));
+
+        emitter.notify();
+        expect(count).to.deep.equal({a: 0, b: 0});
+        emitter.notify();
+        expect(count).to.deep.equal({a: 1, b: 1});
+        emitter.notify();
+        expect(count).to.deep.equal({a: 3, b: 3});
+    });
+
+    it('.notify() with nested .remove()', function () {
+        const emitter = new Emitter();
+
+        const count = {a: 0, b: 0, c: 0};
+        const a = () => ++count.a;
+        const b = () => ++count.b;
+        const c = () => ++count.c;
+
+        emitter.add(a);
+        emitter.add(() => {
+            emitter.remove(a);
+            emitter.add(c);
+            emitter.remove(b);
+        });
+        emitter.add(b);
+
+        emitter.notify();
+        expect(count).to.deep.equal({a: 1, b: 1, c: 0});
+        emitter.notify();
+        expect(count).to.deep.equal({a: 1, b: 1, c: 1});
+        expect(emitter.listenerCount).to.equal(3); /* `c` added twice at this point */
+    });
+
     it('.remove() with reference', function () {
         const emitter = new Emitter();
         const count = {a: 0, b: 0, c: 0};
@@ -286,7 +327,7 @@ describe('RetainEmitter', function () {
         emitter.remove('listener');
     });
 
-    it('alreadu resolved references', function () {
+    it('already resolved references', function () {
         const expectedA = {myNumber: 43};
         const expectedB = {myString: 'Hello Planet!'};
         const emitter = new RetainEmitter<[typeof expectedA, typeof expectedB]>();
@@ -301,6 +342,23 @@ describe('RetainEmitter', function () {
         });
         expect(result.a).equal(expectedA);
         expect(result.b).equal(expectedB);
+    });
+
+    it('.notify() with nested .add() already resolved', function () {
+        const emitter = new RetainEmitter<[number, string]>();
+
+        const count = {a: 0, b: 0};
+        const a = () => ++count.a;
+        const b = () => ++count.b;
+
+        emitter.add(() => emitter.add(a));
+        emitter.add(() => emitter.add(b));
+        expect(count).to.deep.equal({a: 0, b: 0});
+
+        /* Notify will add a and b which should be immediately called */
+        emitter.notify(42, 'Hello World!');
+
+        expect(count).to.deep.equal({a: 1, b: 1});
     });
 
     it('reset', function () {

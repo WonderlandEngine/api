@@ -14,6 +14,6 @@ export type Version = {major: number, minor: number, patch: number, rc: number};
 export const APIVersion: Version = {
     major: 1,
     minor: 1,
-    patch: 2,
+    patch: 5,
     rc: 0
 };

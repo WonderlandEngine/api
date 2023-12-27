@@ -4,5 +4,6 @@
     "singleQuote": true,
     "printWidth": 92,
     "quoteProps": "preserve",
-    "bracketSpacing": false
+    "bracketSpacing": false,
+    "endOfLine": "auto"
 }

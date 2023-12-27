@@ -86,6 +86,21 @@
                     "mesh": {
                         "material": "58"
                     }
+                },
+                {
+                    "type": "test-component-retarget-params",
+                    "test-component-retarget-params": {
+                        "animation": "37",
+                        "texture": "62",
+                        "mesh": "p0",
+                        "skin": "35",
+                        "animationProp": "37",
+                        "textureProp": "62",
+                        "objectProp": "39",
+                        "meshProp": "p0",
+                        "skinProp": "33",
+                        "materialProp": "38"
+                    }
                 }
             ]
         },
@@ -154,8 +169,23 @@
             }
         }
     },
-    "textures": {},
-    "images": {},
+    "textures": {
+        "62": {
+            "link": {
+                "name": "image.png",
+                "file": "image.png"
+            }
+        }
+    },
+    "images": {
+        "61": {
+            "link": {
+                "name": "image.png",
+                "file": "image.png"
+            },
+            "compression": "none"
+        }
+    },
     "materials": {
         "DefaultFontMaterial": {
             "link": {
@@ -540,11 +570,11 @@
     "languages": {},
     "settings": {
         "project": {
-            "name": "TestSkinnedMesh",
+            "name": "Advanced",
             "version": [
                 1,
                 1,
-                0
+                2
             ]
         },
         "vr": {
@@ -552,8 +582,8 @@
         },
         "scripting": {
             "bundlingType": "none",
-            "libraryPaths": [
-                "/js/lib/"
+            "sourcePaths": [
+                "js"
             ]
         },
         "rendering": {
@@ -566,6 +596,10 @@
     "files": {
         "56": {
             "fileName": "assets/SimpleSkin.glb",
+            "importerName": ""
+        },
+        "63": {
+            "fileName": "image.png",
             "importerName": ""
         }
     },

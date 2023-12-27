@@ -1,11 +1,14 @@
 import {simd, threads} from 'wasm-feature-detect';
 import {WonderlandEngine} from './engine.js';
+import {LogLevel} from './utils/logger.js';
 import {WASM} from './wasm.js';
 
 import {APIVersion, Version} from './version.js';
 import {getBaseUrl} from './utils/fetch.js';
 
+export * from './utils/bitset.js';
 export * from './utils/event.js';
+export * from './utils/logger.js';
 export * from './wonderland.js';
 export * from './engine.js';
 export * from './scene.js';
@@ -68,6 +71,26 @@ async function detectFeatures(): Promise<{
 }
 
 /**
+ * Options for {@link LoadRuntimeOptions.xrOfferSession}
+ *
+ * @since 1.1.5
+ */
+export interface XROfferSessionOptions {
+    /**
+     * Mode to offer XR session with. If set to `'auto'`, offers a session
+     * with the first supported mode in the following order:
+     * - VR
+     * - AR
+     * - inline
+     */
+    mode: XRSessionMode | 'auto';
+    /** Required features for the offered XR session */
+    features: string[];
+    /** Optional features for the offered XR session */
+    optionalFeatures: string[];
+}
+
+/**
  * Options to forward to {@link loadRuntime}
  */
 export interface LoadRuntimeOptions {
@@ -107,9 +130,29 @@ export interface LoadRuntimeOptions {
     xrFramebufferScaleFactor: number;
 
     /**
+     * Whether to advertise AR/VR session support to the browser.
+     *
+     * Adds an interactive UI element to the browser interface to start an XR
+     * session. Browser support is optional, so it's advised to still allow
+     * requesting a session with a UI element on the website itself.
+     *
+     * If `undefined`, no XR session is automatically offered to the browser.
+     *
+     * @since 1.1.5
+     */
+    xrOfferSession: XROfferSessionOptions;
+
+    /**
      * Canvas id or element. If this is `undefined`, looks for a canvas with id 'canvas'.
      */
     canvas: string;
+
+    /**
+     * Logging level(s) to enable.
+     *
+     * By default, all levels are enabled.
+     */
+    logs: LogLevel[];
 }
 
 /* Global boolean to check if AR/VR is supported. */
@@ -202,8 +245,10 @@ export async function loadRuntime(
         physx = false,
         loader = false,
         xrFramebufferScaleFactor = 1.0,
+        xrOfferSession = null,
         loadingScreen = baseURL ? `${baseURL}/${LOADING_SCREEN_PATH}` : LOADING_SCREEN_PATH,
         canvas = 'canvas',
+        logs = [LogLevel.Info, LogLevel.Warn, LogLevel.Error],
     } = options;
 
     const variant = [];
@@ -246,6 +291,8 @@ export async function loadRuntime(
     (wasm.worker as string) = `${filename}.worker.js`;
     (wasm.wasm as ArrayBuffer) = wasmData;
     (wasm.canvas as HTMLCanvasElement) = glCanvas;
+    wasm._log.levels.enable(...logs);
+
     const engine = new WonderlandEngine(wasm, loadingScreenData);
 
     if (!window._WL) {
@@ -274,6 +321,37 @@ export async function loadRuntime(
 
     engine.autoResizeCanvas = true;
     engine.start();
+
+    if (xrOfferSession !== null) {
+        let mode = xrOfferSession.mode;
+        if (mode == 'auto') {
+            if (engine.vrSupported) {
+                mode = 'immersive-vr';
+            } else if (engine.arSupported) {
+                mode = 'immersive-ar';
+            } else {
+                mode = 'inline';
+            }
+        }
+
+        const offerSession = function () {
+            engine
+                .offerXRSession(
+                    mode as XRSessionMode,
+                    xrOfferSession.features,
+                    xrOfferSession.optionalFeatures
+                )
+                .then(
+                    /* When the session ends, offer to start a new one again */
+                    (s) => s.addEventListener('end', offerSession)
+                )
+                /* The browser may not suppoer offer session, or a previous request
+                 * was replaced by a new one. Not crucial, but inform the user. */
+                .catch(console.warn);
+        };
+
+        offerSession();
+    }
 
     return engine;
 }

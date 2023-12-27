@@ -9,17 +9,21 @@ import {
     MeshComponent,
     SceneAppendResultWithExtensions,
     Texture,
-    AnimationComponent,
+    ComponentProperty,
+    Mesh,
+    Skin,
+    Animation,
 } from '..';
 
 import {init, reset, projectURL, resourceURL, WL} from './setup.js';
 import {expectFail, expectSuccess} from './chai/promise.js';
 import {fetchWithProgress, getBaseUrl} from '../src/utils/fetch.js';
+import {dummyImage, imagePromise, objectSort} from './utils.js';
 
-/* Component registered in the `TestJsComponents` project. We need to register it
- * Before loading the scene. */
+/* Because we don't use the `index.js` file from each project, we must manually
+ * register the components to test. */
 import {TestDummyComponent} from './projects/components/js/test-component.js';
-import {dummyImage, imagePromise} from './utils.js';
+import {TestComponentRetarget} from './projects/advanced/js/test-component-retarget.js';
 
 interface PhongMaterial extends Material {
     shininess: number;
@@ -27,10 +31,11 @@ interface PhongMaterial extends Material {
 }
 
 use(chaiAlmost());
-beforeEach(reset);
 before(() => init({loader: true}));
 
 describe('Scene', function () {
+    beforeEach(reset);
+
     it('load(), missing file', function () {
         return expectFail(WL.scene.load('missing-scene.bin'), 5000);
     });
@@ -48,7 +53,17 @@ describe('Scene', function () {
         const o = WL.scene.addObject();
         o.addComponent(DestroyCheck);
 
+        let loadingScreenEnded = false;
         let loaded = false;
+
+        WL.onLoadingScreenEnd.add(() => {
+            /* onLoadingScreenEnd callbacks should be notified before the scene
+             * is fully loaded */
+            expect(WL.scene.activeViews).to.be.empty;
+            expect(loaded).to.be.false;
+            loadingScreenEnded = true;
+        });
+
         WL.onSceneLoaded.add(() => {
             /* onSceneLoaded callbacks should only be notified once the scene is
              * fully loaded */
@@ -56,13 +71,14 @@ describe('Scene', function () {
             loaded = true;
         });
 
-        await expectSuccess(WL.scene.load(projectURL('TestSkinnedMesh.bin')));
+        await expectSuccess(WL.scene.load(projectURL('Advanced.bin')));
+        expect(loadingScreenEnded).to.be.true;
         expect(loaded).to.be.true;
         expect(onDestroyCalled).to.be.true;
     });
 
     it('load() with buffer', async function () {
-        const filename = projectURL('TestSkinnedMesh.bin');
+        const filename = projectURL('Advanced.bin');
         const baseURL = getBaseUrl(filename);
         const buffer = await fetchWithProgress(filename);
 
@@ -79,9 +95,8 @@ describe('Scene', function () {
          * The component is on purpose left unregistered. */
         await WL.scene.load(projectURL('TestJsComponentsMain.bin'));
 
-        const root = WL.wrapObject(0);
-        expect(root.children).to.have.lengthOf(2);
-        const children = root.findByName(name);
+        expect(WL.scene.children).to.have.lengthOf(2);
+        const children = WL.scene.findByName(name);
         expect(children[0]).to.be.an.instanceOf(
             Object3D,
             'TestJsComponentsMain.bin invalid scene graph'
@@ -100,6 +115,31 @@ describe('Scene', function () {
         expect(child).to.be.an.instanceof(Object);
         expect(obj.children).to.have.members([child]);
         expect(child.parent).to.equal(obj);
+    });
+
+    it('children', function () {
+        const obj1 = WL.scene.addObject();
+        const obj2 = WL.scene.addObject();
+        WL.scene.addObject(obj1);
+        WL.scene.addObject(obj2);
+        expect(WL.scene.children).to.have.members([obj1, obj2]);
+    });
+
+    it('.findByName()', function () {
+        const obj1 = WL.scene.addObject();
+        obj1.name = 'a';
+        const obj2 = WL.scene.addObject();
+        obj2.name = 'b';
+        const child1 = WL.scene.addObject(obj1);
+        child1.name = 'a';
+
+        const root = WL.wrapObject(0);
+
+        /* Scene.findX() forwards to Object3D.findX() */
+        expect(WL.scene.findByName('a', false)).to.eql(root.findByName('a', false));
+        expect(WL.scene.findByName('a', true)).to.eql(root.findByName('a', true));
+        expect(WL.scene.findByNameDirect('a')).to.eql(root.findByNameDirect('a'));
+        expect(WL.scene.findByNameRecursive('a')).to.eql(root.findByNameRecursive('a'));
     });
 
     it('activeViews', function () {
@@ -162,7 +202,7 @@ describe('Scene', function () {
 
     it('get / set skyMaterial', async function () {
         /* Load the base scene with a sky material/ */
-        await WL.scene.load(projectURL('TestSkinnedMesh.bin'));
+        await WL.scene.load(projectURL('Advanced.bin'));
 
         const material = WL.scene.skyMaterial!;
         expect(material).to.not.be.null;
@@ -182,7 +222,7 @@ describe('Scene', function () {
 
         it('.bin', async function () {
             /* Make sure we have all the pipelines used in the streamed .bin */
-            await WL.scene.load(projectURL('TestSkinnedMesh.bin'));
+            await WL.scene.load(projectURL('Advanced.bin'));
 
             /* Push dummy image to ensure appending images works */
             new Texture(WL, await dummyImage(42, 43));
@@ -210,11 +250,11 @@ describe('Scene', function () {
                 expect(comp.material!.pipeline).to.equal('Phong Opaque');
 
                 /* Ensure images are properly retargeted. */
-                const dummyImg = WL.wasm._images[0];
+                const dummyImg = WL.wasm._images[1];
                 expect(dummyImg).to.not.be.undefined;
                 expect([dummyImg?.width, dummyImg?.height]).to.eql([42, 43]);
-                expect(WL.wasm._images[1]).to.not.be.undefined;
-                const img = await imagePromise(WL.wasm._images[1] as HTMLImageElement);
+                expect(WL.wasm._images[2]).to.not.be.undefined;
+                const img = await imagePromise(WL.wasm._images[2] as HTMLImageElement);
                 expect([img?.width, img?.height]).to.eql([2, 2]);
 
                 /* Ensure that compressed images are retargeted. */
@@ -239,80 +279,9 @@ describe('Scene', function () {
             ]);
         });
 
-        it('resourceOffset', async function () {
-            const binFile = 'test/resources/projects/TestSkinnedMesh.bin';
-            await WL.scene.load(binFile);
-            await WL.scene.append(binFile);
-
-            const root = WL.wrapObject(0);
-            expect(root.children).to.have.a.lengthOf(4);
-
-            const otherRoot = root.children[3];
-            expect(otherRoot.children).to.have.lengthOf(3);
-
-            const skinnedMeshObject = root
-                .findByName('Skinned')[0]
-                .findByName('object_0')[0];
-            expect(skinnedMeshObject).to.not.be.undefined;
-            const meshComponent = skinnedMeshObject.getComponent('mesh') as MeshComponent;
-            expect(meshComponent).to.not.be.null;
-
-            const otherSkinnedMeshObject = otherRoot
-                .findByName('Skinned')[0]
-                .findByName('object_0')[0];
-            expect(otherSkinnedMeshObject).to.not.be.undefined;
-            const otherMeshComponent = otherSkinnedMeshObject.getComponent('mesh')!;
-            expect(otherMeshComponent).to.not.be.null;
-
-            expect(otherMeshComponent.mesh).to.not.be.null;
-            expect(otherMeshComponent.mesh).to.not.be.equal(meshComponent.mesh);
-
-            /* There are 6 primitives + one mesh from the scene = an offset of 7 */
-            const meshOffset = 7;
-            expect(otherMeshComponent.mesh!._index).to.be.equal(
-                meshComponent.mesh!._index + meshOffset
-            );
-
-            /* Disabled for now because append() currently does not work for skins or animations
-             * And it seems materials have some weird behaviour as well */
-            return;
-
-            const material = meshComponent.material;
-            expect(material).to.not.be.null;
-            const otherMaterial = otherMeshComponent.material;
-            expect(otherMaterial).to.not.be.null;
-            expect(material).to.not.be.equal(otherMaterial);
-            /* 1 default material + one material from the scene = an offset of 2 */
-            const materialOffset = 2;
-            expect(otherMaterial?._index).to.be.equal(
-                Number(material?._index) + materialOffset
-            );
-
-            const rootBone = root.children[1];
-            expect(rootBone.children).to.have.lengthOf(1);
-            const animationComponent = rootBone.children[0].getComponent(
-                'animation'
-            ) as AnimationComponent;
-            expect(animationComponent).to.not.be.null;
-            const animation = animationComponent.animation;
-            expect(animation).to.not.be.null;
-
-            const otherRootBone = otherRoot.children[1];
-            const otherAnimationComponent = otherRootBone.children[0].getComponent(
-                'animation'
-            ) as AnimationComponent;
-            expect(otherAnimationComponent).to.not.be.null;
-            const otherAnimation = otherAnimationComponent.animation;
-            expect(otherAnimation).to.not.be.null;
-
-            expect(animation).to.not.be.equal(otherAnimation);
-
-            expect(otherAnimation?._index).to.be.equal(Number(animation?._index) + 1);
-        });
-
         it('.glb', async function () {
             /* Make sure we have all the pipelines used in the streamed .bin */
-            await WL.scene.load(projectURL('TestSkinnedMesh.bin'));
+            await WL.scene.load(projectURL('Advanced.bin'));
             const root = (await WL.scene.append(resourceURL('Box.glb'))) as Object3D;
 
             expect(root).to.be.an.instanceof(Object3D);
@@ -330,7 +299,7 @@ describe('Scene', function () {
 
         it('.glb with textures', async function () {
             /* Make sure we have all the pipelines used in the streamed .bin */
-            await WL.scene.load(projectURL('TestSkinnedMesh.bin'));
+            await WL.scene.load(projectURL('Advanced.bin'));
 
             /* Appends two dummy textures to ensure images indices are correct. */
             const dummyImages = await Promise.all([dummyImage(42, 42), dummyImage(43, 43)]);
@@ -344,14 +313,14 @@ describe('Scene', function () {
             expect(root.children).to.have.a.lengthOf(2);
 
             /* Ensure images are properly retargeted. */
-            expect(WL.wasm._images[0]).to.equal(dummyImages[0]);
-            expect(WL.wasm._images[1]).to.equal(dummyImages[1]);
+            expect(WL.wasm._images[1]).to.equal(dummyImages[0]);
+            expect(WL.wasm._images[2]).to.equal(dummyImages[1]);
 
             /* The .glb contains two textures: 2x2 and 4x4 */
             const imgs = (
                 await Promise.all([
-                    imagePromise(WL.wasm._images[2] as HTMLImageElement),
                     imagePromise(WL.wasm._images[3] as HTMLImageElement),
+                    imagePromise(WL.wasm._images[4] as HTMLImageElement),
                 ])
             ).sort((a, b) => a.width - b.width);
             expect([imgs[0]?.width, imgs[0]?.height]).to.eql([2, 2]);
@@ -382,7 +351,7 @@ describe('Scene', function () {
 
         it('.glb, loadGltfExtensions', async function () {
             /* Make sure we have all the pipelines used in the streamed .bin */
-            await WL.scene.load(projectURL('TestSkinnedMesh.bin'));
+            await WL.scene.load(projectURL('Advanced.bin'));
 
             const {root, extensions} = (await WL.scene.append(
                 'test/resources/BoxWithExtensions.glb',
@@ -431,11 +400,10 @@ describe('Scene', function () {
             /* Contains a single object with a js component */
             await WL.scene.load(projectURL('TestJsComponentsMain.bin'));
 
-            const root = WL.wrapObject(0);
-            expect(root.children).to.have.lengthOf(2);
+            expect(WL.scene.children).to.have.lengthOf(2);
 
             {
-                const objects = root.findByName(name);
+                const objects = WL.scene.findByName(name);
                 expect(objects).to.have.length(
                     1,
                     'TestJsComponentsMain.bin invalid scene graph'
@@ -448,7 +416,7 @@ describe('Scene', function () {
             const appendRoot = (await WL.scene.append(
                 projectURL('TestJsComponentsAppend.bin')
             )) as Object3D;
-            expect(root.children).to.have.lengthOf(3);
+            expect(WL.scene.children).to.have.lengthOf(3);
             expect(appendRoot.children).to.have.lengthOf(1);
             expect(appendRoot).to.be.an.instanceOf(Object3D);
             {
@@ -467,13 +435,13 @@ describe('Scene', function () {
                 static TypeName = 'test-extra-dummy-offset';
             }
             WL.registerComponent(TestExtraComponent);
-            WL.scene.addObject(root).addComponent(TestExtraComponent);
-            expect(root.children).to.have.lengthOf(4);
+            WL.scene.addObject().addComponent(TestExtraComponent);
+            expect(WL.scene.children).to.have.lengthOf(4);
 
             const appendRoot2 = (await WL.scene.append(
                 projectURL('TestJsComponentsAppend.bin')
             )) as Object3D;
-            expect(root.children).to.have.lengthOf(5);
+            expect(WL.scene.children).to.have.lengthOf(5);
             expect(appendRoot2.children).to.have.lengthOf(1);
             expect(appendRoot2).to.be.an.instanceOf(Object3D);
             {
@@ -488,5 +456,149 @@ describe('Scene', function () {
                 expect(comp).to.not.equal(appendRoot.children[0]);
             }
         });
+    });
+});
+
+describe('Scene.append() > Resource retargeting', async function () {
+    /* Registers the component that is used in the test */
+    class TestComponent extends Component {
+        static TypeName = TestComponentRetarget.TypeName;
+        static Properties = TestComponentRetarget.Properties as unknown as Record<
+            string,
+            ComponentProperty
+        >;
+        animationProp!: Animation;
+        materialProp!: Material;
+        meshProp!: Mesh;
+        skinProp!: Skin;
+        textureProp!: Texture;
+        objectProp!: Object3D;
+        animationPropUnset!: Animation | null;
+        materialPropUnset!: Material | null;
+        meshPropUnset!: Mesh | null;
+        skinPropUnset!: Skin | null;
+        texturePropUnset!: Texture | null;
+        objectPropUnset!: Object3D | null;
+    }
+
+    let appendedRoot: Object3D = null!;
+
+    /** @todo: When resources are exposed in the API, it will be possible to
+     * to properly check that the correct retargeting occurred. For now, we use hardcoded
+     * sizes for some resources, such as meshes. */
+    const originalMeshCount = 7; /* 6 primitives + one mesh from the scene = an offset of 7 */
+    const originalSkinCount = 1;
+    const originalTextureCount = 1; /* One 2x2 image */
+    const materialOffset = 2; /* 1 default material + one material from the scene */
+    const originalAnimCount = 1;
+
+    /* Runs first to pre-load and append the scene, so that all the following
+     * tests can access the scene data without re-loading it. */
+    before(async function () {
+        reset();
+        WL.registerComponent(TestComponent);
+
+        const url = projectURL('Advanced.bin');
+        await WL.scene.load(url);
+
+        appendedRoot = (await WL.scene.append(url)) as Object3D;
+    });
+
+    it('MeshComponent properties', function () {
+        const object = WL.scene.findByName('Skinned')[0]?.findByName('object_0')[0];
+        expect(object, 'invalid scene graph, the test must be updated').to.not.be.undefined;
+        const original = object.getComponent('mesh')!;
+        expect(original, 'missing mesh component in skinned hierarchy').to.not.be.null;
+
+        const appendedObject = appendedRoot
+            .findByName('Skinned')[0]
+            ?.findByName('object_0')[0];
+        expect(appendedObject, 'invalid scene graph, the test must be updated').to.not.be
+            .undefined;
+        const component = appendedObject.getComponent('mesh')!;
+        expect(component.mesh).to.not.be.null;
+        expect(component.mesh).to.not.be.equal(original.mesh);
+
+        expect(component.mesh!._index).to.be.equal(
+            original.mesh!._index + originalMeshCount
+        );
+
+        /* Disabled for now because append() currently does not work for materials */
+        return;
+
+        const originalMat = original.material!;
+        const mat = component.material!;
+        expect(mat).to.not.be.equal(originalMat);
+        expect(mat._index).to.be.equal(originalMat._index + materialOffset);
+    });
+
+    it('AnimationComponent', function () {
+        const object = WL.scene.findByNameRecursive('object_1')[0]?.children[0];
+        expect(object, 'invalid scene graph, the test must be updated').to.not.be.undefined;
+        const original = object.getComponent('animation')!;
+        expect(original).to.not.be.null;
+        const originalAnim = original.animation!;
+        expect(originalAnim).to.not.be.null;
+
+        /* Disabled for now because append() currently does not work for skins or animations */
+        return;
+
+        const appendedObject = appendedRoot.findByNameRecursive('object_1')[0]?.children[0];
+        expect(appendedObject).to.not.be.undefined;
+        const component = appendedObject.getComponent('animation')!;
+        expect(component).to.not.be.null;
+        const anim = component.animation!;
+        expect(anim).to.not.be.null;
+
+        expect(anim).to.not.be.equal(originalAnim);
+        expect(anim._index).to.be.equal(originalAnim._index + originalAnimCount);
+    });
+
+    it('Js properties', function () {
+        /* This test checks that references are properly retargeted
+         * upon `append()`. */
+        const rootDummy = WL.scene.findByName('Dummy')[0];
+        const original = rootDummy.getComponents(TestComponent)[0];
+
+        const dummy = appendedRoot.findByName('Dummy')[0];
+        expect(dummy, 'invalid scene graph, the test must be updated').to.not.be.undefined;
+        const comp = dummy.getComponents(TestComponent.TypeName)[0] as TestComponent;
+        expect(comp).to.not.be.undefined;
+
+        /* Ensure the appended scene has different references for each property */
+        expect(comp.animationProp).to.not.equal(
+            original.animationProp,
+            'animation retargeting'
+        );
+        expect(comp.animationProp._index).to.equal(
+            original.animationProp._index + originalAnimCount
+        );
+
+        expect(comp.materialProp).to.not.equal(
+            original.materialProp,
+            'material retargeting'
+        );
+
+        expect(comp.meshProp).to.not.equal(original.meshProp, 'mesh retargeting');
+        expect(comp.meshProp._index).to.equal(original.meshProp._index + originalMeshCount);
+
+        expect(comp.skinProp).to.not.equal(original.skinProp, 'skin retargeting');
+        expect(comp.skinProp._index).to.equal(original.skinProp._index + originalSkinCount);
+
+        expect(comp.textureProp).to.not.equal(original.textureProp, 'texture retargeting');
+        expect(comp.textureProp.id).to.equal(
+            original.textureProp.id + originalTextureCount
+        );
+
+        expect(comp.objectProp).to.not.equal(original.objectProp, 'object retargeting');
+        expect(comp.objectProp.name).to.equal('View');
+
+        /* `null` properties should remain `null` */
+        expect(comp.animationPropUnset).to.be.null;
+        expect(comp.materialPropUnset).to.be.null;
+        expect(comp.meshPropUnset).to.be.null;
+        expect(comp.texturePropUnset).to.be.null;
+        expect(comp.objectPropUnset).to.be.null;
+        expect(comp.skinPropUnset).to.be.null;
     });
 });
