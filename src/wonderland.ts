@@ -1179,12 +1179,7 @@ export class CollisionComponent extends Component {
      */
     @nativeProperty()
     get extents(): Float32Array {
-        const wasm = this._engine.wasm;
-        return new Float32Array(
-            wasm.HEAPF32.buffer,
-            wasm._wl_collision_component_get_extents(this._id),
-            3
-        );
+        return this.getExtents();
     }
 
     /** @overload */
@@ -1489,12 +1484,7 @@ export class ViewComponent extends Component {
     /** Projection matrix. */
     @enumerable()
     get projectionMatrix(): Float32Array {
-        const wasm = this._engine.wasm;
-        return new Float32Array(
-            wasm.HEAPF32.buffer,
-            wasm._wl_view_component_get_projection_matrix(this._id),
-            16
-        );
+        return this.getProjectionMatrix();
     }
 
     /** @overload */
@@ -1508,7 +1498,8 @@ export class ViewComponent extends Component {
     getProjectionMatrix<T extends NumberArray>(out: T): T;
     getProjectionMatrix(out: NumberArray = new Float32Array(16)): NumberArray {
         const wasm = this._engine.wasm;
-        const ptr = wasm._wl_view_component_get_projection_matrix(this._id) / 4; /* Align F32 */
+        const ptr =
+            wasm._wl_view_component_get_projection_matrix(this._id) / 4; /* Align F32 */
         for (let i = 0; i < 16; ++i) {
             out[i] = wasm.HEAPF32[ptr + i];
         }
@@ -2403,9 +2394,7 @@ export class PhysXComponent extends Component {
      */
     @nativeProperty()
     get extents(): Float32Array {
-        const wasm = this._engine.wasm;
-        const ptr = wasm._wl_physx_component_get_extents(this._id);
-        return new Float32Array(wasm.HEAPF32.buffer, ptr, 3);
+        return this.getExtents();
     }
 
     /** @overload */
@@ -2527,9 +2516,7 @@ export class PhysXComponent extends Component {
     /** Linear velocity or `[0, 0, 0]` if the component is not active. */
     @nativeProperty()
     get linearVelocity(): Float32Array {
-        const wasm = this._engine.wasm;
-        wasm._wl_physx_component_get_linearVelocity(this._id, wasm._tempMem);
-        return new Float32Array(wasm.HEAPF32.buffer, wasm._tempMem, 3);
+        return this.getLinearVelocity();
     }
 
     /** @overload */
@@ -2544,7 +2531,10 @@ export class PhysXComponent extends Component {
     getLinearVelocity(out: NumberArray = new Float32Array(3)): NumberArray {
         const wasm = this._engine.wasm;
         const tempMemFloat = wasm._tempMemFloat;
-        wasm._wl_physx_component_get_linearVelocity(this._id, wasm._tempMem); /* Align F32 */
+        wasm._wl_physx_component_get_linearVelocity(
+            this._id,
+            wasm._tempMem
+        ); /* Align F32 */
         for (let i = 0; i < 3; ++i) {
             out[i] = tempMemFloat[i];
         }
@@ -2572,9 +2562,7 @@ export class PhysXComponent extends Component {
     /** Angular velocity or `[0, 0, 0]` if the component is not active. */
     @nativeProperty()
     get angularVelocity(): Float32Array {
-        const wasm = this._engine.wasm;
-        wasm._wl_physx_component_get_angularVelocity(this._id, wasm._tempMem);
-        return new Float32Array(wasm.HEAPF32.buffer, wasm._tempMem, 3);
+        return this.getAngularVelocity();
     }
 
     /** @overload */
@@ -2589,7 +2577,10 @@ export class PhysXComponent extends Component {
     getAngularVelocity(out: NumberArray = new Float32Array(3)): NumberArray {
         const wasm = this._engine.wasm;
         const tempMemFloat = wasm._tempMemFloat;
-        wasm._wl_physx_component_get_angularVelocity(this._id, wasm._tempMem); /* Align F32 */
+        wasm._wl_physx_component_get_angularVelocity(
+            this._id,
+            wasm._tempMem
+        ); /* Align F32 */
         for (let i = 0; i < 3; ++i) {
             out[i] = tempMemFloat[i];
         }
@@ -5696,12 +5687,7 @@ export class Skin {
 
     /** Joints object ids for this skin */
     get jointIds(): Uint16Array {
-        const wasm = this._engine.wasm;
-        return new Uint16Array(
-            wasm.HEAPU16.buffer,
-            wasm._wl_skin_joint_ids(this._index),
-            this.jointCount
-        );
+        return this.getJointIds();
     }
 
     /** @overload */
@@ -5728,12 +5714,7 @@ export class Skin {
      * Inverse bind transforms of the skin.
      */
     get inverseBindTransforms(): Float32Array {
-        const wasm = this._engine.wasm;
-        return new Float32Array(
-            wasm.HEAPF32.buffer,
-            wasm._wl_skin_inverse_bind_transforms(this._index),
-            8 * this.jointCount
-        );
+        return this.getInverseBindTransforms();
     }
 
     /** @overload */
@@ -5747,7 +5728,9 @@ export class Skin {
      * @returns The `out` parameter.
      */
     getInverseBindTransforms<T extends NumberArray>(out: T): T;
-    getInverseBindTransforms(out: NumberArray = new Float32Array(this.jointCount * 8)): NumberArray {
+    getInverseBindTransforms(
+        out: NumberArray = new Float32Array(this.jointCount * 8)
+    ): NumberArray {
         const wasm = this._engine.wasm;
         const ptr = wasm._wl_skin_inverse_bind_transforms(this._index) / 4; /* Align F32 */
         for (let i = 0; i < this.jointCount * 8; ++i) {
@@ -5762,12 +5745,7 @@ export class Skin {
      * Inverse bind scalings of the skin.
      */
     get inverseBindScalings(): Float32Array {
-        const wasm = this._engine.wasm;
-        return new Float32Array(
-            wasm.HEAPF32.buffer,
-            wasm._wl_skin_inverse_bind_scalings(this._index),
-            3 * this.jointCount
-        );
+        return this.getInverseBindScalings();
     }
 
     /** @overload */
@@ -5781,7 +5759,9 @@ export class Skin {
      * @returns The `out` parameter.
      */
     getInverseBindScalings<T extends NumberArray>(out: T): T;
-    getInverseBindScalings(out: NumberArray = new Float32Array(this.jointCount * 3)): NumberArray {
+    getInverseBindScalings(
+        out: NumberArray = new Float32Array(this.jointCount * 3)
+    ): NumberArray {
         const wasm = this._engine.wasm;
         const ptr = wasm._wl_skin_inverse_bind_scalings(this._index) / 4; /* Align F32 */
         for (let i = 0; i < this.jointCount * 3; ++i) {
