@@ -9,6 +9,9 @@ import {Emitter} from './utils/event.js';
 import {ComponentProperty} from './property.js';
 import {WASM} from './wasm.js';
 
+/** Element that can be used as an image in the engine. */
+export type ImageLike = HTMLImageElement | HTMLVideoElement | HTMLCanvasElement;
+
 /**
  * A type alias for any TypedArray constructor, except big-int arrays.
  */
@@ -35,6 +38,7 @@ export type TypedArray<T extends TypedArrayCtor = TypedArrayCtor> = InstanceType
  */
 export interface NumberArray {
     length: number;
+
     [n: number]: number;
 }
 
@@ -51,10 +55,10 @@ export type Constructor<T = any> = {
  * For more information, please have a look at the {@link Component} class.
  */
 export type ComponentConstructor<T extends Component = Component> = Constructor<T> & {
+    _isBaseComponent: boolean;
     TypeName: string;
     Properties: Record<string, ComponentProperty>;
-    /** @deprecated @hidden */
-    Dependencies?: ComponentConstructor[];
+    InheritProperties?: boolean;
     onRegister?: (engine: WonderlandEngine) => void;
 };
 
@@ -115,6 +119,18 @@ declare const WL: WonderlandEngine;
  * Wonderland Engine API
  * @namespace WL
  */
+
+/**
+ * Default set of logging tags used by the API.
+ */
+export enum LogTag {
+    /** Initialization, component registration, etc... */
+    Engine = 0,
+    /** Scene loading */
+    Scene = 1,
+    /** Component init, update, etc... */
+    Component = 2,
+}
 
 /**
  * Collider type enum for {@link CollisionComponent}.
@@ -357,6 +373,34 @@ export enum MaterialParamType {
 }
 
 /**
+ * Create a proxy throwing destroyed errors upon access.
+ *
+ * @param type The type to display upon error
+ * @returns The proxy instance
+ */
+function createDestroyedProxy(type: string) {
+    return new Proxy(
+        {},
+        {
+            get(_, param: string) {
+                if (param === 'isDestroyed') return true;
+                throw new Error(`Canno't read '${param}' of destroyed ${type}`);
+            },
+            set(_, param: string) {
+                throw new Error(`Canno't write '${param}' of destroyed ${type}`);
+            },
+        }
+    );
+}
+
+/** Proxy used to override prototypes of destroyed objects. */
+export const DestroyedObjectInstance = createDestroyedProxy('object');
+/** Proxy used to override prototypes of destroyed components. */
+export const DestroyedComponentInstance = createDestroyedProxy('component');
+/** Proxy used to override prototypes of destroyed textures. */
+export const DestroyedTextureInstance = createDestroyedProxy('texture');
+
+/**
  * Check whether a given shape is a mesh or not.
  *
  * @param shape The shape to check.
@@ -364,6 +408,25 @@ export enum MaterialParamType {
  */
 function isMeshShape(shape: Shape): boolean {
     return shape === Shape.ConvexMesh || shape === Shape.TriangleMesh;
+}
+
+/**
+ * Check whether an object is the {@link Component} class or not,
+ *
+ * @note This method if foolproof to developers inadvertently using
+ * multiple Wonderland Engine API in a bundle.
+ *
+ * @param value The object to check.
+ * @returns `true` if the object is a {@link Component} class, `false` otherwise.
+ */
+function isBaseComponentClass(
+    value: Constructor<any> | null
+): value is ComponentConstructor {
+    return (
+        !!value &&
+        value.hasOwnProperty('_isBaseComponent') &&
+        (value as ComponentConstructor)._isBaseComponent
+    );
 }
 
 /**
@@ -375,12 +438,15 @@ function isMeshShape(shape: Shape): boolean {
  */
 const UP_VECTOR = [0, 1, 0];
 
+const SQRT_3 = Math.sqrt(3);
+
 /**
- * Native component
+ * Provides access to a component instance of a specified component type.
  *
- * Provides access to a native component instance of a specified component type.
+ * @example
  *
- * Usage example:
+ * This is how you extend this class to create your own custom
+ * component:
  *
  * ```js
  * import { Component, Type } from '@wonderlandengine/api';
@@ -398,6 +464,16 @@ const UP_VECTOR = [0, 1, 0];
  * ```
  */
 export class Component {
+    /**
+     * `true` for every class inheriting from this class.
+     *
+     * @note This is a workaround for `instanceof` to prevent issues
+     * that could arise when an application ends up using multiple API versions.
+     *
+     * @hidden
+     */
+    static readonly _isBaseComponent = true;
+
     /**
      * Unique identifier for this component class.
      *
@@ -440,17 +516,59 @@ export class Component {
      * myComponent.myBoolean = false;
      * myComponent.myFloat = -42.0;
      * ```
+     *
+     * #### References
+     *
+     * Reference types (i.e., mesh, object, etc...) can also be listed as **required**:
+     *
+     * ```js
+     * import {Component, Property} from '@wonderlandengine/api';
+     *
+     * class MyComponent extends Component {
+     *     static Properties = {
+     *         myObject: Property.object({required: true}),
+     *         myAnimation: Property.animation({required: true}),
+     *         myTexture: Property.texture({required: true}),
+     *         myMesh: Property.mesh({required: true}),
+     *     }
+     * }
+     * ```
+     *
+     * Please note that references are validated **once** before the call to {@link Component.start} only,
+     * via the {@link Component.validateProperties} method.
      */
     static Properties: Record<string, ComponentProperty>;
 
     /**
-     * This was never released in an official version, we are keeping it
-     * to easy transition to the new API.
+     * When set to `true`, the child class inherits from the parent
+     * properties, as shown in the following example:
      *
-     * @deprecated Use {@link Component.onRegister} instead.
-     * @hidden
+     * ```js
+     * import {Component, Property} from '@wonderlandengine/api';
+     *
+     * class Parent extends Component {
+     *     static TypeName = 'parent';
+     *     static Properties = {parentName: Property.string('parent')}
+     * }
+     *
+     * class Child extends Parent {
+     *     static TypeName = 'child';
+     *     static Properties = {name: Property.string('child')}
+     *     static InheritProperties = true;
+     *
+     *     start() {
+     *         // Works because `InheritProperties` is `true`.
+     *         console.log(`${this.name} inherits from ${this.parentName}`);
+     *     }
+     * }
+     * ```
+     *
+     * @note Properties defined in descendant classes will override properties
+     * with the same name defined in ancestor classes.
+     *
+     * Defaults to `true`.
      */
-    static Dependencies?: ComponentConstructor[];
+    static InheritProperties?: boolean;
 
     /**
      * Called when this component class is registered.
@@ -503,6 +621,17 @@ export class Component {
      * ```
      */
     static onRegister?: (engine: WonderlandEngine) => void;
+
+    /**
+     * Allows to inherit properties directly inside the editor.
+     *
+     * @note Do not use directly, prefer using {@link inheritProperties}.
+     *
+     * @hidden
+     */
+    static _inheritProperties() {
+        inheritProperties(this);
+    }
 
     /**
      * Triggered when the component is initialized by the runtime. This method
@@ -649,6 +778,52 @@ export class Component {
     }
 
     /**
+     * Copy all the properties from `src` into this instance.
+     *
+     * @note Only properties are copied. If a component needs to
+     * copy extra data, it needs to override this method.
+     *
+     * #### Example
+     *
+     * ```js
+     * class MyComponent extends Component {
+     *     nonPropertyData = 'Hello World';
+     *
+     *     copy(src) {
+     *         super.copy(src);
+     *         this.nonPropertyData = src.nonPropertyData;
+     *         return this;
+     *     }
+     * }
+     * ```
+     *
+     * @note This method is called by {@link Object3D.clone}. Do not attempt to:
+     *     - Create new component
+     *     - Read references to other objects
+     *
+     * When cloning via {@link Object3D.clone}, this method will be called before
+     * {@link Component.start}.
+     *
+     * @note JavaScript component properties aren't retargeted. Thus, references
+     * inside the source object will not be retargeted to the destination object,
+     * at the exception of the skin data on {@link MeshComponent} and {@link AnimationComponent}.
+     *
+     * @param src The source component to copy from.
+     *
+     * @returns Reference to self (for method chaining).
+     */
+    copy(src: Record<string, any>): this {
+        const ctor = this.constructor as ComponentConstructor;
+        for (const name in ctor.Properties) {
+            const value = src[name];
+            if (value !== undefined) {
+                (this as Record<string, any>)[name] = value;
+            }
+        }
+        return this;
+    }
+
+    /**
      * Remove this component from its objects and destroy it.
      *
      * It is best practice to set the component to `null` after,
@@ -661,9 +836,17 @@ export class Component {
      * @since 0.9.0
      */
     destroy(): void {
-        this._engine.wasm._wl_component_remove(this._manager, this._id);
-        (this._manager as number) = -1;
-        (this._id as number) = -1;
+        const manager = this._manager;
+        if (manager < 0 || this._id < 0) return;
+
+        /* Must be stored before destruction. */
+        const jsManager = this.engine.wasm._jsManagerIndex;
+
+        this._engine.wasm._wl_component_remove(manager, this._id);
+
+        /** @todo: Remove at 1.2.0 when a generic destroy is implemented
+         * for every manager. */
+        if (manager !== jsManager) this._triggerOnDestroy();
     }
 
     /**
@@ -681,15 +864,65 @@ export class Component {
     /**
      * Reset the component properties to default.
      *
+     * @note This is automatically called during the component instantiation.
+     *
      * @returns Reference to self (for method chaining).
      */
-    reset(): this {
+    resetProperties(): this {
         const ctor = this.constructor as ComponentConstructor;
         const properties = ctor.Properties;
+        if (!properties) return this;
         for (const name in properties) {
             (this as Record<string, any>)[name] = properties[name].default;
         }
         return this;
+    }
+
+    /** @deprecated Use {@link Component.resetProperties} instead. */
+    reset(): this {
+        return this.resetProperties();
+    }
+
+    /**
+     * Validate the properties on this instance.
+     *
+     * @throws If any of the required properties isn't initialized
+     * on this instance.
+     */
+    validateProperties(): void {
+        const ctor = this.constructor as ComponentConstructor;
+        if (!ctor.Properties) return;
+
+        for (const name in ctor.Properties) {
+            if (!ctor.Properties[name].required) continue;
+            if (!(this as Record<string, any>)[name]) {
+                throw new Error(`Property '${name}' is required but was not initialized`);
+            }
+        }
+    }
+
+    /**
+     * `true` if the component is destroyed, `false` otherwise.
+     *
+     * If {@link WonderlandEngine.erasePrototypeOnDestroy} is `true`,
+     * reading a custom property will not work:
+     *
+     * ```js
+     * engine.erasePrototypeOnDestroy = true;
+     *
+     * const comp = obj.addComponent('mesh');
+     * comp.customParam = 'Hello World!';
+     *
+     * console.log(comp.isDestroyed); // Prints `false`
+     * comp.destroy();
+     * console.log(comp.isDestroyed); // Prints `true`
+     * console.log(comp.customParam); // Throws an error
+     * ```
+     *
+     * @since 1.1.1
+     */
+    get isDestroyed(): boolean {
+        return this._id < 0;
     }
 
     /**
@@ -707,39 +940,56 @@ export class Component {
             try {
                 this.init();
             } catch (e) {
-                console.error(
+                this.engine.log.error(
+                    LogTag.Component,
                     `Exception during ${this.type} init() on object ${this.object.name}`
                 );
-                console.error(e);
+                this.engine.log.error(LogTag.Component, e);
             }
         }
-        if (!this.start) return;
 
         /* Arm onActivate() with the initial start() call */
         const oldActivate = this.onActivate;
         this.onActivate = function () {
-            /* As "component" is the component index, which may change
-             * through calls to init() and start(), we call it on the
-             * calling object, which will be the component, instead of
-             * wljs_component_start() etc */
+            this.onActivate = oldActivate;
+            let failed = false;
+            try {
+                this.validateProperties();
+            } catch (e) {
+                this.engine.log.error(
+                    LogTag.Component,
+                    `Exception during ${this.type} validateProperties() on object ${this.object.name}`
+                );
+                this.engine.log.error(LogTag.Component, e);
+                failed = true;
+            }
+
             try {
                 this.start?.();
             } catch (e) {
-                console.error(
+                this.engine.log.error(
+                    LogTag.Component,
                     `Exception during ${this.type} start() on object ${this.object.name}`
                 );
-                console.error(e);
+                this.engine.log.error(LogTag.Component, e);
+                failed = true;
             }
-            this.onActivate = oldActivate;
+
+            if (failed) {
+                this.active = false;
+                return;
+            }
+
             if (!this.onActivate) return;
 
             try {
                 this.onActivate();
             } catch (e) {
-                console.error(
+                this.engine.log.error(
+                    LogTag.Component,
                     `Exception during ${this.type} onActivate() on object ${this.object.name}`
                 );
-                console.error(e);
+                this.engine.log.error(LogTag.Component, e);
             }
         };
     }
@@ -756,10 +1006,11 @@ export class Component {
         try {
             this.update(dt);
         } catch (e) {
-            console.error(
+            this.engine.log.error(
+                LogTag.Component,
                 `Exception during ${this.type} update() on object ${this.object.name}`
             );
-            console.error(e);
+            this.engine.log.error(LogTag.Component, e);
             if (this._engine.wasm._deactivate_component_on_error) {
                 this.active = false;
             }
@@ -778,10 +1029,11 @@ export class Component {
         try {
             this.onActivate();
         } catch (e) {
-            console.error(
+            this.engine.log.error(
+                LogTag.Component,
                 `Exception during ${this.type} onActivate() on object ${this.object.name}`
             );
-            console.error(e);
+            this.engine.log.error(LogTag.Component, e);
         }
     }
 
@@ -797,10 +1049,11 @@ export class Component {
         try {
             this.onDeactivate();
         } catch (e) {
-            console.error(
+            this.engine.log.error(
+                LogTag.Component,
                 `Exception during ${this.type} onDeactivate() on object ${this.object.name}`
             );
-            console.error(e);
+            this.engine.log.error(LogTag.Component, e);
         }
     }
 
@@ -812,16 +1065,86 @@ export class Component {
      * @hidden
      */
     _triggerOnDestroy() {
-        if (!this.onDestroy) return;
         try {
-            this.onDestroy();
+            if (this.onDestroy) this.onDestroy();
         } catch (e) {
-            console.error(
+            this.engine.log.error(
+                LogTag.Component,
                 `Exception during ${this.type} onDestroy() on object ${this.object.name}`
             );
-            console.error(e);
+            this.engine.log.error(LogTag.Component, e);
         }
+        this._engine._destroyComponent(this);
     }
+}
+
+/**
+ * Components must be registered before loading / appending a scene.
+ *
+ * It's possible to end up with a broken component in the following cases:
+ *
+ * - Component wasn't registered when the scene was loaded
+ * - Component instantiation failed
+ *
+ * This dummy component is thus used as a placeholder by the engine.
+ */
+export class BrokenComponent extends Component {
+    static TypeName = '__broken-component__';
+}
+
+/**
+ * Merge the ascendant properties of class
+ *
+ * This method walks the prototype chain, and merges
+ * all the properties found in parent components.
+ *
+ * Example:
+ *
+ * ```js
+ * import {Property, inheritProperties} from '@wonderlandengine/api';
+ *
+ * class Parent {
+ *     static Properties = { parentProp: Property.string('parent') };
+ * }
+ *
+ * class Child extends Parent {
+ *     static Properties = { childProp: Property.string('child') };
+ * }
+ * inheritProperties(Child);
+ * ```
+ *
+ * @param target The class in which properties should be merged
+ *
+ * @hidden
+ */
+export function inheritProperties(target: ComponentConstructor) {
+    if (!target.TypeName) return;
+
+    const chain: Record<string, ComponentProperty>[] = [];
+    let curr: Constructor<any> | null = target;
+    while (curr && !isBaseComponentClass(curr)) {
+        const comp = curr as ComponentConstructor;
+
+        /* Stop at the first class that doesn't require properties merging */
+        const needsMerge = comp.hasOwnProperty('InheritProperties')
+            ? comp.InheritProperties
+            : true;
+        if (!needsMerge) break;
+
+        if (comp.TypeName && comp.hasOwnProperty('Properties')) {
+            chain.push(comp.Properties);
+        }
+        curr = Object.getPrototypeOf(curr);
+    }
+
+    /* No prototype merge is needed. */
+    if (chain.length <= 1) return;
+
+    const merged = {};
+    for (let i = chain.length - 1; i >= 0; --i) {
+        Object.assign(merged, chain[i]);
+    }
+    target.Properties = merged;
 }
 
 /**
@@ -882,6 +1205,59 @@ export class CollisionComponent extends Component {
      */
     set extents(extents: Readonly<NumberArray>) {
         this.extents.set(extents);
+    }
+
+    /**
+     * Get collision component radius.
+     *
+     * @note If {@link collider} is not {@link Collider.Sphere}, the returned value
+     * corresponds to the radius of a sphere enclosing the shape.
+     *
+     * Example:
+     *
+     * ```js
+     * sphere.radius = 3.0;
+     * console.log(sphere.radius); // 3.0
+     *
+     * box.extents = [2.0, 2.0, 2.0];
+     * console.log(box.radius); // 1.732...
+     * ```
+     *
+     */
+    get radius(): number {
+        const wasm = this._engine.wasm;
+        if (this.collider === Collider.Sphere)
+            return wasm.HEAPF32[wasm._wl_collision_component_get_extents(this._id) >> 2];
+        const extents = new Float32Array(
+            wasm.HEAPF32.buffer,
+            wasm._wl_collision_component_get_extents(this._id),
+            3
+        );
+        const x2 = extents[0] * extents[0];
+        const y2 = extents[1] * extents[1];
+        const z2 = extents[2] * extents[2];
+        return Math.sqrt(x2 + y2 + z2) / 2;
+    }
+
+    /**
+     * Set collision component radius.
+     *
+     * @param radius Radius of the collision component
+     *
+     * @note If {@link collider} is not {@link Collider.Sphere},
+     * the extents are set to form a square that fits a sphere with the provided radius.
+     *
+     * Example:
+     *
+     * ```js
+     * aabbCollision.radius = 2.0; // AABB fits a sphere of radius 2.0
+     * boxCollision.radius = 3.0; // Box now fits a sphere of radius 3.0, keeping orientation
+     * ```
+     *
+     */
+    set radius(radius: number) {
+        const length = this.collider === Collider.Sphere ? radius : (2 * radius) / SQRT_3;
+        this.extents.set([length, length, length]);
     }
 
     /**
@@ -1059,10 +1435,7 @@ export class TextComponent extends Component {
      */
     set text(text: any) {
         const wasm = this._engine.wasm;
-        wasm._wl_text_component_set_text(
-            this._id,
-            wasm.tempUTF8(text.toString())
-        );
+        wasm._wl_text_component_set_text(this._id, wasm.tempUTF8(text.toString()));
     }
 
     /**
@@ -1194,12 +1567,12 @@ export class InputComponent extends Component {
      */
     @enumerable()
     get xrInputSource(): XRInputSource | null {
-        const xrSession = this._engine.xrSession;
-        if (xrSession) {
-            for (let inputSource of xrSession.inputSources) {
-                if (inputSource.handedness == this.handedness) {
-                    return inputSource;
-                }
+        const xr = this._engine.xr;
+        if (!xr) return null;
+
+        for (let inputSource of xr.session.inputSources) {
+            if (inputSource.handedness == this.handedness) {
+                return inputSource;
             }
         }
 
@@ -1680,6 +2053,52 @@ export class PhysXComponent extends Component {
     /** @override */
     static TypeName = 'physx';
 
+    /** @overload */
+    getTranslationOffset(): Float32Array;
+    /**
+     * Local translation offset.
+     *
+     * Allows to move a physx component without creating a new object in the hierarchy.
+     *
+     * @param out Destination array/vector, expected to have at least 3 elements.
+     * @returns The `out` parameter.
+     *
+     * @since 1.1.1
+     */
+    getTranslationOffset<T extends NumberArray>(out: T): T;
+    getTranslationOffset(out: NumberArray = new Float32Array(3)): NumberArray {
+        const wasm = this._engine.wasm;
+        wasm._wl_physx_component_get_offsetTranslation(this._id, wasm._tempMem);
+        out[0] = wasm._tempMemFloat[0];
+        out[1] = wasm._tempMemFloat[1];
+        out[2] = wasm._tempMemFloat[2];
+        return out;
+    }
+
+    /** @overload */
+    getRotationOffset(): Float32Array;
+    /**
+     * Local rotation offset represented as a quaternion.
+     *
+     * Allows to rotate a physx component without creating a new object in the hierarchy.
+     *
+     * @param out Destination array/vector, expected to have at least 4 elements.
+     * @returns The `out` parameter.
+     *
+     * @since 1.1.1
+     */
+    getRotationOffset<T extends NumberArray>(out: T): T;
+    getRotationOffset(out: NumberArray = new Float32Array(4)): NumberArray {
+        const wasm = this._engine.wasm;
+        const ptr =
+            wasm._wl_physx_component_get_offsetTransform(this._id) >> 2; /* Align F32 */
+        out[0] = wasm.HEAPF32[ptr];
+        out[1] = wasm.HEAPF32[ptr + 1];
+        out[2] = wasm.HEAPF32[ptr + 2];
+        out[3] = wasm.HEAPF32[ptr + 3];
+        return out;
+    }
+
     /**
      * Set whether this rigid body is static.
      *
@@ -1705,6 +2124,73 @@ export class PhysXComponent extends Component {
     @nativeProperty()
     get static(): boolean {
         return !!this._engine.wasm._wl_physx_component_get_static(this._id);
+    }
+
+    /**
+     * Equivalent to {@link PhysXComponent.getTranslationOffset}.
+     *
+     * Gives a quick view of the offset in a debugger.
+     *
+     * @note Prefer to use {@link PhysXComponent.getTranslationOffset} for performance.
+     *
+     * @since 1.1.1
+     */
+    @nativeProperty()
+    get translationOffset(): Float32Array {
+        return this.getTranslationOffset();
+    }
+
+    /**
+     * Set the offset translation.
+     *
+     * The array must be a vector of at least **3** elements.
+     *
+     * @note The component must be re-activated to apply the change.
+     *
+     * @since 1.1.1
+     */
+    set translationOffset(offset: ArrayLike<number>) {
+        const wasm = this._engine.wasm;
+        wasm._wl_physx_component_set_offsetTranslation(
+            this._id,
+            offset[0],
+            offset[1],
+            offset[2]
+        );
+    }
+
+    /**
+     * Equivalent to {@link PhysXComponent.getRotationOffset}.
+     *
+     * Gives a quick view of the offset in a debugger.
+     *
+     * @note Prefer to use {@link PhysXComponent.getRotationOffset} for performance.
+     *
+     * @since 1.1.1
+     */
+    @nativeProperty()
+    get rotationOffset(): Float32Array {
+        return this.getRotationOffset();
+    }
+
+    /**
+     * Set the offset rotation.
+     *
+     * The array must be a quaternion of at least **4** elements.
+     *
+     * @note The component must be re-activated to apply the change.
+     *
+     * @since 1.1.1
+     */
+    set rotationOffset(offset: ArrayLike<number>) {
+        const wasm = this._engine.wasm;
+        wasm._wl_physx_component_set_offsetRotation(
+            this._id,
+            offset[0],
+            offset[1],
+            offset[2],
+            offset[3]
+        );
     }
 
     /**
@@ -1854,9 +2340,13 @@ export class PhysXComponent extends Component {
      * @since 0.8.10
      */
     @nativeProperty()
-    get shapeData(): {index: number} | null {
+    get shapeData(): {
+        index: number;
+    } | null {
         if (!isMeshShape(this.shape)) return null;
-        return {index: this._engine.wasm._wl_physx_component_get_shape_data(this._id)};
+        return {
+            index: this._engine.wasm._wl_physx_component_get_shape_data(this._id),
+        };
     }
 
     /**
@@ -2082,7 +2572,8 @@ export class PhysXComponent extends Component {
      *
      * @param lock The Axis that needs to be set.
      *
-     * Combine flags with Bitwise OR.
+     * Combine flags with Bitwise OR:
+     *
      * ```js
      * body.linearLockAxis = LockAxis.X | LockAxis.Y; // x and y set
      * body.linearLockAxis = LockAxis.X; // y unset
@@ -2131,7 +2622,7 @@ export class PhysXComponent extends Component {
     /**
      * Get the angular lock axes flags.
      *
-     * To get the state of a specific flag, Bitwise AND with the LockAxis needed.
+     * To get the state of a specific flag, Bitwise AND with the LockAxis needed:
      *
      * ```js
      * if(body.angularLockAxis & LockAxis.Y) {
@@ -2179,6 +2670,29 @@ export class PhysXComponent extends Component {
             v[1],
             v[2]
         );
+    }
+
+    /**
+     * Set the rigid body to sleep upon activation.
+     *
+     * When asleep, the rigid body will not be simulated until the next contact.
+     *
+     * @param flag `true` to sleep upon activation.
+     *
+     * @since 1.1.5
+     */
+    set sleepOnActivate(flag: boolean) {
+        this._engine.wasm._wl_physx_component_set_sleepOnActivate(this._id, flag);
+    }
+
+    /**
+     * `true` if the rigid body is set to sleep upon activation, `false` otherwise.
+     *
+     * @since 1.1.5
+     */
+    @nativeProperty()
+    get sleepOnActivate(): boolean {
+        return !!this._engine.wasm._wl_physx_component_get_sleepOnActivate(this._id);
     }
 
     /**
@@ -2246,7 +2760,7 @@ export class PhysXComponent extends Component {
      *      if(type == CollisionEventType.TouchLost) return;
      *
      *      // Take damage on collision with enemies
-     *      if(other.object.name.startsWith('enemy-')) {
+     *      if(other.object.name.startsWith("enemy-")) {
      *          this.applyDamage(10);
      *      }
      *  }.bind(this));
@@ -2694,20 +3208,22 @@ interface MeshAttributeAccessorOptions<T extends TypedArrayCtor> {
  * Usage:
  *
  * ```js
- *   const mesh = this.object.getComponent('mesh').mesh;
- *   const positions = mesh.attribute(WL.MeshAttribute.Position);
+ * const mesh = this.object.getComponent('mesh').mesh;
+ * const positions = mesh.attribute(MeshAttribute.Position);
  *
- *   const temp = new Float32Array(3);
- *   for(int i = 0; i < positions.length; ++i) {
- *       // pos will reference temp and thereby not allocate additional
- *       // JavaScript garbage, which would cause a perf spike when collected.
- *       const pos = positions.get(i, temp);
- *       // scale position by 2 on X axis only
- *       pos[0] *= 2.0f;
- *       positions.set(i, pos);
- *   }
- *   // we're done modifying, tell the engine to move vertex data to the GPU
- *   mesh.update();
+ * // Equivalent to `new Float32Array(3)`.
+ * const temp = positions.createArray();
+ *
+ * for(let i = 0; i < positions.length; ++i) {
+ *     // `pos` will reference `temp` and thereby not allocate additional
+ *     // memory, which would cause a perf spike when collected.
+ *     const pos = positions.get(i, temp);
+ *     // Scale position by 2 on x-axis only.
+ *     pos[0] *= 2.0;
+ *     positions.set(i, pos);
+ * }
+ * // We're done modifying, tell the engine to move vertex data to the GPU.
+ * mesh.update();
  * ```
  */
 export class MeshAttributeAccessor<T extends TypedArrayCtor = TypedArrayCtor> {
@@ -2779,7 +3295,7 @@ export class MeshAttributeAccessor<T extends TypedArrayCtor = TypedArrayCtor> {
      *
      * ```js
      * const vertexCount = 4;
-     * const positionAttribute = mesh.attribute(MeshAttributes.Position);
+     * const positionAttribute = mesh.attribute(MeshAttribute.Position);
      *
      * // A position has 3 floats per vertex. Thus, positions has length 3 * 4.
      * const positions = positionAttribute.createArray(vertexCount);
@@ -3102,7 +3618,10 @@ export class Material {
 }
 
 /** Temporary canvas */
-let temp2d: {canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D} | null = null;
+let temp2d: {
+    canvas: HTMLCanvasElement;
+    ctx: CanvasRenderingContext2D;
+} | null = null;
 
 /**
  * Wrapper around a native texture data.
@@ -3120,10 +3639,7 @@ export class Texture {
      * @param engine The engine instance
      * @param param HTML media element to create texture from or texture id to wrap.
      */
-    constructor(
-        engine: WonderlandEngine,
-        param: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | number
-    ) {
+    constructor(engine: WonderlandEngine, param: ImageLike | number) {
         this._engine = engine ?? WL;
         const wasm = engine.wasm;
         if (
@@ -3134,6 +3650,8 @@ export class Texture {
             const index = wasm._images.length;
             wasm._images.push(param);
             this._imageIndex = index;
+            /** @todo: For 1.2.0, images referenced here should be per-scene, i.e., based
+             * on the main scene images. */
             this._id = this._engine.wasm._wl_renderer_addImage(index);
         } else {
             this._id = param;
@@ -3200,7 +3718,10 @@ export class Texture {
                     'Texture.updateSubImage(): Failed to obtain CanvasRenderingContext2D.'
                 );
             }
-            temp2d = {canvas, ctx};
+            temp2d = {
+                canvas,
+                ctx,
+            };
         }
 
         const wasm = this._engine.wasm;
@@ -3231,7 +3752,7 @@ export class Texture {
      * @since 0.9.0
      */
     destroy(): void {
-        this.engine.textures._destroy(this);
+        this.engine._destroyTexture(this);
         this._id = -1;
         this._imageIndex = null;
     }
@@ -3353,15 +3874,15 @@ export class Animation {
  * {@link Scene#addObject} on the {@link WonderlandEngine.scene}.
  */
 export class Object3D {
-    /** Wonderland Engine instance. @hidden */
-    protected _engine: WonderlandEngine;
-
     /**
      * Object index in the manager.
      *
      * @hidden
      */
-    protected readonly _objectId: number = -1;
+    readonly _objectId: number = -1;
+
+    /** Wonderland Engine instance. @hidden */
+    protected _engine: WonderlandEngine;
 
     /**
      * @param o Object id to wrap
@@ -3403,6 +3924,15 @@ export class Object3D {
 
     /**
      * Children of this object.
+     *
+     * @note Child order is **undefined**. No assumptions should be made
+     * about the index of a specific object.
+     *
+     * If you need to access a specific child of this object, you can
+     * use {@link Object3D.findByName}.
+     *
+     * When the object exists in the scene at editor time, prefer passing it as
+     * a component property.
      */
     get children(): Object3D[] {
         const childrenCount = this._engine.wasm._wl_object_get_children_count(
@@ -3451,6 +3981,29 @@ export class Object3D {
     }
 
     /**
+     * Clone this hierarchy into a new one.
+     *
+     * Cloning copies the hierarchy structure, object names,
+     * as well as components.
+     *
+     * JavaScript components are cloned using {@link Component.copy}. You can
+     * override this method in your components.
+     *
+     * @param parent The parent for the cloned hierarchy or `null` to clone
+     *     into the scene root. Defaults to `null`.
+     *
+     * @returns The clone of this object.
+     */
+    clone(parent: Object3D | null = null): Object3D {
+        const engine = this._engine;
+        const id = engine.wasm._wl_object_clone(
+            this._objectId,
+            parent ? parent._objectId : 0
+        );
+        return engine.wrapObject(id);
+    }
+
+    /**
      * Reset local transformation (translation, rotation and scaling) to identity.
      *
      * @returns Reference to self (for method chaining).
@@ -3470,6 +4023,7 @@ export class Object3D {
         this._engine.wasm._wl_object_reset_translation_rotation(this.objectId);
         return this;
     }
+
     /** @deprecated Please use {@link Object3D.resetPositionRotation} instead. */
     resetTranslationRotation(): this {
         return this.resetPositionRotation();
@@ -3500,6 +4054,7 @@ export class Object3D {
         this._engine.wasm._wl_object_reset_translation(this.objectId);
         return this;
     }
+
     /** @deprecated Please use {@link Object3D.resetPosition} instead. */
     resetTranslation(): this {
         return this.resetPosition();
@@ -3519,6 +4074,7 @@ export class Object3D {
     translate(v: Readonly<NumberArray>): this {
         return this.translateLocal(v);
     }
+
     /**
      * Translate object by a vector in the parent's space.
      *
@@ -3560,6 +4116,7 @@ export class Object3D {
         this.rotateAxisAngleDegLocal(a, d);
         return this;
     }
+
     /**
      * Rotate around given axis by given angle (degrees) in local space.
      *
@@ -3583,6 +4140,7 @@ export class Object3D {
     rotateAxisAngleRad(a: Readonly<NumberArray>, d: number): this {
         return this.rotateAxisAngleRadLocal(a, d);
     }
+
     /**
      * Rotate around given axis by given angle (radians) in local space.
      *
@@ -3660,6 +4218,7 @@ export class Object3D {
         this.rotateLocal(q);
         return this;
     }
+
     /**
      * Rotate by a quaternion.
      *
@@ -3692,6 +4251,7 @@ export class Object3D {
         this.scaleLocal(v);
         return this;
     }
+
     /**
      * Scale object by a vector in object space.
      *
@@ -3723,6 +4283,7 @@ export class Object3D {
         out[2] = wasm._tempMemFloat[2];
         return out;
     }
+
     /** @overload */
     getTranslationLocal(): Float32Array;
     /** @deprecated Please use {@link Object3D.getPositionLocal} instead. */
@@ -3753,6 +4314,7 @@ export class Object3D {
         out[2] = wasm._tempMemFloat[2];
         return out;
     }
+
     /** @overload */
     getTranslationWorld(): Float32Array;
     /** @deprecated Please use {@link Object3D.getPositionWorld} instead. */
@@ -3774,6 +4336,7 @@ export class Object3D {
         this._engine.wasm._wl_object_set_translation_local(this.objectId, v[0], v[1], v[2]);
         return this;
     }
+
     /** @deprecated Please use {@link Object3D.setPositionLocal} instead. */
     setTranslationLocal(v: Readonly<NumberArray>): this {
         return this.setPositionLocal(v);
@@ -3793,6 +4356,7 @@ export class Object3D {
         this._engine.wasm._wl_object_set_translation_world(this.objectId, v[0], v[1], v[2]);
         return this;
     }
+
     /** @deprecated Please use {@link Object3D.setPositionWorld} instead. */
     setTranslationWorld(v: Readonly<NumberArray>): this {
         return this.setPositionWorld(v);
@@ -4226,6 +4790,7 @@ export class Object3D {
     getForward<T extends NumberArray>(out: T): T {
         return this.getForwardWorld(out);
     }
+
     /**
      * Compute the object's forward facing world space vector.
      *
@@ -4247,6 +4812,7 @@ export class Object3D {
     getUp<T extends NumberArray>(out: T): T {
         return this.getUpWorld(out);
     }
+
     /**
      * Compute the object's up facing world space vector.
      *
@@ -4265,6 +4831,7 @@ export class Object3D {
     getRight<T extends NumberArray>(out: T): T {
         return this.getRightWorld(out);
     }
+
     /**
      * Compute the object's right facing world space vector.
      *
@@ -4559,8 +5126,9 @@ export class Object3D {
 
     /** Destroy the object with all of its components and remove it from the scene */
     destroy(): void {
-        this._engine.wasm._wl_scene_remove_object(this.objectId);
-        (this._objectId as number) = -1;
+        if (this._objectId < 0) return;
+        this.engine.wasm._wl_scene_remove_object(this._objectId);
+        this.engine._destroyObject(this);
     }
 
     /**
@@ -4639,7 +5207,10 @@ export class Object3D {
                 typeIndex,
                 index
             );
-            return jsIndex < 0 ? null : this._engine.wasm._components[jsIndex];
+            if (jsIndex < 0) return null;
+
+            const component = this._engine.wasm._components[jsIndex];
+            return component.constructor !== BrokenComponent ? component : null;
         }
 
         const componentId = this._engine.wasm._wl_get_component_id(
@@ -4679,10 +5250,8 @@ export class Object3D {
      * @note As this function is non-trivial, avoid using it in `update()` repeatedly,
      *      but rather store its result in `init()` or `start()`
      * @warning This method will currently return at most 341 components.
-     * @overload
      */
     getComponents<T extends Component>(typeOrClass: ComponentConstructor<T>): T[];
-
     getComponents<T extends Component>(
         typeOrClass?: string | ComponentConstructor<T> | null
     ): T[] {
@@ -4709,7 +5278,7 @@ export class Object3D {
             maxComps
         );
 
-        const jsManagerIndex = wasm._typeIndexFor('js');
+        const jsManagerIndex = wasm._jsManagerIndex;
         for (let i = 0; i < componentsCount; ++i) {
             const t = wasm._tempMemUint8[i + offset];
             const componentId = wasm._tempMemUint16[i];
@@ -4717,7 +5286,10 @@ export class Object3D {
             if (t == jsManagerIndex) {
                 const typeIndex = wasm._wl_get_js_component_index_for_id(componentId);
                 const comp = wasm._components[typeIndex];
-                if (componentType === null || comp.type == type) components.push(comp);
+                const matches = componentType === null || comp.type == type;
+                if (comp.constructor !== BrokenComponent && matches) {
+                    components.push(comp);
+                }
                 continue;
             }
 
@@ -4815,13 +5387,7 @@ export class Object3D {
             component = this._engine._wrapComponent(type, componentType, componentId)!;
         }
 
-        if (params !== undefined) {
-            const ctor = component.constructor as ComponentConstructor;
-            for (const key in params) {
-                if (!(key in ctor.Properties)) continue;
-                (component as Record<string, any>)[key] = params[key];
-            }
-        }
+        if (params !== undefined) component.copy(params as Component);
 
         /* Explicitly initialize native components */
         if (componentType < 0) {
@@ -4840,10 +5406,140 @@ export class Object3D {
     }
 
     /**
+     * Search for descendants matching the name.
+     *
+     * This method is a wrapper around {@link Object3D.findByNameDirect} and
+     * {@link Object3D.findByNameRecursive}.
+     *
+     * @param name The name to search for.
+     * @param recursive If `true`, the method will look at all the descendants of this object.
+     *     If `false`, this method will only perform the search in direct children.
+     * @returns An array of {@link Object3D} matching the name.
+     *
+     * @since 1.1.0
+     */
+    findByName(name: string, recursive = false): Object3D[] {
+        return recursive ? this.findByNameRecursive(name) : this.findByNameDirect(name);
+    }
+
+    /**
+     * Search for all **direct** children matching the name.
+     *
+     * @note Even though this method is heavily optimized, it does perform
+     * a linear search to find the objects. Do not use in a hot path.
+     *
+     * @param name The name to search for.
+     * @returns An array of {@link Object3D} matching the name.
+     *
+     * @since 1.1.0
+     */
+    findByNameDirect(name: string): Object3D[] {
+        const wasm = this._engine.wasm;
+        const id = this._objectId;
+
+        /* Divide by 4 to get half as many ushort as possible */
+        const tempSizeU16 = wasm._tempMemSize >> 2;
+        const maxCount = tempSizeU16 - 2; /* Reserve two ushort */
+
+        const buffer = wasm._tempMemUint16;
+        buffer[maxCount] = 0; /* Index offset */
+        buffer[maxCount + 1] = 0; /* child count */
+
+        const bufferPtr = wasm._tempMem;
+        const indexPtr = bufferPtr + maxCount * 2;
+        const childCountPtr = bufferPtr + maxCount * 2 + 2;
+        const namePtr = wasm.tempUTF8(name, (maxCount + 2) * 2);
+
+        const result: Object3D[] = [];
+        let read = 0;
+        while (
+            (read = wasm._wl_object_findByName(
+                id,
+                namePtr,
+                indexPtr,
+                childCountPtr,
+                bufferPtr,
+                maxCount
+            ))
+        ) {
+            for (let i = 0; i < read; ++i) result.push(this.engine.wrapObject(buffer[i]));
+        }
+
+        return result;
+    }
+
+    /**
+     * Search for **all descendants** matching the name.
+     *
+     * @note Even though this method is heavily optimized, it does perform
+     * a linear search to find the objects. Do not use in a hot path.
+     *
+     * @param name The name to search for.
+     * @returns An array of {@link Object3D} matching the name.
+     *
+     * @since 1.1.0
+     */
+    findByNameRecursive(name: string): Object3D[] {
+        const wasm = this._engine.wasm;
+        const id = this._objectId;
+
+        /* Divide by 4 to get half as many ushort as possible */
+        const tempSizeU16 = wasm._tempMemSize >> 2;
+        const maxCount = tempSizeU16 - 1; /* Reserve one ushort */
+
+        const buffer = wasm._tempMemUint16;
+        buffer[maxCount] = 0; /* Index offset */
+
+        const bufferPtr = wasm._tempMem;
+        const indexPtr = bufferPtr + maxCount * 2;
+        const namePtr = wasm.tempUTF8(name, (maxCount + 1) * 2);
+
+        let read = 0;
+        const result: Object3D[] = [];
+        while (
+            (read = wasm._wl_object_findByNameRecursive(
+                id,
+                namePtr,
+                indexPtr,
+                bufferPtr,
+                maxCount
+            ))
+        ) {
+            for (let i = 0; i < read; ++i) result.push(this.engine.wrapObject(buffer[i]));
+        }
+
+        return result;
+    }
+
+    /**
      * Whether given object's transformation has changed.
      */
     get changed(): boolean {
         return !!this._engine.wasm._wl_object_is_changed(this.objectId);
+    }
+
+    /**
+     * `true` if the object is destroyed, `false` otherwise.
+     *
+     * If {@link WonderlandEngine.erasePrototypeOnDestroy} is `true`,
+     * reading a custom property will not work:
+     *
+     * ```js
+     * engine.erasePrototypeOnDestroy = true;
+     *
+     * const obj = scene.addObject();
+     * obj.customParam = 'Hello World!';
+     *
+     * console.log(obj.isDestroyed); // Prints `false`
+     * obj.destroy();
+     * console.log(obj.isDestroyed); // Prints `true`
+     * console.log(obj.customParam); // Throws an error
+     * ```
+     *
+     * @since 1.1.1
+     */
+    get isDestroyed(): boolean {
+        return this._objectId < 0;
     }
 
     /**
@@ -5070,14 +5766,14 @@ export {math};
  *
  * Allows {@link I18N.onLanguageChanged "detecting language change"},
  * {@link I18N.language "setting the current language"} or translating
- * {@link I18N.translate() "individual terms"}.
+ * {@link I18N.translate "individual terms"}.
  *
  * Internationalization works with terms,
  * a string type keyword that is linked to a different text for each language.
  *
  * Internally, string parameters for text and js components are
  * automatically swapped during language change, given they are linked to a term.
- * If manual text swapping is desired, {@link I18N.translate()}
+ * If manual text swapping is desired, {@link I18N.translate}
  * can be used to retrieve the current translation for any term.
  *
  * You can also use the {@link I18N.onLanguageChanged} to manually update text
@@ -5093,6 +5789,7 @@ export class I18N {
      * second parameter is the new language index.
      *
      * Usage from a within a component:
+     *
      * ```js
      * this.engine.i18n.onLanguageChanged.add((oldLanguageIndex, newLanguageIndex) => {
      *     const oldLanguage = this.engine.i18n.languageName(oldLanguageIndex);
@@ -5106,6 +5803,9 @@ export class I18N {
     /** Wonderland Engine instance. @hidden */
     protected _engine: WonderlandEngine;
 
+    /** Previously set language index. @hidden */
+    private _prevLanguageIndex: number = -1;
+
     /**
      * Constructor
      */
@@ -5116,23 +5816,55 @@ export class I18N {
     /**
      * Set current language and apply translations to linked text parameters.
      *
+     * @note This is equivalent to {@link I18N.setLanguage}.
+     *
      * @param code Language code to switch to
      */
     set language(code: string | null) {
-        if (code == null) return;
-        const wasm = this._engine.wasm;
-        wasm._wl_i18n_setLanguage(wasm.tempUTF8(code));
+        this.setLanguage(code);
     }
 
-    /**
-     * Get current language code.
-     *
-     */
+    /** Get current language code. */
     get language(): string | null {
         const wasm = this._engine.wasm;
         const code = wasm._wl_i18n_currentLanguage();
         if (code === 0) return null;
         return wasm.UTF8ToString(code);
+    }
+
+    /**
+     * Get the current language index.
+     *
+     * This method is more efficient than its equivalent:
+     *
+     * ```js
+     * const index = i18n.languageIndex(i18n.language);
+     * ```
+     */
+    get currentIndex(): number {
+        return this._engine.wasm._wl_i18n_currentLanguageIndex();
+    }
+
+    /** Previous language index. */
+    get previousIndex(): number {
+        return this._prevLanguageIndex;
+    }
+
+    /**
+     * Set current language and apply translations to linked text parameters.
+     *
+     * @param code The language code.
+     * @returns A promise that resolves with the current index code when the
+     *     language is loaded.
+     */
+    setLanguage(code: string | null): Promise<number> {
+        if (code == null) return Promise.resolve(this.currentIndex);
+        const wasm = this._engine.wasm;
+        this._prevLanguageIndex = this.currentIndex;
+        wasm._wl_i18n_setLanguage(wasm.tempUTF8(code));
+        return this._engine.scene
+            ._flushAppend(this._engine.scene.baseURL)
+            .then(() => this.currentIndex);
     }
 
     /**

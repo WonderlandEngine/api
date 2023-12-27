@@ -1,3 +1,5 @@
+import {Object3D} from '..';
+
 /**
  * Promise that resolves when the image is loaded.
  *
@@ -47,4 +49,14 @@ export function dummyImage(width: number, height: number): Promise<HTMLImageElem
     img.src = canvas.toDataURL();
 
     return imagePromise(img);
+}
+
+/**
+ * Comparator to use when sorting on an array of `Object3D`.
+ *
+ * @param a The first object to compare.
+ * @param b The second object to compare.
+ */
+export function objectSort(a: Object3D, b: Object3D) {
+    return a.objectId - b.objectId;
 }

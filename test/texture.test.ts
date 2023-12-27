@@ -19,7 +19,8 @@ describe('Texture', function () {
         const texture = await WL.textures.load('test/resources/2x2.png');
         expect(texture.width).to.equal(2);
         expect(texture.height).to.equal(2);
-        expect(WL.textures.get(0)?.id).to.equal(texture.id);
+        expect(WL.textures.get(0)).to.equal(null);
+        expect(WL.textures.get(1)?.id).to.equal(texture.id);
     });
 
     it('.equals()', async function () {
@@ -44,17 +45,17 @@ describe('Texture', function () {
         ]);
         const tex1 = new Texture(WL, images[0]);
         const tex2 = new Texture(WL, images[1]);
-        expect(tex1.id).to.equal(0);
-        expect(tex2.id).to.equal(1);
+        expect(tex1.id).to.equal(1);
+        expect(tex2.id).to.equal(2);
 
         tex1.destroy();
         expect(tex1.id).to.equal(-1);
-        expect(tex2.id).to.equal(1);
+        expect(tex2.id).to.equal(2);
         expect(WL.textures.get(tex2.id)?.width).to.equal(6);
         expect(WL.textures.get(tex2.id)?.height).to.equal(8);
 
         const tex3 = new Texture(WL, images[2]);
-        expect(tex3.id).to.equal(0);
+        expect(tex3.id).to.equal(1);
         expect(WL.textures.get(tex3.id)?.width).to.equal(10);
         expect(WL.textures.get(tex3.id)?.height).to.equal(12);
     });

@@ -295,6 +295,25 @@ describe('PhysX', function () {
         expect(p2.angularDamping).to.almost(1.5);
     });
 
+    it('sleeping objects simulation', function () {
+        const obj = WL.scene.addObject();
+        obj.setPositionWorld([0, 1, 0]);
+        const comp = obj.addComponent('physx', {
+            mass: 1,
+            shape: Shape.Box,
+            sleepOnActivate: true,
+        })!;
+
+        WL.wasm._wl_nextUpdate(1.0); /* Large update to ensure it doesn't move */
+        expect(obj.getPositionWorld()).to.deep.almost([0, 1, 0]);
+
+        comp.active = false;
+        comp.sleepOnActivate = false;
+        comp.active = true;
+        WL.wasm._wl_nextUpdate(1.0); /* Large update to ensure it moves */
+        expect(obj.getPositionWorld()[1]).to.be.lessThan(0.0);
+    });
+
     it('get/set offsetTranslation', function () {
         const obj = WL.scene.addObject();
         const comp = obj.addComponent('physx', {shape: Shape.Box})!;
@@ -309,6 +328,22 @@ describe('PhysX', function () {
         expect(comp.rotationOffset).to.deep.almost([0, 0, 0, 1]);
         comp.rotationOffset = [1, 0, 0, 1];
         expect(comp.rotationOffset).to.deep.almost([0.707, 0, 0, 0.707], 0.01);
+    });
+
+    it('get/set sleepOnActivate', function () {
+        const obj = WL.scene.addObject();
+        {
+            const comp = obj.addComponent('physx', {shape: Shape.Box, active: false})!;
+            expect(comp.sleepOnActivate).to.be.false;
+            comp.sleepOnActivate = true;
+            expect(comp.sleepOnActivate).to.be.true;
+        }
+        const comp = obj.addComponent('physx', {
+            shape: Shape.Box,
+            sleepOnActivate: true,
+            active: false,
+        })!;
+        expect(comp.sleepOnActivate).to.be.true;
     });
 
     describe('Flags', function () {

@@ -25,6 +25,22 @@ import {Scene} from './scene.js';
 import {Version} from './version.js';
 import {WASM} from './wasm.js';
 import {TextureManager} from './texture-manager.js';
+import {Logger} from './utils/logger.js';
+import {LogTag} from './index.js';
+
+function checkXRSupport() {
+    if (!navigator.xr) {
+        const isLocalhost =
+            location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+        const missingHTTPS = location.protocol !== 'https:' && !isLocalhost;
+        return Promise.reject(
+            missingHTTPS
+                ? 'WebXR is only supported with HTTPS or on localhost!'
+                : 'WebXR unsupported in this browser.'
+        );
+    }
+    return Promise.resolve();
+}
 
 /**
  * Main Wonderland Engine instance.
@@ -35,7 +51,8 @@ export class WonderlandEngine {
     /**
      * {@link Emitter} for WebXR session end events.
      *
-     * Usage from a within a component:
+     * Usage from within a component:
+     *
      * ```js
      * this.engine.onXRSessionEnd.add(() => console.log("XR session ended."));
      * ```
@@ -43,9 +60,10 @@ export class WonderlandEngine {
     readonly onXRSessionEnd = new Emitter();
 
     /**
-     * {@link Emitter} for WebXR session start events.
+     * {@link RetainEmitter} for WebXR session start events.
      *
-     * Usage from a within a component:
+     * Usage from within a component:
+     *
      * ```js
      * this.engine.onXRSessionStart.add((session, mode) => console.log(session, mode));
      * ```
@@ -67,7 +85,8 @@ export class WonderlandEngine {
     /**
      * {@link Emitter} for canvas / main framebuffer resize events.
      *
-     * Usage from a within a component:
+     * Usage from within a component:
+     *
      * ```js
      * this.engine.onResize.add(() => {
      *     const canvas = this.engine.canvas;
@@ -86,12 +105,36 @@ export class WonderlandEngine {
     readonly vrSupported: boolean = false;
 
     /**
+     * {@link RetainEmitter} signalling the end of the loading screen.
+     *
+     * Listeners get notified when the first call to {@link Scene#load()} is
+     * invoked. At this point the new scene has not become active, and none of
+     * its resources or components are initialized.
+     *
+     * Compared to {@link onSceneLoaded}, this does not wait for all components
+     * to be fully initialized and activated. Any handler added inside
+     * {@link Component#init()}, {@link Component#start()} or
+     * {@link Component#onActivate()} will be called immediately.
+     *
+     * Usage:
+     *
+     * ```js
+     * this.engine.onLoadingScreenEnd.add(() => console.log("Wait is over!"));
+     * ```
+     */
+    readonly onLoadingScreenEnd = new RetainEmitter();
+
+    /**
      * {@link Emitter} for scene loaded events.
      *
-     * Listeners get notified when a call to {@link Scene#load()} finishes,
-     * which also happens after the main scene has replaced the loading screen.
+     * Listeners get notified when a call to {@link Scene#load()} finishes. At
+     * this point all resources are loaded and all components had their
+     * {@link Component#init()} as well as (if active)
+     * {@link Component#start()} and {@link Component#onActivate()} methods
+     * called.
      *
-     * Usage from a within a component:
+     * Usage from within a component:
+     *
      * ```js
      * this.engine.onSceneLoaded.add(() => console.log("Scene switched!"));
      * ```
@@ -209,6 +252,14 @@ export class WonderlandEngine {
     #resizeObserver: ResizeObserver | null = null;
 
     /**
+     * Initial reference space type set by webxr_init. See {@link _init} for
+     * more information.
+     *
+     * @hidden
+     */
+    #initialReferenceSpaceType: XRReferenceSpaceType | null = null;
+
+    /**
      * Create a new engine instance.
      *
      * @param wasm Wasm bridge instance
@@ -225,10 +276,7 @@ export class WonderlandEngine {
 
         this.canvas.addEventListener(
             'webglcontextlost',
-            function (e) {
-                console.error('Context lost:');
-                console.error(e);
-            },
+            (e) => this.log.error(LogTag.Engine, 'Context lost:', e),
             false
         );
     }
@@ -327,7 +375,7 @@ export class WonderlandEngine {
     }
 
     /**
-     * Request a XR session.
+     * Request an XR session.
      *
      * @note Please use this call instead of directly calling `navigator.xr.requestSession()`.
      * Wonderland Engine requires to be aware that a session is started, and this
@@ -343,17 +391,37 @@ export class WonderlandEngine {
         features: string[],
         optionalFeatures: string[] = []
     ): Promise<XRSession> {
-        if (!navigator.xr) {
-            const isLocalhost =
-                location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-            const missingHTTPS = location.protocol !== 'https:' && !isLocalhost;
-            return Promise.reject(
-                missingHTTPS
-                    ? 'WebXR is only supported with HTTPS or on localhost!'
-                    : 'WebXR unsupported in this browser.'
-            );
-        }
-        return this.#wasm.webxr_requestSession(mode, features, optionalFeatures);
+        return checkXRSupport().then(() =>
+            this.#wasm.webxr_requestSession(mode, features, optionalFeatures)
+        );
+    }
+
+    /**
+     * Offer an XR session.
+     *
+     * Adds an interactive UI element to the browser interface to start an XR
+     * session. Browser support is optional, so it's advised to still allow
+     * requesting a session with a UI element on the website itself.
+     *
+     * @note Please use this call instead of directly calling `navigator.xr.offerSession()`.
+     * Wonderland Engine requires to be aware that a session is started, and this
+     * is done through this call.
+     *
+     * @param mode The XR mode.
+     * @param features An array of required features, e.g., `['local-floor', 'hit-test']`.
+     * @param optionalFeatures An array of optional features, e.g., `['bounded-floor', 'depth-sensing']`.
+     * @returns A promise resolving with the `XRSession`, a string error message otherwise.
+     *
+     * @since 1.1.5
+     */
+    offerXRSession(
+        mode: XRSessionMode,
+        features: string[],
+        optionalFeatures: string[] = []
+    ): Promise<XRSession> {
+        return checkXRSupport().then(() =>
+            this.#wasm.webxr_offerSession(mode, features, optionalFeatures)
+        );
     }
 
     /**
@@ -497,6 +565,11 @@ export class WonderlandEngine {
         };
     }
 
+    /** Engine {@link Logger}. Use it to turn on / off logging. */
+    get log(): Logger {
+        return this.#wasm._log;
+    }
+
     /* Internal-Only Methods */
 
     /**
@@ -508,6 +581,34 @@ export class WonderlandEngine {
      */
     _init() {
         (this.scene as Scene) = new Scene(this);
+
+        /* Force the reference space to 'local'/'viewer' for the loading screen
+         * to make sure the head input is at the origin. Doing it this way to
+         * avoid adding JS components to the loading screen. */
+        const onXRStart = () => {
+            this.#initialReferenceSpaceType = this.xr!.currentReferenceSpaceType;
+            const newSpace =
+                this.xr!.referenceSpaceForType('local') ??
+                this.xr!.referenceSpaceForType('viewer');
+            this.xr!.currentReferenceSpace = newSpace;
+        };
+
+        /* Not once() because the user can enter and exit XR several times
+         * during a long loading screen */
+        this.onXRSessionStart.add(onXRStart);
+
+        /* This is called before all init()/start()/onActivate() so we avoid
+         * overwriting a user-set reference space */
+        this.onLoadingScreenEnd.once(() => {
+            this.onXRSessionStart.remove(onXRStart);
+
+            if (!this.xr || !this.#initialReferenceSpaceType) return;
+
+            this.xr.currentReferenceSpace =
+                this.xr.referenceSpaceForType(this.#initialReferenceSpaceType) ??
+                this.xr.referenceSpaceForType('viewer');
+            this.#initialReferenceSpaceType = null;
+        });
 
         /* Setup the error handler. This is used to to manage native errors. */
         this.#wasm._wl_set_error_callback(
