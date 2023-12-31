@@ -3962,7 +3962,8 @@ export class Object3D {
 
     /**
      * Children of this object.
-     * The returned array might have more elements than the actual childre count, so you should rely
+     * If you use the out paramter, the returned array might have more elements than the actual children count,
+     * if the out array was bigger than the actual childre count, so you should rely
      * on the this.childrenCount value when iterating on it.
      *
      * @param out Destination array, expected to have at least this.childrenCount elements.
