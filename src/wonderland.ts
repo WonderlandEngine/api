@@ -3185,7 +3185,11 @@ export class Mesh {
         return indexArray;
     }
 
-    /** Index data (read-only) or `null` if the mesh is not indexed. */
+    /**
+     * Equivalent to {@link Mesh.getIndexData}.
+     *
+     * @note Prefer to use {@link Mesh.getIndexData} for performance.
+     */
     get indexData(): Uint8Array | Uint16Array | Uint32Array | null {
         const wasm = this._engine.wasm;
         const tempMem = wasm._tempMem;
