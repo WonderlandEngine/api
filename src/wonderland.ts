@@ -5659,7 +5659,11 @@ export class RayHit {
         this._ptr = ptr;
     }
 
-    /** Array of ray hit locations. */
+    /**
+     * Equivalent to {@link RayHit.getLocations}.
+     *
+     * @note Prefer to use {@link RayHit.getLocations} for performance.
+     */
     get locations(): Float32Array[] {
         return this.getLocations();
     }
@@ -5688,7 +5692,11 @@ export class RayHit {
         return out;
     }
 
-    /** Array of ray hit normals (only when using {@link Physics#rayCast}. */
+    /**
+     * Equivalent to {@link RayHit.getNormals}.
+     *
+     * @note Prefer to use {@link RayHit.getNormals} for performance.
+     */
     get normals(): Float32Array[] {
         return this.getNormals();
     }
@@ -5718,9 +5726,9 @@ export class RayHit {
     }
 
     /**
-     * Prefer these to recalculating the distance from locations.
+     * Equivalent to {@link RayHit.getDistances}.
      *
-     * Distances of array hits to ray origin.
+     * @note Prefer to use {@link RayHit.getDistances} for performance.
      */
     get distances(): Float32Array {
         return this.getDistances();
@@ -5747,26 +5755,29 @@ export class RayHit {
         return out;
     }
 
-    /** Hit objects */
+    /**
+     * Equivalent to {@link RayHit.getObjects}.
+     *
+     * @note Prefer to use {@link RayHit.getObjects} for performance.
+     */
     get objects(): (Object3D | null)[] {
-        return this.getObjects();
+        /** @todo: Remove at 2.0.0, this is kept for backward compatibility. */
+        const objects: (Object3D | null)[] = [null, null, null, null];
+        return this.getObjects(objects as Object3D[]);
     }
 
-    /** @overload */
-    getObjects(): (Object3D | null)[];
     /**
      * Hit objects
      *
      * @param out Destination array/vector, expected to have at least this.hitCount elements.
      * @returns The `out` parameter.
      */
-    getObjects<T extends (Object3D | null)[]>(out: T): T;
-    getObjects(out: (Object3D | null)[] = new Array(this.hitCount)): (Object3D | null)[] {
+    getObjects(out: Object3D[] = new Array(this.hitCount)): Object3D[] {
         const HEAPU16 = this._engine.wasm.HEAPU16;
         const alignedPtr = (this._ptr + (48 * 2 + 16)) >> 1;
         for (let i = 0; i < this.hitCount; ++i) {
             const objectPtr = alignedPtr + i;
-            out[i] = this._engine.wrapObject(HEAPU16[objectPtr + i]);
+            out[i] = this._engine.wrapObject(HEAPU16[objectPtr]);
         }
         return out;
     }
