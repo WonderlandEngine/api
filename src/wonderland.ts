@@ -1172,10 +1172,9 @@ export class CollisionComponent extends Component {
     }
 
     /**
-     * Collision component extents.
+     * Equivalent to {@link CollisionComponent.getExtents}.
      *
-     * If {@link collider} returns {@link Collider.Sphere}, only the first
-     * component of the returned vector is used.
+     * @note Prefer to use {@link CollisionComponent.getExtents} for performance.
      */
     @nativeProperty()
     get extents(): Float32Array {
@@ -1481,7 +1480,11 @@ export class ViewComponent extends Component {
     /** @override */
     static TypeName = 'view';
 
-    /** Projection matrix. */
+    /**
+     * Equivalent to {@link ViewComponent.getProjectionMatrix}.
+     *
+     * @note Prefer to use {@link ViewComponent.getProjectionMatrix} for performance.
+     */
     @enumerable()
     get projectionMatrix(): Float32Array {
         return this.getProjectionMatrix();
@@ -2390,7 +2393,9 @@ export class PhysXComponent extends Component {
     }
 
     /**
-     * The shape extents for collision detection.
+     * Equivalent to {@link PhysXComponent.getExtents}.
+     *
+     * @note Prefer to use {@link PhysXComponent.getExtents} for performance.
      */
     @nativeProperty()
     get extents(): Float32Array {
@@ -2513,7 +2518,11 @@ export class PhysXComponent extends Component {
         );
     }
 
-    /** Linear velocity or `[0, 0, 0]` if the component is not active. */
+    /**
+     * Equivalent to {@link PhysXComponent.getLinearVelocity}.
+     *
+     * @note Prefer to use {@link PhysXComponent.getLinearVelocity} for performance.
+     */
     @nativeProperty()
     get linearVelocity(): Float32Array {
         return this.getLinearVelocity();
@@ -2559,7 +2568,11 @@ export class PhysXComponent extends Component {
         );
     }
 
-    /** Angular velocity or `[0, 0, 0]` if the component is not active. */
+    /**
+     * Equivalent to {@link PhysXComponent.getAngularVelocity}.
+     *
+     * @note Prefer to use {@link PhysXComponent.getAngularVelocity} for performance.
+     */
     @nativeProperty()
     get angularVelocity(): Float32Array {
         return this.getAngularVelocity();
@@ -5685,7 +5698,11 @@ export class Skin {
         return this._engine.wasm._wl_skin_get_joint_count(this._index);
     }
 
-    /** Joints object ids for this skin */
+    /**
+     * Equivalent to {@link Skin.getJointIds}.
+     *
+     * @note Prefer to use {@link Skin.getJointIds} for performance.
+     */
     get jointIds(): Uint16Array {
         return this.getJointIds();
     }
@@ -5709,9 +5726,9 @@ export class Skin {
     }
 
     /**
-     * Dual quaternions in a flat array of size 8 times {@link jointCount}.
+     * Equivalent to {@link Skin.getInverseBindTransforms}.
      *
-     * Inverse bind transforms of the skin.
+     * @note Prefer to use {@link Skin.getInverseBindTransforms} for performance.
      */
     get inverseBindTransforms(): Float32Array {
         return this.getInverseBindTransforms();
@@ -5740,9 +5757,9 @@ export class Skin {
     }
 
     /**
-     * Vectors in a flat array of size 3 times {@link jointCount}.
+     * Equivalent to {@link Skin.getInverseBindScalings}.
      *
-     * Inverse bind scalings of the skin.
+     * @note Prefer to use {@link Skin.getInverseBindScalings} for performance.
      */
     get inverseBindScalings(): Float32Array {
         return this.getInverseBindScalings();
