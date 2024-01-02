@@ -3938,16 +3938,9 @@ export class Object3D {
     }
 
     /**
-     * Children of this object.
+     * Equivalent to {@link Object3D.getChildren}.
      *
-     * @note Child order is **undefined**. No assumptions should be made
-     * about the index of a specific object.
-     *
-     * If you need to access a specific child of this object, you can
-     * use {@link Object3D.findByName}.
-     *
-     * When the object exists in the scene at editor time, prefer passing it as
-     * a component property.
+     * @note Prefer to use {@link Object3D.getChildren} for performance.
      */
     get children(): Object3D[] {
         return this.getChildren();
@@ -3962,7 +3955,17 @@ export class Object3D {
 
     /**
      * Children of this object.
-     * If you use the out paramter, the returned array might have more elements than the actual children count,
+     *
+     * @note Child order is **undefined**. No assumptions should be made
+     * about the index of a specific object.
+     *
+     * If you need to access a specific child of this object, you can
+     * use {@link Object3D.findByName}.
+     *
+     * When the object exists in the scene at editor time, prefer passing it as
+     * a component property.
+     *
+     * If you use the out parameter, the returned array might have more elements than the actual children count,
      * if the out array was bigger than the actual childre count, so you should rely
      * on the this.childrenCount value when iterating on it.
      *
