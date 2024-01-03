@@ -3965,11 +3965,10 @@ export class Object3D {
      * When the object exists in the scene at editor time, prefer passing it as
      * a component property.
      *
-     * If you use the out parameter, the returned array might have more elements than the actual children count,
-     * if the out array was bigger than the actual childre count, so you should rely
-     * on the this.childrenCount value when iterating on it.
+     * @note When providing an output array, only `this.childrenCount` elements will be written.
+     * The rest of the array will not be modified by this method.
      *
-     * @param out Destination array, expected to have at least this.childrenCount elements.
+     * @param out Destination array, expected to have at least `this.childrenCount` elements.
      * @returns The `out` parameter.
      */
     getChildren(out: Object3D[] = new Array(this.childrenCount)): Object3D[] {

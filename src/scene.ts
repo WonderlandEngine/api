@@ -251,7 +251,7 @@ export class Scene {
      */
     get children(): Object3D[] {
         const root = this._engine.wrapObject(0);
-        return root.children;
+        return root.getChildren();
     }
 
     /**
@@ -264,31 +264,16 @@ export class Scene {
 
     /**
      * Children of the root object.
-     * If you use the out paramter, the returned array might have more elements than the actual children count,
-     * if the out array was bigger than the actual childre count, so you should rely
-     * on the this.childrenCount value when iterating on it.
      *
-     * @param out Destination array, expected to have at least this.childrenCount elements.
+     * @note When providing an output array, only `this.childrenCount` elements will be written.
+     * The rest of the array will not be modified by this method.
+     *
+     * @param out Destination array, expected to have at least `this.childrenCount` elements.
      * @returns The `out` parameter.
      */
     getChildren(out: Object3D[] = new Array(this.childrenCount)): Object3D[] {
-        const childrenCount = this.childrenCount;
-        if (childrenCount === 0) return out;
-
-        const wasm = this._engine.wasm;
-        wasm.requireTempMem(childrenCount * 2);
-
-        const rootObjectId = 0;
-        this._engine.wasm._wl_object_get_children(
-            rootObjectId,
-            wasm._tempMem,
-            wasm._tempMemSize >> 1
-        );
-
-        for (let i = 0; i < childrenCount; ++i) {
-            out[i] = this._engine.wrapObject(wasm._tempMemUint16[i]);
-        }
-        return out;
+        const root = this._engine.wrapObject(0);
+        return root.getChildren(out);
     }
 
     /**
