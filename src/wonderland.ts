@@ -1172,19 +1172,42 @@ export class CollisionComponent extends Component {
     }
 
     /**
-     * Collision component extents.
+     * Equivalent to {@link CollisionComponent.getExtents}.
      *
-     * If {@link collider} returns {@link Collider.Sphere}, only the first
-     * component of the returned vector is used.
+     * @note Prefer to use {@link CollisionComponent.getExtents} for performance.
      */
     @nativeProperty()
     get extents(): Float32Array {
+        /** @todo: Break at 2.0.0. Do not allow modifying memory in-place at 2.0.0. */
         const wasm = this._engine.wasm;
         return new Float32Array(
             wasm.HEAPF32.buffer,
             wasm._wl_collision_component_get_extents(this._id),
             3
         );
+    }
+
+    /** @overload */
+    getExtents(): Float32Array;
+    /**
+     * Collision component extents.
+     *
+     * If {@link collider} returns {@link Collider.Sphere}, only the first
+     * component of the returned vector is used.
+     *
+     * @param out Destination array/vector, expected to have at least 3 elements.
+     * @returns The `out` parameter.
+     */
+    getExtents<T extends NumberArray>(out: T): T;
+    getExtents(out: NumberArray = new Float32Array(3)): NumberArray {
+        const wasm = this._engine.wasm;
+        const ptr = wasm._wl_collision_component_get_extents(this._id) / 4; /* Align F32 */
+
+        out[0] = wasm.HEAPF32[ptr];
+        out[1] = wasm.HEAPF32[ptr + 1];
+        out[2] = wasm.HEAPF32[ptr + 2];
+
+        return out;
     }
 
     /**
@@ -1465,15 +1488,39 @@ export class ViewComponent extends Component {
     /** @override */
     static TypeName = 'view';
 
-    /** Projection matrix. */
+    /**
+     * Equivalent to {@link ViewComponent.getProjectionMatrix}.
+     *
+     * @note Prefer to use {@link ViewComponent.getProjectionMatrix} for performance.
+     */
     @enumerable()
     get projectionMatrix(): Float32Array {
+        /** @todo: Break at 2.0.0. Do not allow modifying memory in-place at 2.0.0. */
         const wasm = this._engine.wasm;
         return new Float32Array(
             wasm.HEAPF32.buffer,
             wasm._wl_view_component_get_projection_matrix(this._id),
             16
         );
+    }
+
+    /** @overload */
+    getProjectionMatrix(): Float32Array;
+    /**
+     * Projection matrix.
+     *
+     * @param out Destination array/vector, expected to have at least 16 elements.
+     * @returns The `out` parameter.
+     */
+    getProjectionMatrix<T extends NumberArray>(out: T): T;
+    getProjectionMatrix(out: NumberArray = new Float32Array(16)): NumberArray {
+        const wasm = this._engine.wasm;
+        const ptr =
+            wasm._wl_view_component_get_projection_matrix(this._id) / 4; /* Align F32 */
+        for (let i = 0; i < 16; ++i) {
+            out[i] = wasm.HEAPF32[ptr + i];
+        }
+        return out;
     }
 
     /** ViewComponent near clipping plane value. */
@@ -2360,13 +2407,36 @@ export class PhysXComponent extends Component {
     }
 
     /**
-     * The shape extents for collision detection.
+     * Equivalent to {@link PhysXComponent.getExtents}.
+     *
+     * @note Prefer to use {@link PhysXComponent.getExtents} for performance.
      */
     @nativeProperty()
     get extents(): Float32Array {
+        /** @todo: Break at 2.0.0. Do not allow modifying memory in-place at 2.0.0. */
         const wasm = this._engine.wasm;
         const ptr = wasm._wl_physx_component_get_extents(this._id);
         return new Float32Array(wasm.HEAPF32.buffer, ptr, 3);
+    }
+
+    /** @overload */
+    getExtents(): Float32Array;
+    /**
+     * The shape extents for collision detection.
+     *
+     * @param out Destination array/vector, expected to have at least 3 elements.
+     * @returns The `out` parameter.
+     */
+    getExtents<T extends NumberArray>(out: T): T;
+    getExtents(out: NumberArray = new Float32Array(3)): NumberArray {
+        const wasm = this._engine.wasm;
+        const ptr = wasm._wl_physx_component_get_extents(this._id) / 4; /* Align F32 */
+
+        out[0] = wasm.HEAPF32[ptr];
+        out[1] = wasm.HEAPF32[ptr + 1];
+        out[2] = wasm.HEAPF32[ptr + 2];
+
+        return out;
     }
 
     /**
@@ -2467,12 +2537,41 @@ export class PhysXComponent extends Component {
         );
     }
 
-    /** Linear velocity or `[0, 0, 0]` if the component is not active. */
+    /**
+     * Equivalent to {@link PhysXComponent.getLinearVelocity}.
+     *
+     * @note Prefer to use {@link PhysXComponent.getLinearVelocity} for performance.
+     */
     @nativeProperty()
     get linearVelocity(): Float32Array {
+        /** @todo: Break at 2.0.0. Do not allow modifying memory in-place at 2.0.0. */
         const wasm = this._engine.wasm;
         wasm._wl_physx_component_get_linearVelocity(this._id, wasm._tempMem);
         return new Float32Array(wasm.HEAPF32.buffer, wasm._tempMem, 3);
+    }
+
+    /** @overload */
+    getLinearVelocity(): Float32Array;
+    /**
+     * Linear velocity or `[0, 0, 0]` if the component is not active.
+     *
+     * @param out Destination array/vector, expected to have at least 3 elements.
+     * @returns The `out` parameter.
+     */
+    getLinearVelocity<T extends NumberArray>(out: T): T;
+    getLinearVelocity(out: NumberArray = new Float32Array(3)): NumberArray {
+        const wasm = this._engine.wasm;
+        const tempMemFloat = wasm._tempMemFloat;
+        wasm._wl_physx_component_get_linearVelocity(
+            this._id,
+            wasm._tempMem
+        ); /* Align F32 */
+
+        out[0] = tempMemFloat[0];
+        out[1] = tempMemFloat[1];
+        out[2] = tempMemFloat[2];
+
+        return out;
     }
 
     /**
@@ -2493,12 +2592,41 @@ export class PhysXComponent extends Component {
         );
     }
 
-    /** Angular velocity or `[0, 0, 0]` if the component is not active. */
+    /**
+     * Equivalent to {@link PhysXComponent.getAngularVelocity}.
+     *
+     * @note Prefer to use {@link PhysXComponent.getAngularVelocity} for performance.
+     */
     @nativeProperty()
     get angularVelocity(): Float32Array {
+        /** @todo: Break at 2.0.0. Do not allow modifying memory in-place at 2.0.0. */
         const wasm = this._engine.wasm;
         wasm._wl_physx_component_get_angularVelocity(this._id, wasm._tempMem);
         return new Float32Array(wasm.HEAPF32.buffer, wasm._tempMem, 3);
+    }
+
+    /** @overload */
+    getAngularVelocity(): Float32Array;
+    /**
+     * Angular velocity or `[0, 0, 0]` if the component is not active.
+     *
+     * @param out Destination array/vector, expected to have at least 3 elements.
+     * @returns The `out` parameter.
+     */
+    getAngularVelocity<T extends NumberArray>(out: T): T;
+    getAngularVelocity(out: NumberArray = new Float32Array(3)): NumberArray {
+        const wasm = this._engine.wasm;
+        const tempMemFloat = wasm._tempMemFloat;
+        wasm._wl_physx_component_get_angularVelocity(
+            this._id,
+            wasm._tempMem
+        ); /* Align F32 */
+
+        out[0] = tempMemFloat[0];
+        out[1] = tempMemFloat[1];
+        out[2] = tempMemFloat[2];
+
+        return out;
     }
 
     /**
@@ -5698,7 +5826,7 @@ export class RayHit {
         this._engine = engine;
         this._ptr = ptr;
     }
-  
+
     /** Hosting engine instance. */
     get engine() {
         return this._engine;
