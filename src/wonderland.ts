@@ -3230,7 +3230,10 @@ export class Mesh {
         const indexCount = wasm.HEAPU32[tempMem / 4];
         const indexSize = wasm.HEAPU32[tempMem / 4 + 1];
 
-        if (!out) out = Mesh.createMeshIndexArray(indexSize, indexCount);
+        // @todo: Check that out byte size is big enough
+        if (!out) {
+            out = Mesh.createMeshIndexArray(indexSize, indexCount);
+        }
 
         switch (indexSize) {
             case MeshIndexType.UnsignedByte: {
