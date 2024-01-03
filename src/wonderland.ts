@@ -3938,6 +3938,22 @@ export class Object3D {
     }
 
     /**
+     * Equivalent to {@link Object3D.getChildren}.
+     *
+     * @note Prefer to use {@link Object3D.getChildren} for performance.
+     */
+    get children(): Object3D[] {
+        return this.getChildren();
+    }
+
+    /**
+     * The number of children of this object.
+     */
+    get childrenCount(): number {
+        return this._engine.wasm._wl_object_get_children_count(this.objectId);
+    }
+
+    /**
      * Children of this object.
      *
      * @note Child order is **undefined**. No assumptions should be made
@@ -3948,12 +3964,16 @@ export class Object3D {
      *
      * When the object exists in the scene at editor time, prefer passing it as
      * a component property.
+     *
+     * @note When providing an output array, only `this.childrenCount` elements will be written.
+     * The rest of the array will not be modified by this method.
+     *
+     * @param out Destination array, expected to have at least `this.childrenCount` elements.
+     * @returns The `out` parameter.
      */
-    get children(): Object3D[] {
-        const childrenCount = this._engine.wasm._wl_object_get_children_count(
-            this.objectId
-        );
-        if (childrenCount === 0) return [];
+    getChildren(out: Object3D[] = new Array(this.childrenCount)): Object3D[] {
+        const childrenCount = this.childrenCount;
+        if (childrenCount === 0) return out;
 
         const wasm = this._engine.wasm;
         wasm.requireTempMem(childrenCount * 2);
@@ -3964,11 +3984,10 @@ export class Object3D {
             wasm._tempMemSize >> 1
         );
 
-        const children: Object3D[] = new Array(childrenCount);
         for (let i = 0; i < childrenCount; ++i) {
-            children[i] = this._engine.wrapObject(wasm._tempMemUint16[i]);
+            out[i] = this._engine.wrapObject(wasm._tempMemUint16[i]);
         }
-        return children;
+        return out;
     }
 
     /**

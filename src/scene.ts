@@ -251,7 +251,28 @@ export class Scene {
      */
     get children(): Object3D[] {
         const root = this._engine.wrapObject(0);
-        return root.children;
+        return root.getChildren();
+    }
+
+    /**
+     * The number of children of the root object.
+     */
+    get childrenCount(): number {
+        const rootObjectId = 0;
+        return this._engine.wasm._wl_object_get_children_count(rootObjectId);
+    }
+
+    /**
+     * Root object's children.
+     *
+     * See {@link Object3D.getChildren} for more information.
+     *
+     * @param out Destination array, expected to have at least `this.childrenCount` elements.
+     * @returns The `out` parameter.
+     */
+    getChildren(out: Object3D[] = new Array(this.childrenCount)): Object3D[] {
+        const root = this._engine.wrapObject(0);
+        return root.getChildren(out);
     }
 
     /**
