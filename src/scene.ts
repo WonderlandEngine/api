@@ -263,10 +263,9 @@ export class Scene {
     }
 
     /**
-     * Children of the root object.
+     * Root object's children.
      *
-     * @note When providing an output array, only `this.childrenCount` elements will be written.
-     * The rest of the array will not be modified by this method.
+     * See {@link Object3D.getChildren} for more information.
      *
      * @param out Destination array, expected to have at least `this.childrenCount` elements.
      * @returns The `out` parameter.
