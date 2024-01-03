@@ -1202,9 +1202,11 @@ export class CollisionComponent extends Component {
     getExtents(out: NumberArray = new Float32Array(3)): NumberArray {
         const wasm = this._engine.wasm;
         const ptr = wasm._wl_collision_component_get_extents(this._id) / 4; /* Align F32 */
-        for (let i = 0; i < 3; ++i) {
-            out[i] = wasm.HEAPF32[ptr + i];
-        }
+
+        out[0] = wasm.HEAPF32[ptr];
+        out[1] = wasm.HEAPF32[ptr + 1];
+        out[2] = wasm.HEAPF32[ptr + 2];
+
         return out;
     }
 
@@ -2429,9 +2431,11 @@ export class PhysXComponent extends Component {
     getExtents(out: NumberArray = new Float32Array(3)): NumberArray {
         const wasm = this._engine.wasm;
         const ptr = wasm._wl_physx_component_get_extents(this._id) / 4; /* Align F32 */
-        for (let i = 0; i < 3; ++i) {
-            out[i] = wasm.HEAPF32[ptr + i];
-        }
+
+        out[0] = wasm.HEAPF32[ptr];
+        out[1] = wasm.HEAPF32[ptr + 1];
+        out[2] = wasm.HEAPF32[ptr + 2];
+
         return out;
     }
 
@@ -2562,9 +2566,11 @@ export class PhysXComponent extends Component {
             this._id,
             wasm._tempMem
         ); /* Align F32 */
-        for (let i = 0; i < 3; ++i) {
-            out[i] = tempMemFloat[i];
-        }
+
+        out[0] = tempMemFloat[0];
+        out[1] = tempMemFloat[1];
+        out[2] = tempMemFloat[2];
+
         return out;
     }
 
@@ -2615,9 +2621,11 @@ export class PhysXComponent extends Component {
             this._id,
             wasm._tempMem
         ); /* Align F32 */
-        for (let i = 0; i < 3; ++i) {
-            out[i] = tempMemFloat[i];
-        }
+
+        out[0] = tempMemFloat[0];
+        out[1] = tempMemFloat[1];
+        out[2] = tempMemFloat[2];
+
         return out;
     }
 
