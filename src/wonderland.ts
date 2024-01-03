@@ -5719,93 +5719,42 @@ export class Skin {
         return this._engine.wasm._wl_skin_get_joint_count(this._index);
     }
 
-    /**
-     * Equivalent to {@link Skin.getJointIds}.
-     *
-     * @note Prefer to use {@link Skin.getJointIds} for performance.
-     */
+    /** Joints object ids for this skin */
     get jointIds(): Uint16Array {
-        return this.getJointIds();
-    }
-
-    /** @overload */
-    getJointIds(): Uint16Array;
-    /**
-     * Joints object ids for this skin
-     *
-     * @param out Destination array/vector, expected to have at least this.jointCount elements.
-     * @returns The `out` parameter.
-     */
-    getJointIds<T extends NumberArray>(out: T): T;
-    getJointIds(out: NumberArray = new Uint16Array(this.jointCount)): NumberArray {
         const wasm = this._engine.wasm;
-        const ptr = wasm._wl_skin_joint_ids(this._index) / 2; /* Align U16 */
-        for (let i = 0; i < this.jointCount; ++i) {
-            out[i] = wasm.HEAPU16[ptr + i];
-        }
-        return out;
+        return new Uint16Array(
+            wasm.HEAPU16.buffer,
+            wasm._wl_skin_joint_ids(this._index),
+            this.jointCount
+        );
     }
 
-    /**
-     * Equivalent to {@link Skin.getInverseBindTransforms}.
-     *
-     * @note Prefer to use {@link Skin.getInverseBindTransforms} for performance.
-     */
-    get inverseBindTransforms(): Float32Array {
-        return this.getInverseBindTransforms();
-    }
-
-    /** @overload */
-    getInverseBindTransforms(): Float32Array;
     /**
      * Dual quaternions in a flat array of size 8 times {@link jointCount}.
      *
      * Inverse bind transforms of the skin.
-     *
-     * @param out Destination array/vector, expected to have at least this.jointCount * 8 elements.
-     * @returns The `out` parameter.
      */
-    getInverseBindTransforms<T extends NumberArray>(out: T): T;
-    getInverseBindTransforms(
-        out: NumberArray = new Float32Array(this.jointCount * 8)
-    ): NumberArray {
+    get inverseBindTransforms(): Float32Array {
         const wasm = this._engine.wasm;
-        const ptr = wasm._wl_skin_inverse_bind_transforms(this._index) / 4; /* Align F32 */
-        for (let i = 0; i < this.jointCount * 8; ++i) {
-            out[i] = wasm.HEAPF32[ptr + i];
-        }
-        return out;
+        return new Float32Array(
+            wasm.HEAPF32.buffer,
+            wasm._wl_skin_inverse_bind_transforms(this._index),
+            8 * this.jointCount
+        );
     }
 
-    /**
-     * Equivalent to {@link Skin.getInverseBindScalings}.
-     *
-     * @note Prefer to use {@link Skin.getInverseBindScalings} for performance.
-     */
-    get inverseBindScalings(): Float32Array {
-        return this.getInverseBindScalings();
-    }
-
-    /** @overload */
-    getInverseBindScalings(): Float32Array;
     /**
      * Vectors in a flat array of size 3 times {@link jointCount}.
      *
      * Inverse bind scalings of the skin.
-     *
-     * @param out Destination array/vector, expected to have at least this.jointCount * 3 elements.
-     * @returns The `out` parameter.
      */
-    getInverseBindScalings<T extends NumberArray>(out: T): T;
-    getInverseBindScalings(
-        out: NumberArray = new Float32Array(this.jointCount * 3)
-    ): NumberArray {
+    get inverseBindScalings(): Float32Array {
         const wasm = this._engine.wasm;
-        const ptr = wasm._wl_skin_inverse_bind_scalings(this._index) / 4; /* Align F32 */
-        for (let i = 0; i < this.jointCount * 3; ++i) {
-            out[i] = wasm.HEAPF32[ptr + i];
-        }
-        return out;
+        return new Float32Array(
+            wasm.HEAPF32.buffer,
+            wasm._wl_skin_inverse_bind_scalings(this._index),
+            3 * this.jointCount
+        );
     }
 
     /**
