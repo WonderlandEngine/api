@@ -5678,52 +5678,133 @@ export class RayHit {
         this._engine = engine;
         this._ptr = ptr;
     }
-
+  
     /** Hosting engine instance. */
     get engine() {
         return this._engine;
     }
 
-    /** Array of ray hit locations. */
+    /**
+     * Equivalent to {@link RayHit.getLocations}.
+     *
+     * @note Prefer to use {@link RayHit.getLocations} for performance.
+     */
     get locations(): Float32Array[] {
-        let p = this._ptr;
-        let l = [];
-        for (let i = 0; i < this.hitCount; ++i) {
-            l.push(new Float32Array(this._engine.wasm.HEAPF32.buffer, p + 12 * i, 3));
-        }
-        return l;
+        return this.getLocations();
     }
 
-    /** Array of ray hit normals (only when using {@link Physics#rayCast}. */
+    /** @overload */
+    getLocations(): Float32Array[];
+    /**
+     * Array of ray hit locations.
+     *
+     * @param out Destination array of arrays/vectors, expected to have at least this.hitCount elements,
+     *            and each array/vector is expected to have at least 3 elements.
+     * @returns The `out` parameter.
+     */
+    getLocations<T extends NumberArray[]>(out: T): T;
+    getLocations(out?: NumberArray[]): NumberArray[] {
+        if (!out) out = Array.from({length: this.hitCount}, () => new Float32Array(3));
+
+        const wasm = this._engine.wasm;
+        const alignedPtr = this._ptr / 4; /* Align F32 */
+        for (let i = 0; i < this.hitCount; ++i) {
+            const locationPtr = alignedPtr + 3 * i;
+            out[i][0] = wasm.HEAPF32[locationPtr];
+            out[i][1] = wasm.HEAPF32[locationPtr + 1];
+            out[i][2] = wasm.HEAPF32[locationPtr + 2];
+        }
+        return out;
+    }
+
+    /**
+     * Equivalent to {@link RayHit.getNormals}.
+     *
+     * @note Prefer to use {@link RayHit.getNormals} for performance.
+     */
     get normals(): Float32Array[] {
-        let p = this._ptr + 48;
-        let l = [];
-        for (let i = 0; i < this.hitCount; ++i) {
-            l.push(new Float32Array(this._engine.wasm.HEAPF32.buffer, p + 12 * i, 3));
-        }
-        return l;
+        return this.getNormals();
     }
 
+    /** @overload */
+    getNormals(): Float32Array[];
+    /**
+     * Array of ray hit normals (only when using {@link Physics#rayCast}.
+     *
+     * @param out Destination array of arrays/vectors, expected to have at least this.hitCount elements,
+     *            and each array/vector is expected to have at least 3 elements.
+     * @returns The `out` parameter.
+     */
+    getNormals<T extends NumberArray[]>(out: T): T;
+    getNormals(out?: NumberArray[]): NumberArray[] {
+        if (!out) out = Array.from({length: this.hitCount}, () => new Float32Array(3));
+
+        const wasm = this._engine.wasm;
+        const alignedPtr = (this._ptr + 48) / 4; /* Align F32 */
+        for (let i = 0; i < this.hitCount; ++i) {
+            const normalPtr = alignedPtr + 3 * i;
+            out[i][0] = wasm.HEAPF32[normalPtr];
+            out[i][1] = wasm.HEAPF32[normalPtr + 1];
+            out[i][2] = wasm.HEAPF32[normalPtr + 2];
+        }
+        return out;
+    }
+
+    /**
+     * Equivalent to {@link RayHit.getDistances}.
+     *
+     * @note Prefer to use {@link RayHit.getDistances} for performance.
+     */
+    get distances(): Float32Array {
+        return this.getDistances();
+    }
+
+    /** @overload */
+    getDistances(): Float32Array;
     /**
      * Prefer these to recalculating the distance from locations.
      *
      * Distances of array hits to ray origin.
+     *
+     * @param out Destination array/vector, expected to have at least this.hitCount elements.
+     * @returns The `out` parameter.
      */
-    get distances(): Float32Array {
-        const p = this._ptr + 48 * 2;
-        return new Float32Array(this._engine.wasm.HEAPF32.buffer, p, this.hitCount);
+    getDistances<T extends NumberArray>(out: T): T;
+    getDistances(out: NumberArray = new Float32Array(this.hitCount)): NumberArray {
+        const wasm = this._engine.wasm;
+        const alignedPtr = (this._ptr + 48 * 2) / 4; /* Align F32 */
+        for (let i = 0; i < this.hitCount; ++i) {
+            const distancePtr = alignedPtr + i;
+            out[i] = wasm.HEAPF32[distancePtr];
+        }
+        return out;
     }
 
-    /** Hit objects */
+    /**
+     * Equivalent to {@link RayHit.getObjects}.
+     *
+     * @note Prefer to use {@link RayHit.getObjects} for performance.
+     */
     get objects(): (Object3D | null)[] {
-        const HEAPU16 = this._engine.wasm.HEAPU16;
+        /** @todo: Remove at 2.0.0, this is kept for backward compatibility. */
         const objects: (Object3D | null)[] = [null, null, null, null];
+        return this.getObjects(objects as Object3D[]);
+    }
 
-        let p = (this._ptr + (48 * 2 + 16)) >> 1;
+    /**
+     * Hit objects
+     *
+     * @param out Destination array/vector, expected to have at least this.hitCount elements.
+     * @returns The `out` parameter.
+     */
+    getObjects(out: Object3D[] = new Array(this.hitCount)): Object3D[] {
+        const HEAPU16 = this._engine.wasm.HEAPU16;
+        const alignedPtr = (this._ptr + (48 * 2 + 16)) >> 1;
         for (let i = 0; i < this.hitCount; ++i) {
-            objects[i] = this._engine.wrapObject(HEAPU16[p + i]);
+            const objectPtr = alignedPtr + i;
+            out[i] = this._engine.wrapObject(HEAPU16[objectPtr]);
         }
-        return objects;
+        return out;
     }
 
     /** Number of hits (max 4) */
