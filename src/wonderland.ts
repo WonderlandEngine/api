@@ -1178,7 +1178,7 @@ export class CollisionComponent extends Component {
      */
     @nativeProperty()
     get extents(): Float32Array {
-        // @todo: Break at 2.0.0.Do not allow modifying memory in -place at 2.0.0.
+        // @todo: Break at 2.0.0. Do not allow modifying memory in-place at 2.0.0.
         const wasm = this._engine.wasm;
         return new Float32Array(
             wasm.HEAPF32.buffer,
@@ -1495,7 +1495,7 @@ export class ViewComponent extends Component {
      */
     @enumerable()
     get projectionMatrix(): Float32Array {
-        // @todo: Break at 2.0.0.Do not allow modifying memory in -place at 2.0.0.
+        // @todo: Break at 2.0.0. Do not allow modifying memory in-place at 2.0.0.
         const wasm = this._engine.wasm;
         return new Float32Array(
             wasm.HEAPF32.buffer,
@@ -2413,7 +2413,7 @@ export class PhysXComponent extends Component {
      */
     @nativeProperty()
     get extents(): Float32Array {
-        // @todo: Break at 2.0.0.Do not allow modifying memory in -place at 2.0.0.
+        // @todo: Break at 2.0.0. Do not allow modifying memory in-place at 2.0.0.
         const wasm = this._engine.wasm;
         const ptr = wasm._wl_physx_component_get_extents(this._id);
         return new Float32Array(wasm.HEAPF32.buffer, ptr, 3);
@@ -2544,7 +2544,7 @@ export class PhysXComponent extends Component {
      */
     @nativeProperty()
     get linearVelocity(): Float32Array {
-        // @todo: Break at 2.0.0.Do not allow modifying memory in -place at 2.0.0.
+        // @todo: Break at 2.0.0. Do not allow modifying memory in-place at 2.0.0.
         const wasm = this._engine.wasm;
         wasm._wl_physx_component_get_linearVelocity(this._id, wasm._tempMem);
         return new Float32Array(wasm.HEAPF32.buffer, wasm._tempMem, 3);
@@ -2599,7 +2599,7 @@ export class PhysXComponent extends Component {
      */
     @nativeProperty()
     get angularVelocity(): Float32Array {
-        // @todo: Break at 2.0.0.Do not allow modifying memory in -place at 2.0.0.
+        // @todo: Break at 2.0.0. Do not allow modifying memory in-place at 2.0.0.
         const wasm = this._engine.wasm;
         wasm._wl_physx_component_get_angularVelocity(this._id, wasm._tempMem);
         return new Float32Array(wasm.HEAPF32.buffer, wasm._tempMem, 3);
