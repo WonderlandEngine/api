@@ -2837,6 +2837,11 @@ export class Physics {
         this._callbacks = {};
     }
 
+    /** Hosting engine instance. */
+    get engine() {
+        return this._engine;
+    }
+
     /**
      * Cast a ray through the physics scene and find intersecting objects.
      *
@@ -2946,7 +2951,7 @@ export class Mesh {
     readonly _index: number = -1;
 
     /** Wonderland Engine instance. @hidden */
-    protected _engine: WonderlandEngine;
+    protected readonly _engine: WonderlandEngine;
 
     /**
      * Create a new instance.
@@ -3231,7 +3236,7 @@ export class MeshAttributeAccessor<T extends TypedArrayCtor = TypedArrayCtor> {
     readonly length: number = 0;
 
     /** Wonderland Engine instance. @hidden */
-    protected _engine: WonderlandEngine;
+    protected readonly _engine: WonderlandEngine;
 
     /** Attribute index. @hidden */
     private _attribute: number = -1;
@@ -3283,6 +3288,11 @@ export class MeshAttributeAccessor<T extends TypedArrayCtor = TypedArrayCtor> {
                 ? wasm.getTempBufferF32.bind(wasm)
                 : wasm.getTempBufferU16.bind(wasm)
         ) as () => TypedArray<T>;
+    }
+
+    /** Hosting engine instance. */
+    get engine() {
+        return this._engine;
     }
 
     /**
@@ -3440,7 +3450,7 @@ export class Material {
     private _definition: number;
 
     /** Wonderland Engine instance. @hidden */
-    protected _engine: WonderlandEngine;
+    protected readonly _engine: WonderlandEngine;
 
     /**
      * Create a new Material.
@@ -3628,7 +3638,7 @@ let temp2d: {
  */
 export class Texture {
     /** Wonderland Engine instance. @hidden */
-    protected _engine: WonderlandEngine;
+    protected readonly _engine: WonderlandEngine;
 
     /** Index in the manager. @hidden */
     private _id: number = 0;
@@ -3780,7 +3790,7 @@ export class Animation {
     _index: number;
 
     /** Wonderland Engine instance. @hidden */
-    protected _engine: WonderlandEngine;
+    protected readonly _engine: WonderlandEngine;
 
     /**
      * @param index Index in the manager
@@ -3788,6 +3798,11 @@ export class Animation {
     constructor(engine: WonderlandEngine = WL, index: number) {
         this._engine = engine;
         this._index = index;
+    }
+
+    /** Hosting engine instance. */
+    get engine() {
+        return this._engine;
     }
 
     /** Duration of this animation. */
@@ -3882,7 +3897,7 @@ export class Object3D {
     readonly _objectId: number = -1;
 
     /** Wonderland Engine instance. @hidden */
-    protected _engine: WonderlandEngine;
+    protected readonly _engine: WonderlandEngine;
 
     /**
      * @param o Object id to wrap
@@ -5566,11 +5581,16 @@ export class Skin {
     _index: number;
 
     /** Wonderland Engine instance. @hidden */
-    protected _engine: WonderlandEngine;
+    protected readonly _engine: WonderlandEngine;
 
     constructor(engine: WonderlandEngine, index: number) {
         this._engine = engine;
         this._index = index;
+    }
+
+    /** Hosting engine instance. */
+    get engine() {
+        return this._engine;
     }
 
     /** Amount of joints in this skin. */
@@ -5643,7 +5663,7 @@ export {Object3D as Object};
  */
 export class RayHit {
     /** Wonderland Engine instance. @hidden */
-    protected _engine: WonderlandEngine;
+    protected readonly _engine: WonderlandEngine;
 
     /** Pointer to the memory heap. */
     private _ptr: number;
@@ -5657,6 +5677,11 @@ export class RayHit {
         }
         this._engine = engine;
         this._ptr = ptr;
+    }
+  
+    /** Hosting engine instance. */
+    get engine() {
+        return this._engine;
     }
 
     /**
@@ -5882,7 +5907,7 @@ export class I18N {
     readonly onLanguageChanged = new Emitter<[number, number]>();
 
     /** Wonderland Engine instance. @hidden */
-    protected _engine: WonderlandEngine;
+    protected readonly _engine: WonderlandEngine;
 
     /** Previously set language index. @hidden */
     private _prevLanguageIndex: number = -1;
@@ -5892,6 +5917,11 @@ export class I18N {
      */
     constructor(engine: WonderlandEngine) {
         this._engine = engine;
+    }
+
+    /** Hosting engine instance. */
+    get engine() {
+        return this._engine;
     }
 
     /**
