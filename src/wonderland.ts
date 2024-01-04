@@ -3185,12 +3185,8 @@ export class Mesh {
         return indexArray;
     }
 
-    /**
-     * Equivalent to {@link Mesh.getIndexData}.
-     *
-     * @note Prefer to use {@link Mesh.getIndexData} for performance.
-     */
-    get indexData(): Uint8Array | Uint16Array | Uint32Array | null {
+    /** Index data (read-only) or `null` if the mesh is not indexed. */
+    get indexDataView(): Uint8Array | Uint16Array | Uint32Array | null {
         const wasm = this._engine.wasm;
         const tempMem = wasm._tempMem;
         const ptr = wasm._wl_mesh_get_indexData(this._index, tempMem, tempMem + 4);
@@ -3209,58 +3205,9 @@ export class Mesh {
         return null;
     }
 
-    /** @overload */
-    getIndexData(): Uint8Array | Uint16Array | Uint32Array | null;
-    /**
-     * Index data (read-only) or `null` if the mesh is not indexed.
-     *
-     * @param out Destination array/vector, expected to have at least indexCount elements.
-     *            The array type must match the MeshIndexType.
-     * @returns The `out` parameter.
-     */
-    getIndexData<T extends Uint8Array | Uint16Array | Uint32Array | null>(out: T): T;
-    getIndexData(
-        out?: Uint8Array | Uint16Array | Uint32Array | null
-    ): Uint8Array | Uint16Array | Uint32Array | null {
-        const wasm = this._engine.wasm;
-        const tempMem = wasm._tempMem;
-        const ptr = wasm._wl_mesh_get_indexData(this._index, tempMem, tempMem + 4);
-        if (ptr === null) return null;
-
-        const indexCount = wasm.HEAPU32[tempMem / 4];
-        const indexSize = wasm.HEAPU32[tempMem / 4 + 1];
-
-        // @todo: Check that out byte size is big enough
-        if (!out) {
-            out = Mesh.createMeshIndexArray(indexSize, indexCount);
-        }
-
-        switch (indexSize) {
-            case MeshIndexType.UnsignedByte: {
-                const alignedPtr = ptr;
-                for (let i = 0; i < indexCount; ++i) {
-                    out[i] = wasm.HEAPU8[alignedPtr + i];
-                }
-                break;
-            }
-            case MeshIndexType.UnsignedShort: {
-                const alignedPtr = ptr / 2;
-                for (let i = 0; i < indexCount; ++i) {
-                    out[i] = wasm.HEAPU16[alignedPtr + i];
-                }
-                break;
-            }
-            case MeshIndexType.UnsignedInt: {
-                const alignedPtr = ptr / 4;
-                for (let i = 0; i < indexCount; ++i) {
-                    out[i] = wasm.HEAPU32[alignedPtr + i];
-                }
-
-                break;
-            }
-        }
-
-        return out;
+    /** @deprecated Use {@link #indexDataView} instead. */
+    get indexData(): Uint8Array | Uint16Array | Uint32Array | null {
+        return this.indexDataView;
     }
 
     /** Hosting engine instance. */
