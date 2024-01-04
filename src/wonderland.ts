@@ -3137,8 +3137,56 @@ export class Mesh {
         return this._engine.wasm._wl_mesh_get_vertexCount(this._index);
     }
 
+    /** Number of indices in this mesh, or `null` if the mesh is not indexed.  */
+    get indexCount(): number | null {
+        const wasm = this._engine.wasm;
+        const tempMem = wasm._tempMem;
+        const ptr = wasm._wl_mesh_get_indexData(this._index, tempMem, tempMem + 4);
+        if (ptr === null) return null;
+
+        return wasm.HEAPU32[tempMem / 4];
+    }
+
+    /** The mesh index number type, or `null` if the mesh is not indexed.  */
+    get meshIndexType(): number | null {
+        const wasm = this._engine.wasm;
+        const tempMem = wasm._tempMem;
+        const ptr = wasm._wl_mesh_get_indexData(this._index, tempMem, tempMem + 4);
+        if (ptr === null) return null;
+
+        return wasm.HEAPU32[tempMem / 4 + 1];
+    }
+
+    /**
+     * Creates a mesh index array of the give mesh index type
+     *
+     * @param meshIndexType Mesh index type which specify the kind of array to create
+     * @param indexCount Size of the array
+     * @returns The newly created array, or `null` if the mesh is not indexed.
+     */
+    static createMeshIndexArray(
+        meshIndexType: MeshIndexType,
+        indexCount: number
+    ): Uint8Array | Uint16Array | Uint32Array {
+        let indexArray: Uint8Array | Uint16Array | Uint32Array;
+
+        switch (meshIndexType) {
+            case MeshIndexType.UnsignedByte:
+                indexArray = new Uint8Array(indexCount);
+                break;
+            case MeshIndexType.UnsignedShort:
+                indexArray = new Uint16Array(indexCount);
+                break;
+            case MeshIndexType.UnsignedInt:
+                indexArray = new Uint32Array(indexCount);
+                break;
+        }
+
+        return indexArray;
+    }
+
     /** Index data (read-only) or `null` if the mesh is not indexed. */
-    get indexData(): Uint8Array | Uint16Array | Uint32Array | null {
+    get indexDataView(): Uint8Array | Uint16Array | Uint32Array | null {
         const wasm = this._engine.wasm;
         const tempMem = wasm._tempMem;
         const ptr = wasm._wl_mesh_get_indexData(this._index, tempMem, tempMem + 4);
@@ -3155,6 +3203,11 @@ export class Mesh {
                 return new Uint32Array(wasm.HEAPU32.buffer, ptr, indexCount);
         }
         return null;
+    }
+
+    /** @deprecated Use {@link Mesh.indexDataView} instead. */
+    get indexData(): Uint8Array | Uint16Array | Uint32Array | null {
+        return this.indexDataView;
     }
 
     /** Hosting engine instance. */
