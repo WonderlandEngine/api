@@ -3205,7 +3205,7 @@ export class Mesh {
         return null;
     }
 
-    /** @deprecated Use {@link #indexDataView} instead. */
+    /** @deprecated Use {@link Mesh.indexDataView} instead. */
     get indexData(): Uint8Array | Uint16Array | Uint32Array | null {
         return this.indexDataView;
     }
