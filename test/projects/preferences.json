@@ -35,6 +35,7 @@
         "mouseLookSensitivity": 1.0,
         "mousePanSensitivity": 0.019999999552965164,
         "autoNpmInstall": false,
+        "useLocalApiJs": false,
         "enablePlugins": false
     }
 }

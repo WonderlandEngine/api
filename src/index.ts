@@ -11,9 +11,15 @@ export * from './utils/event.js';
 export * from './utils/logger.js';
 export * from './wonderland.js';
 export * from './engine.js';
-export * from './scene.js';
 export * from './property.js';
-export * from './texture-manager.js';
+export * from './prefab.js';
+export * from './scene.js';
+export * from './scene-gltf.js';
+export * from './resources/resource.js';
+export * from './resources/material-manager.js';
+export * from './resources/mesh-manager.js';
+export * from './resources/texture-manager.js';
+export * from './types.js';
 export * from './version.js';
 export * from './wasm.js';
 
@@ -104,6 +110,10 @@ export interface LoadRuntimeOptions {
      * If `undefined`, performs browser feature detection to check whether threads are supported or not.
      */
     threads: boolean;
+    /**
+     * If `true`, forces the runtime to load the webgpu-compatible version.
+     */
+    webgpu: boolean;
     /**
      * If `true`, forces the runtime to load a physx-compatible version.
      *
@@ -242,6 +252,7 @@ export async function loadRuntime(
     const {
         simd = simdSupported,
         threads = threadsSupported,
+        webgpu = false,
         physx = false,
         loader = false,
         xrFramebufferScaleFactor = 1.0,
@@ -252,6 +263,7 @@ export async function loadRuntime(
     } = options;
 
     const variant = [];
+    if (webgpu) variant.push('webgpu');
     if (loader) variant.push('loader');
     if (physx) variant.push('physx');
     if (simd) variant.push('simd');
@@ -279,19 +291,28 @@ export async function loadRuntime(
         download(loadingScreen, 'Failed to fetch loading screen file'),
     ]);
 
-    const glCanvas = document.getElementById(canvas) as HTMLCanvasElement;
-    if (!glCanvas) {
+    const canvasElement = document.getElementById(canvas) as HTMLCanvasElement;
+    if (!canvasElement) {
         throw new Error(`loadRuntime(): Failed to find canvas with id '${canvas}'`);
     }
-    if (!(glCanvas instanceof HTMLCanvasElement)) {
+    if (!(canvasElement instanceof HTMLCanvasElement)) {
         throw new Error(`loadRuntime(): HTML element '${canvas}' must be a canvas`);
     }
 
     const wasm = new WASM(threads);
     (wasm.worker as string) = `${filename}.worker.js`;
     (wasm.wasm as ArrayBuffer) = wasmData;
-    (wasm.canvas as HTMLCanvasElement) = glCanvas;
+    (wasm.canvas as HTMLCanvasElement) = canvasElement;
     wasm._log.levels.enable(...logs);
+
+    if (webgpu) {
+        const adapter = await (navigator as any).gpu.requestAdapter();
+        const desc = {
+            requiredFeatures: ['texture-compression-bc'],
+        };
+        const device = await adapter.requestDevice(desc);
+        (wasm.preinitializedWebGPUDevice as any) = device;
+    }
 
     const engine = new WonderlandEngine(wasm, loadingScreenData);
 

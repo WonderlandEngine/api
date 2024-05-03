@@ -1,6 +1,6 @@
 {
   "name": "@wonderlandengine/api",
-  "version": "1.1.5",
+  "version": "1.2.0",
   "description": "Wonderland Engine's JavaScript API.",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -27,18 +27,17 @@
     "url": "https://github.com/WonderlandEngine/api/issues"
   },
   "homepage": "https://github.com/WonderlandEngine/api#readme",
+  "prettier": "@wonderlandengine/prettier-config",
   "scripts": {
     "build": "tsc",
     "build:watch": "tsc --watch",
-    "prebuild": "node write-version.mjs",
-    "test": "npm run build && npm run test:typecheck && wtr",
-    "test:watch": "npm run build && wtr --watch",
+    "prebuild": "node ./scripts/pre-build.mjs",
+    "test": "npm run build && npm run test:typecheck && node ./scripts/run-tests.mjs",
     "test:typecheck": "tsc --project ./test/tsconfig.json --noEmit",
-    "pretty": "prettier --config ./prettierrc.json --write \"src/**/*.ts\" \"test/**/*.ts\"",
-    "pretty:check": "prettier --config ./prettierrc.json --check \"src/**/*.ts\" \"test/**/*.ts\"",
-    "prepublishOnly": "npm run build",
-    "prepack": "npm run build",
-    "prepare": "npm run prebuild",
+    "test:build": "node ./scripts/build-projects.mjs",
+    "pretty": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "pretty:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
+    "prepare": "npm run build",
     "doc": "typedoc --entryPoints ./src/index.ts --tsconfig tsconfig.json --json ./doc.json --treatWarningsAsErrors"
   },
   "files": [
@@ -55,6 +54,7 @@
     "@types/node": "^18.11.9",
     "@web/dev-server-esbuild": "^0.4.1",
     "@web/test-runner": "0.17.0",
+    "@wonderlandengine/prettier-config": "^1.0.0",
     "esbuild": "^0.11.14",
     "prettier": "^2.8.0",
     "typedoc": "^0.23.21",

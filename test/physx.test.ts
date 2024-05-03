@@ -1,30 +1,29 @@
 import {expect, use} from '@esm-bundle/chai';
 import {chaiAlmost} from './chai/almost.js';
 
-import {PhysXComponent, Shape, ForceMode, CollisionEventType, LockAxis} from '..';
+import {PhysXComponent, Shape, ForceMode, CollisionEventType, LockAxis, Scene} from '..';
 
-import {init, reset, WL} from './setup.js';
+import {describeScene, init, reset, WL} from './setup.js';
 
 use(chaiAlmost());
 
 before(init.bind(null, {physx: true}));
-beforeEach(reset);
 
-describe('PhysX', function () {
+describeScene('PhysX', function (ctx) {
     it('addComponent', function () {
-        const object = WL.scene.addObject();
+        const object = ctx.scene.addObject();
 
         object.name = 'testobj';
         const obj = object;
 
         const physx = obj.addComponent('physx')!;
-        expect(physx._id).to.equal(0);
+        expect(physx._localId).to.equal(0);
         expect(physx instanceof PhysXComponent).to.equal(true);
     });
 
     it('physxComponent', function () {
-        const objA = WL.scene.addObject();
-        const objB = WL.scene.addObject();
+        const objA = ctx.scene.addObject();
+        const objB = ctx.scene.addObject();
 
         objA.setTranslationWorld([0, 0, -10]);
         objB.setTranslationWorld([1, 1, -10]);
@@ -72,176 +71,9 @@ describe('PhysX', function () {
         pA.addTorque([1, 0, 0]);
     });
 
-    it('collisionCallbacks', function () {
-        const objA = WL.scene.addObject();
-        const objB = WL.scene.addObject();
-        const objC = WL.scene.addObject();
-        const objD = WL.scene.addObject();
-
-        objA.setTranslationWorld([10, 10, -5]);
-        objB.setTranslationWorld([1, 1, -10]);
-        objC.setTranslationWorld([-1, -1, 10]);
-        objD.setTranslationWorld([-1, -10, 10]);
-
-        const compA = objA.addComponent('physx', {
-            shape: Shape.Box,
-            mass: 1,
-        })!;
-
-        const compB = objB.addComponent('physx', {
-            static: true,
-            shape: Shape.Plane,
-        })!;
-
-        const compC = objC.addComponent('physx', {
-            static: true,
-            shape: Shape.Sphere,
-        })!;
-
-        const compD = objD.addComponent('physx', {
-            static: true,
-            trigger: true,
-            allowQuery: true,
-            shape: Shape.Sphere,
-        })!;
-
-        WL.wasm._wl_nextUpdate(0.01);
-
-        let otherId = 123;
-        let otherIdFiltered = 123;
-        let triggered = 0;
-
-        const p = objA.getComponent('physx', 0)!;
-
-        expect(p.static).to.equal(false);
-        p.kinematic = true;
-
-        const cbA = p.onCollision(function (event, other) {
-            if (event == CollisionEventType.Touch) otherId = other._id;
-            else if (event == CollisionEventType.TouchLost) otherId = 0;
-        });
-        const cbB = p.onCollisionWith(objC.getComponent('physx')!, function (event, other) {
-            if (event == CollisionEventType.Touch) otherIdFiltered = other._id;
-            else if (event == CollisionEventType.TouchLost) otherIdFiltered = 0;
-        });
-
-        /* Set 'triggered' to true when trigger object callback called */
-        const t = objD.getComponent('physx', 0)!;
-        t.onCollision((e, o) => {
-            triggered = 1;
-        });
-
-        /* Changing the kinematic flag while component is inactive would throw
-         * an assertion in 0.8.9. We since handle this more gracefully. */
-        p.active = false;
-        p.kinematic = true;
-        p.active = true;
-
-        expect(p.kinematic).to.equal(true);
-
-        /* Make A collide with B */
-        objA.setTranslationWorld([1, 1, -10]);
-        WL.wasm._wl_physx_update_global_pose(objA.objectId, compA._id);
-
-        WL.wasm._wl_nextUpdate(0.01);
-
-        /* Kinematic flag should have kept objA from falling */
-        const local = [0, 0, 0];
-        const world = [0, 0, 0];
-        objA.getTranslationLocal(local);
-        objA.getTranslationWorld(world);
-        expect(local).to.eql([1, 1, -10]);
-        expect(world).to.eql([1, 1, -10]);
-
-        expect(otherId).to.equal(compB._id);
-        expect(otherIdFiltered).to.equal(123);
-        expect(triggered).to.equal(0);
-
-        /* Stop A from colliding with B */
-        objA.setTranslationWorld([2.1, 1, -10]);
-        WL.wasm._wl_physx_update_global_pose(objA.objectId, compA._id);
-
-        WL.wasm._wl_nextUpdate(0.01);
-
-        expect(otherId).to.equal(0);
-        expect(otherIdFiltered).to.equal(123);
-        expect(triggered).to.equal(0);
-
-        /* Make A collide with C */
-        objA.setTranslationWorld([-1, -1, 10]);
-        WL.wasm._wl_physx_update_global_pose(objA.objectId, compA._id);
-
-        WL.wasm._wl_nextUpdate(0.01);
-
-        expect(otherId).to.equal(compC._id);
-        expect(otherIdFiltered).to.equal(compC._id);
-        expect(triggered).to.equal(0);
-
-        /* Uncollide and soak up the associated events */
-        objA.setTranslationWorld([10, 10, -5]);
-
-        WL.wasm._wl_nextUpdate(0.01);
-
-        /* Make A collide with D */
-        objA.setTranslationWorld([-1, -10, 10]);
-        WL.wasm._wl_physx_update_global_pose(objA.objectId, compA._id);
-
-        WL.wasm._wl_nextUpdate(0.01);
-
-        expect(triggered).to.equal(1);
-
-        p.removeCollisionCallback(cbA);
-        p.removeCollisionCallback(cbB);
-        expect(() => p.removeCollisionCallback(123)).to.throw(Error);
-    });
-
-    it('raycast', function () {
-        const objA = WL.scene.addObject();
-        const objB = WL.scene.addObject();
-        const objC = WL.scene.addObject();
-        const objD = WL.scene.addObject();
-
-        objA.setTranslationWorld([0, 1, -5]);
-        objB.setTranslationWorld([0, 1, -10]);
-        objC.setTranslationWorld([0, 1, -15]);
-        objD.setTranslationWorld([0, 1, -20]);
-
-        const compA = objA.addComponent('physx', {
-            static: true,
-            shape: Shape.Box,
-            mass: 1,
-        });
-
-        const compB = objB.addComponent('physx', {
-            kinematic: true,
-            shape: Shape.Box,
-        });
-
-        const compC = objC.addComponent('physx', {
-            static: true,
-            shape: Shape.Box,
-        });
-
-        const compD = objD.addComponent('physx', {
-            gravity: false,
-            shape: Shape.Box,
-        });
-
-        WL.wasm._wl_nextUpdate(0.01);
-
-        const hit = WL.physics!.rayCast([0, 1, 0], [0, 0, -1], 255, 50);
-
-        expect(hit.hitCount).to.equal(4);
-        expect(hit.distances).to.deep.almost([4, 9, 14, 19]);
-        expect(hit.objects[0]?.equals(objA)).to.be.true;
-        expect(hit.objects[1]?.equals(objB)).to.be.true;
-        expect(hit.objects[2]?.equals(objC)).to.be.true;
-        expect(hit.objects[3]?.equals(objD)).to.be.true;
-    });
-
     it('collisionShape', function () {
-        const objA = WL.scene.addObject();
-        const objB = WL.scene.addObject();
+        const objA = ctx.scene.addObject();
+        const objB = ctx.scene.addObject();
 
         objA.setTranslationWorld([0, 0, -10]);
         objB.setTranslationWorld([1, 1, -10]);
@@ -295,27 +127,8 @@ describe('PhysX', function () {
         expect(p2.angularDamping).to.almost(1.5);
     });
 
-    it('sleeping objects simulation', function () {
-        const obj = WL.scene.addObject();
-        obj.setPositionWorld([0, 1, 0]);
-        const comp = obj.addComponent('physx', {
-            mass: 1,
-            shape: Shape.Box,
-            sleepOnActivate: true,
-        })!;
-
-        WL.wasm._wl_nextUpdate(1.0); /* Large update to ensure it doesn't move */
-        expect(obj.getPositionWorld()).to.deep.almost([0, 1, 0]);
-
-        comp.active = false;
-        comp.sleepOnActivate = false;
-        comp.active = true;
-        WL.wasm._wl_nextUpdate(1.0); /* Large update to ensure it moves */
-        expect(obj.getPositionWorld()[1]).to.be.lessThan(0.0);
-    });
-
     it('get/set offsetTranslation', function () {
-        const obj = WL.scene.addObject();
+        const obj = ctx.scene.addObject();
         const comp = obj.addComponent('physx', {shape: Shape.Box})!;
         expect(comp.translationOffset).to.deep.almost([0, 0, 0]);
         comp.translationOffset = [1, 2, 3];
@@ -323,15 +136,43 @@ describe('PhysX', function () {
     });
 
     it('get/set offsetRotation', function () {
-        const obj = WL.scene.addObject();
+        const obj = ctx.scene.addObject();
         const comp = obj.addComponent('physx', {shape: Shape.Box})!;
         expect(comp.rotationOffset).to.deep.almost([0, 0, 0, 1]);
         comp.rotationOffset = [1, 0, 0, 1];
         expect(comp.rotationOffset).to.deep.almost([0.707, 0, 0, 0.707], 0.01);
     });
 
+    it('get/set linearVelocity', function () {
+        const obj = ctx.scene.addObject();
+        const comp = obj.addComponent('physx', {shape: Shape.Box, active: true})!;
+        expect(comp.linearVelocity).to.deep.almost([0, 0, 0]);
+        expect(comp.getLinearVelocity()).to.deep.almost([0, 0, 0]);
+
+        comp.linearVelocity = [1, 2, 3];
+        expect(comp.linearVelocity).to.deep.almost([1, 2, 3]);
+        expect(comp.getLinearVelocity()).to.deep.almost([1, 2, 3]);
+
+        comp.active = false;
+        expect(comp.linearVelocity).to.deep.almost([0, 0, 0]);
+    });
+
+    it('get/set angularVelocity', function () {
+        const obj = ctx.scene.addObject();
+        const comp = obj.addComponent('physx', {shape: Shape.Box, active: true})!;
+        expect(comp.angularVelocity).to.deep.almost([0, 0, 0]);
+        expect(comp.getAngularVelocity()).to.deep.almost([0, 0, 0]);
+
+        comp.angularVelocity = [1, 2, 3];
+        expect(comp.angularVelocity).to.deep.almost([1, 2, 3]);
+        expect(comp.getAngularVelocity()).to.deep.almost([1, 2, 3]);
+
+        comp.active = false;
+        expect(comp.angularVelocity).to.deep.almost([0, 0, 0]);
+    });
+
     it('get/set sleepOnActivate', function () {
-        const obj = WL.scene.addObject();
+        const obj = ctx.scene.addObject();
         {
             const comp = obj.addComponent('physx', {shape: Shape.Box, active: false})!;
             expect(comp.sleepOnActivate).to.be.false;
@@ -348,7 +189,7 @@ describe('PhysX', function () {
 
     describe('Flags', function () {
         it('static', function () {
-            const obj = WL.scene.addObject();
+            const obj = ctx.scene.addObject();
             const comp = obj.addComponent('physx')!;
             expect(comp.static).to.be.false;
             /* Must deactivate to change the static flag */
@@ -359,7 +200,7 @@ describe('PhysX', function () {
         });
 
         it('kinematic', function () {
-            const obj = WL.scene.addObject();
+            const obj = ctx.scene.addObject();
             const comp = obj.addComponent('physx')!;
             comp.kinematic = true;
             expect(comp.kinematic).to.be.true;
@@ -368,7 +209,7 @@ describe('PhysX', function () {
         });
 
         it('gravity', function () {
-            const obj = WL.scene.addObject();
+            const obj = ctx.scene.addObject();
             const comp = obj.addComponent('physx')!;
             expect(comp.gravity).to.be.true;
             comp.gravity = false;
@@ -376,7 +217,7 @@ describe('PhysX', function () {
         });
 
         it('simulate', function () {
-            const obj = WL.scene.addObject();
+            const obj = ctx.scene.addObject();
             const comp = obj.addComponent('physx')!;
             expect(comp.simulate).to.be.true;
             comp.simulate = false;
@@ -384,7 +225,7 @@ describe('PhysX', function () {
         });
 
         it('allowSimulation', function () {
-            const obj = WL.scene.addObject();
+            const obj = ctx.scene.addObject();
             const comp = obj.addComponent('physx')!;
             comp.allowSimulation = true;
             expect(comp.allowSimulation).to.be.true;
@@ -394,7 +235,7 @@ describe('PhysX', function () {
         });
 
         it('allowQuery', function () {
-            const obj = WL.scene.addObject();
+            const obj = ctx.scene.addObject();
             const comp = obj.addComponent('physx')!;
             comp.allowQuery = true;
             expect(comp.allowQuery).to.be.true;
@@ -403,7 +244,7 @@ describe('PhysX', function () {
         });
 
         it('trigger', function () {
-            const obj = WL.scene.addObject();
+            const obj = ctx.scene.addObject();
             const comp = obj.addComponent('physx')!;
             comp.trigger = true;
             expect(comp.trigger).to.be.true;
@@ -413,7 +254,7 @@ describe('PhysX', function () {
         });
 
         it('linearLockAxis', function () {
-            const obj = WL.scene.addObject();
+            const obj = ctx.scene.addObject();
             const comp = obj.addComponent('physx')!;
             expect(comp.linearLockAxis).to.equal(LockAxis.None);
             comp.linearLockAxis = LockAxis.Y;
@@ -425,7 +266,7 @@ describe('PhysX', function () {
         });
 
         it('angularLockAxis', function () {
-            const obj = WL.scene.addObject();
+            const obj = ctx.scene.addObject();
             const comp = obj.addComponent('physx')!;
             expect(comp.angularLockAxis).to.equal(LockAxis.None);
             comp.angularLockAxis = LockAxis.Z;
@@ -435,7 +276,7 @@ describe('PhysX', function () {
         });
 
         it('groupsMask', function () {
-            const obj = WL.scene.addObject();
+            const obj = ctx.scene.addObject();
             const comp = obj.addComponent('physx')!;
             expect(comp.groupsMask).to.equal(255);
             comp.groupsMask = 1 << 2;
@@ -443,7 +284,7 @@ describe('PhysX', function () {
         });
 
         it('blocksMask', function () {
-            const obj = WL.scene.addObject();
+            const obj = ctx.scene.addObject();
             const comp = obj.addComponent('physx')!;
             expect(comp.blocksMask).to.equal(255);
             comp.blocksMask = 1 << 2;
@@ -451,7 +292,7 @@ describe('PhysX', function () {
         });
 
         it('clone', function () {
-            const obj = WL.scene.addObject();
+            const obj = ctx.scene.addObject();
             const comp = obj.addComponent('physx')!;
             comp.static = true;
             comp.kinematic = true;
@@ -508,5 +349,250 @@ describe('PhysX', function () {
             expect(clone.shape).to.equal(comp.shape);
             expect(clone.shapeData).to.deep.equal(comp.shapeData);
         });
+    });
+});
+
+describe('Physx > Active', function () {
+    let scene: Scene = null!;
+
+    beforeEach(function () {
+        reset();
+        scene = WL._createEmpty();
+        return WL.switchTo(scene);
+    });
+
+    it('collisionCallbacks', function () {
+        const objA = scene.addObject();
+        const objB = scene.addObject();
+        const objC = scene.addObject();
+        const objD = scene.addObject();
+
+        objA.setTranslationWorld([10, 10, -5]);
+        objB.setTranslationWorld([1, 1, -10]);
+        objC.setTranslationWorld([-1, -1, 10]);
+        objD.setTranslationWorld([-1, -10, 10]);
+
+        const compA = objA.addComponent('physx', {
+            shape: Shape.Box,
+            mass: 1,
+        })!;
+
+        const compB = objB.addComponent('physx', {
+            static: true,
+            shape: Shape.Plane,
+        })!;
+
+        const compC = objC.addComponent('physx', {
+            static: true,
+            shape: Shape.Sphere,
+        })!;
+
+        objD.addComponent('physx', {
+            static: true,
+            trigger: true,
+            allowQuery: true,
+            shape: Shape.Sphere,
+        })!;
+
+        WL.wasm._wl_nextUpdate(0.01);
+
+        let otherId = 123;
+        let otherIdFiltered = 123;
+        let triggered = 0;
+
+        const p = objA.getComponent('physx', 0)!;
+
+        expect(p.static).to.equal(false);
+        p.kinematic = true;
+
+        const cbA = p.onCollision(function (event, other) {
+            if (event == CollisionEventType.Touch) otherId = other._localId;
+            else if (event == CollisionEventType.TouchLost) otherId = 0;
+        });
+        const cbB = p.onCollisionWith(objC.getComponent('physx')!, function (event, other) {
+            if (event == CollisionEventType.Touch) otherIdFiltered = other._localId;
+            else if (event == CollisionEventType.TouchLost) otherIdFiltered = 0;
+        });
+
+        /* Set 'triggered' to true when trigger object callback called */
+        const t = objD.getComponent('physx', 0)!;
+        t.onCollision((e, o) => {
+            triggered = 1;
+        });
+
+        /* Changing the kinematic flag while component is inactive would throw
+         * an assertion in 0.8.9. We since handle this more gracefully. */
+        p.active = false;
+        p.kinematic = true;
+        p.active = true;
+
+        expect(p.kinematic).to.equal(true);
+
+        /* Make A collide with B */
+        objA.setTranslationWorld([1, 1, -10]);
+        WL.wasm._wl_physx_update_global_pose(objA._id, compA._id);
+
+        WL.wasm._wl_nextUpdate(0.01);
+
+        /* Kinematic flag should have kept objA from falling */
+        const local = [0, 0, 0];
+        const world = [0, 0, 0];
+        objA.getTranslationLocal(local);
+        objA.getTranslationWorld(world);
+        expect(local).to.eql([1, 1, -10]);
+        expect(world).to.eql([1, 1, -10]);
+
+        expect(otherId).to.equal(compB._localId);
+        expect(otherIdFiltered).to.equal(123);
+        expect(triggered).to.equal(0);
+
+        /* Stop A from colliding with B */
+        objA.setTranslationWorld([2.1, 1, -10]);
+        WL.wasm._wl_physx_update_global_pose(objA._id, compA._id);
+
+        WL.wasm._wl_nextUpdate(0.01);
+
+        expect(otherId).to.equal(0);
+        expect(otherIdFiltered).to.equal(123);
+        expect(triggered).to.equal(0);
+
+        /* Make A collide with C */
+        objA.setTranslationWorld([-1, -1, 10]);
+        WL.wasm._wl_physx_update_global_pose(objA._id, compA._id);
+
+        WL.wasm._wl_nextUpdate(0.01);
+
+        expect(otherId).to.equal(compC._localId);
+        expect(otherIdFiltered).to.equal(compC._localId);
+        expect(triggered).to.equal(0);
+
+        /* Uncollide and soak up the associated events */
+        objA.setTranslationWorld([10, 10, -5]);
+
+        WL.wasm._wl_nextUpdate(0.01);
+
+        /* Make A collide with D */
+        objA.setTranslationWorld([-1, -10, 10]);
+        WL.wasm._wl_physx_update_global_pose(objA._id, compA._id);
+
+        WL.wasm._wl_nextUpdate(0.01);
+
+        expect(triggered).to.equal(1);
+
+        p.removeCollisionCallback(cbA);
+        p.removeCollisionCallback(cbB);
+        expect(() => p.removeCollisionCallback(123)).to.throw(Error);
+    });
+
+    it('raycast', function () {
+        const obj = scene.addObject();
+        const comp = obj.addComponent('physx', {
+            static: true,
+            shape: Shape.Box,
+            mass: 1,
+        });
+
+        const physx = WL.physics!;
+        const hit = physx.rayCast([0, 0, 5], [0, 0, -1], 255, 50);
+
+        expect(hit.hitCount).to.equal(1);
+        expect(hit.getDistances()).to.deep.almost([4]);
+        expect(hit.distances).to.deep.almost([4]);
+        expect(hit.getLocations()).to.deep.almost([[0, 0, 1]]);
+        expect(hit.locations).to.deep.almost([[0, 0, 1]]);
+        expect(hit.getNormals()).to.deep.almost([[0, 0, 1]]);
+        expect(hit.normals).to.deep.almost([[0, 0, 1]]);
+
+        physx.rayCast([0, 2, 0], [0, -1, 0], 255, 50);
+        expect(hit.hitCount).to.equal(1);
+        expect(hit.getDistances()).to.deep.almost([1]);
+        expect(hit.distances).to.deep.almost([1]);
+        expect(hit.getLocations()).to.deep.almost([[0, 1, 0]]);
+        expect(hit.locations).to.deep.almost([[0, 1, 0]]);
+        expect(hit.getNormals()).to.deep.almost([[0, 1, 0]]);
+        expect(hit.normals).to.deep.almost([[0, 1, 0]]);
+
+        obj.rotateAxisAngleDeg([0, 1, 0], 45);
+        comp.active = false;
+        comp.active = true;
+        physx.rayCast([0, 0, 2], [0, 0, -1], 255, 50);
+        expect(hit.hitCount).to.equal(1);
+        /* Origin is located at [0, 0, 2], and the cube diagonal has length sqrt(2). */
+        expect(hit.getDistances()).to.deep.almost([2 - Math.sqrt(2)]);
+        expect(hit.getLocations()).to.deep.almost([[0, 0, Math.sqrt(2)]]);
+    });
+
+    it('raycast aligned objects', function () {
+        const objA = scene.addObject();
+        const objB = scene.addObject();
+        const objC = scene.addObject();
+        const objD = scene.addObject();
+
+        objA.setTranslationWorld([0, 1, -5]);
+        objB.setTranslationWorld([0, 1, -10]);
+        objC.setTranslationWorld([0, 1, -15]);
+        objD.setTranslationWorld([0, 1, -20]);
+
+        objA.addComponent('physx', {
+            static: true,
+            shape: Shape.Box,
+            mass: 1,
+        });
+        objB.addComponent('physx', {
+            kinematic: true,
+            shape: Shape.Box,
+        });
+        objC.addComponent('physx', {
+            static: true,
+            shape: Shape.Box,
+        });
+        objD.addComponent('physx', {
+            gravity: false,
+            shape: Shape.Box,
+        });
+
+        WL.wasm._wl_nextUpdate(0.01);
+
+        const hit = WL.physics!.rayCast([0, 1, 0], [0, 0, -1], 255, 50);
+
+        expect(hit.hitCount).to.equal(4);
+
+        expect(hit.getDistances()).to.deep.almost([4, 9, 14, 19]);
+
+        const locations = hit.getLocations();
+        expect(locations[0]).to.deep.almost([0, 1, -4]);
+        expect(locations[1]).to.deep.almost([0, 1, -9]);
+        expect(locations[2]).to.deep.almost([0, 1, -14]);
+        expect(locations[3]).to.deep.almost([0, 1, -19]);
+
+        const normals = hit.getNormals();
+        expect(normals[0]).to.deep.almost([0, 0, 1]);
+        expect(normals[1]).to.deep.almost([0, 0, 1]);
+        expect(normals[2]).to.deep.almost([0, 0, 1]);
+        expect(normals[3]).to.deep.almost([0, 0, 1]);
+
+        expect(hit.objects[0]!.equals(objA)).to.be.true;
+        expect(hit.objects[1]!.equals(objB)).to.be.true;
+        expect(hit.objects[2]!.equals(objC)).to.be.true;
+        expect(hit.objects[3]!.equals(objD)).to.be.true;
+    });
+
+    it('sleeping objects simulation', function () {
+        const obj = scene.addObject();
+        obj.setPositionWorld([0, 1, 0]);
+        const comp = obj.addComponent('physx', {
+            mass: 1,
+            shape: Shape.Box,
+            sleepOnActivate: true,
+        })!;
+
+        WL.wasm._wl_nextUpdate(1.0); /* Large update to ensure it doesn't move */
+        expect(obj.getPositionWorld()).to.deep.almost([0, 1, 0]);
+
+        comp.active = false;
+        comp.sleepOnActivate = false;
+        comp.active = true;
+        WL.wasm._wl_nextUpdate(1.0); /* Large update to ensure it moves */
+        expect(obj.getPositionWorld()[1]).to.be.lessThan(0.0);
     });
 });

@@ -1,40 +1,20 @@
-import {Object3D} from '..';
+import {InMemoryLoadOptions, Scene, WonderlandEngine} from '..';
+import {onImageReady} from '../dist/utils/fetch.js';
+import {fetchWithProgress} from '../src/utils/fetch';
+import {projectURL} from './setup';
 
-/**
- * Promise that resolves when the image is loaded.
- *
- * If the image fails to load, the promise will be
- * rejected with the error.
- *
- * @param img The image to wait for
- * @returns A promise wrapping the image on success,
- *     an error otherwise.
- */
-export function imagePromise<T extends HTMLImageElement | HTMLCanvasElement>(
-    image: T | null
-): Promise<T> {
-    if (!image) return Promise.reject('image is null');
-    if (image instanceof HTMLCanvasElement) return Promise.resolve(image);
-
-    const img = image as HTMLImageElement;
-    if (img.complete) return Promise.resolve(img as T);
-
-    return new Promise((res, rej) => {
-        function success() {
-            img.removeEventListener('load', success);
-            res(img as T);
-        }
-        function error(e: ErrorEvent) {
-            img.removeEventListener('error', error);
-            rej(e);
-        }
-        img.addEventListener('error', error);
-        img.addEventListener('load', success);
-    });
+class ResourceLike {
+    _index = -1;
+    constructor(index: number) {
+        this._index = index;
+    }
+    equals(other: ResourceLike) {
+        return this._index === other._index;
+    }
 }
 
 /**
- * Create a dummy image with dimensiosn `width * height`.
+ * Create a dummy image with dimensions `width * height`.
  *
  * @param width The image width
  * @param height The image height
@@ -48,15 +28,36 @@ export function dummyImage(width: number, height: number): Promise<HTMLImageElem
     const img = new Image(width, height);
     img.src = canvas.toDataURL();
 
-    return imagePromise(img);
+    return onImageReady(img);
 }
 
 /**
- * Comparator to use when sorting on an array of `Object3D`.
+ * Create a mocked {@link Scene} object.
  *
- * @param a The first object to compare.
- * @param b The second object to compare.
+ * @param index Index of the scene
+ * @returns An object with a similar structure to {@link Scene}.
  */
-export function objectSort(a: Object3D, b: Object3D) {
-    return a.objectId - b.objectId;
+export function mockedScene(index: number = 0) {
+    return new ResourceLike(index) as unknown as Scene;
+}
+
+/**
+ * Load multiple project bins.
+ *
+ * @param filenames Name of each bin to load
+ * @returns A promise that resolve with an array of object
+ *     that can be used with {@link WonderlandEngine.loadSceneAsGroupFromMemory}
+ *     and {@link SceneGroup.loadSceneFromBuffer}.
+ */
+export async function loadProjectBins(...filenames: string[]) {
+    const bins: InMemoryLoadOptions[] = [];
+    const promises: Promise<InMemoryLoadOptions>[] = [];
+    for (const filename of filenames) {
+        promises.push(
+            fetchWithProgress(projectURL(filename)).then((buffer) => {
+                return {filename, baseURL: projectURL(''), buffer};
+            })
+        );
+    }
+    return Promise.all(promises);
 }

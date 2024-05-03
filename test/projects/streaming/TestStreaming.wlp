@@ -478,9 +478,7 @@
         },
         "scripting": {
             "bundlingType": "none",
-            "libraryPaths": [
-                "/js/lib/"
-            ]
+            "entryPoint": null
         }
     },
     "files": {

@@ -2,12 +2,36 @@ import {WonderlandEngine} from './engine.js';
 import {LogTag} from './index.js';
 import {Emitter} from './utils/event.js';
 import {fetchWithProgress, getBaseUrl} from './utils/fetch.js';
-import {clamp, timeout} from './utils/misc.js';
+import {clamp} from './utils/misc.js';
 import {isString} from './utils/object.js';
-import {Material, NumberArray, Object3D, RayHit, ViewComponent} from './wonderland.js';
+import {Component, ViewComponent, Object3D, RayHit} from './wonderland.js';
+import {NumberArray} from './types.js';
+import {Material} from './resources/material-manager.js';
+import {InMemoryLoadOptions, Prefab, SceneLoadOptions} from './prefab.js';
+import {GLTFExtensionsInstance, PrefabGLTF} from './scene-gltf.js';
 
-/** Extension data obtained from glTF files. */
-export interface GLTFExtensions {
+export interface InstantiateResult {
+    root: Object3D;
+}
+
+export interface InstantiateGltfResult extends InstantiateResult {
+    extensions: GLTFExtensionsInstance | null;
+}
+
+/** Options for scene activation. */
+export interface ActivateOptions {
+    /** If `true`, dispatches a ready event in the document. */
+    dispatchReadyEvent?: boolean;
+    /** @hidden */
+    legacyLoaded?: boolean;
+}
+
+/**
+ * Legacy gltf extension type.
+ *
+ * @deprecated Use the new {@link WonderlandEngine.loadGLTF} API.
+ */
+export interface GLTFExtensionsLegacy {
     /** glTF root extensions object. JSON data indexed by extension name. */
     root: Record<string, Record<string, any>>;
     /**
@@ -36,7 +60,7 @@ export interface SceneAppendParameters {
  */
 export type SceneAppendResultWithExtensions = {
     root: Object3D | null;
-    extensions: GLTFExtensions;
+    extensions: GLTFExtensionsLegacy;
 };
 
 /**
@@ -51,276 +75,208 @@ export type SceneAppendResult = (Object3D | null) | SceneAppendResultWithExtensi
 /** Magic number for .bin */
 const MAGIC_BIN = 'WLEV';
 
-/** Scene loading options. */
-export interface SceneLoadOptions {
-    /** An in-memory buffer, containing the bytes of a `.bin` file. */
-    buffer: ArrayBuffer;
-
-    /** Path from which resources are resolved (images, languages, etc...). */
-    baseURL: string;
-}
-
 /**
- * Provides global scene functionality like raycasting.
+ * Wonderland Engine (.bin) scene.
+ *
+ * Wonderland Engine packages two types of scene:
+ * - Activatable scene: Contains objects, components, views, resources, and rendering data
+ * - Streamable scene: Contains objects, components, and resources
+ *
+ * #### Activation
+ *
+ * Some scenes are **activatable**, they can thus be attached to the renderer
+ * to be updated and rendered on the canvas.
+ *
+ * For more information, have a look at the {@link WonderlandEngine.switchTo} method.
+ *
+ * #### Instantiation
+ *
+ * Besides activation, a scene can instantiate the content of another scene.
+ *
+ * For more information, have a look at the {@link Scene#instantiate} method.
+ *
+ * @category scene
  */
-export class Scene {
+export class Scene extends Prefab {
     /** Called before rendering the scene */
     readonly onPreRender = new Emitter();
     /** Called after the scene has been rendered */
     readonly onPostRender = new Emitter();
 
-    /** Wonderland Engine instance. @hidden */
-    protected readonly _engine: WonderlandEngine;
-
     /** Ray hit pointer in WASM heap. @hidden */
     private _rayHit: number;
     /** Ray hit. @hidden */
     private _hit: RayHit;
-    /**
-     * Relative directory of the scene that was loaded with {@link Scene.load}
-     * Used for loading any files relative to the main scene.
-     *
-     * We need this for the tests that load bin files since we aren't loading
-     * from the deploy folder directly. (test/resources/projects/*.bin)
-     *
-     * @hidden
-     */
-    private _baseURL: string;
 
-    constructor(engine: WonderlandEngine) {
-        this._engine = engine;
-        this._rayHit = engine.wasm._malloc(4 * (3 * 4 + 3 * 4 + 4 + 2) + 4);
-        this._hit = new RayHit(this._engine, this._rayHit);
-        this._baseURL = '';
+    constructor(engine: WonderlandEngine, index: number) {
+        super(engine, index);
+        /** `this.engine?` is used for testing. */
+        this._rayHit = this.engine?.wasm._malloc(4 * (3 * 4 + 3 * 4 + 4 + 2) + 4);
+        this._hit = new RayHit(this, this._rayHit);
+    }
+
+    /** @overload */
+    instantiate(scene: PrefabGLTF): InstantiateGltfResult;
+    /** @overload */
+    instantiate(scene: Prefab): InstantiateResult;
+    /**
+     * Instantiate `scene` into this instance.
+     *
+     * Any scene can be instantiated into one another. It's thus possible
+     * to instantiate a {@link PrefabGLTF} into this instance, or another
+     * {@link Scene} instance.
+     *
+     * #### Usage
+     *
+     * ```js
+     * const prefabScene = await engine.loadScene('Prefab.bin');
+     * // Instantiate `prefabScene` into `scene`
+     * engine.scene.instantiate(prefabScene);
+     * ```
+     *
+     * #### Shared Resources
+     *
+     * Instantiating **does not** duplicate resources. Each instance will
+     * reference the same assets stored in the {@link Scene}, e.g.,
+     *
+     * ```js
+     * // `zombie` has one mesh and one material
+     * const zombie = await engine.loadScene('Zombie.bin');
+     *
+     * for (let i = 0; i < 100; ++i) {
+     *     engine.scene.instantiate(zombie);
+     * }
+     *
+     * console.log(engine.meshes.count) // Prints '1'
+     * console.log(engine.materials.count) // Prints '1'
+     * ```
+     *
+     * @param scene The scene to instantiate.
+     * @returns An object containing the instantiated root {@link Object3D}.
+     *     When a glTF is instantiated, the result can contain extra metadata.
+     *     For more information, have a look at the {@link InstantiateResult} type.
+     *
+     * @since 1.2.0
+     */
+    instantiate(prefab: Prefab): InstantiateResult;
+    instantiate(prefab: Prefab): InstantiateResult {
+        const wasm = this.engine.wasm;
+        const id = wasm._wl_scene_instantiate(prefab._index, this._index);
+
+        const result: InstantiateResult = {root: this.wrap(id)};
+        if (prefab instanceof PrefabGLTF) {
+            const obj = this.wrap(id);
+            prefab._processInstantiaton(this, obj, result as InstantiateGltfResult);
+        }
+        return result;
+    }
+
+    /** @todo: Add `instantiateBatch` to instantiate multiple chunks in a row. */
+
+    /**
+     * @todo Provide an API to delete all resources linked to a scene.
+     *
+     * Example:
+     *
+     * ```ts
+     * const scene = await engine.loadScene('Scene.bin');
+     * ...
+     * scene.destroy({removeResources: true});
+     * ```
+     */
+
+    /**
+     * Destroy this scene and remove it from the engine.
+     *
+     * @note Destroying a scene **doesn't** remove the materials, meshes,
+     * and textures it references in the engine. Those should be cleaned up either by loading
+     * another main scene via {@link WonderlandEngine.loadMainScene}, or manually using {@link Mesh.destroy}.
+     *
+     * @throws If the scene is currently active.
+     * */
+    destroy() {
+        if (this.isActive) {
+            throw new Error(
+                `Attempt to destroy ${this}, but destroying the active scene is not supported`
+            );
+        }
+
+        /* Store before calling `super.destroy()` since the call
+         * might destroy entirely the prototype. */
+        const wasm = this.engine.wasm;
+        const rayPtr = this._rayHit;
+
+        super.destroy();
+
+        wasm._free(rayPtr);
     }
 
     /**
      * Currently active view components.
      */
     get activeViews(): ViewComponent[] {
-        const wasm = this._engine.wasm;
-        const count = wasm._wl_scene_get_active_views(this._engine.wasm._tempMem, 16);
-
+        const wasm = this.engine.wasm;
+        const count = wasm._wl_scene_get_active_views(this._index, wasm._tempMem, 16);
         const views: ViewComponent[] = [];
-        const viewTypeIndex = wasm._typeIndexFor('view');
         for (let i = 0; i < count; ++i) {
-            views.push(
-                new ViewComponent(
-                    this._engine,
-                    viewTypeIndex,
-                    this._engine.wasm._tempMemInt[i]
-                )
-            );
+            const id = wasm._tempMemInt[i];
+            views.push(this._components.wrapView(id));
         }
 
         return views;
     }
 
     /**
-     * Relative directory of the scene that was loaded with {@link Scene.load}
-     * Used for loading any files relative to the main scene.
+     * Cast a ray through the scene and find intersecting collision components.
      *
-     * @hidden
-     */
-    get baseURL(): string {
-        return this._baseURL;
-    }
-
-    /**
-     * Cast a ray through the scene and find intersecting objects.
-     *
-     * The resulting ray hit will contain up to **4** closest ray hits,
+     * The resulting ray hit will contain **up to 4** closest ray hits,
      * sorted by increasing distance.
+     *
+     * Example:
+     *
+     * ```js
+     * const hit = engine.scene.rayCast(
+     *     [0, 0, 0],
+     *     [0, 0, 1],
+     *     1 << 0 | 1 << 4, // Only check against components in groups 0 and 4
+     *     25
+     * );
+     * if (hit.hitCount > 0) {
+     *     const locations = hit.getLocations();
+     *     console.log(`Object hit at: ${locations[0][0]}, ${locations[0][1]}, ${locations[0][2]}`);
+     * }
+     * ```
      *
      * @param o Ray origin.
      * @param d Ray direction.
-     * @param group Collision group to filter by: only objects that are
-     *        part of given group are considered for raycast.
+     * @param groupMask Bitmask of collision groups to filter by: only objects
+     *        that are part of given groups are considered for the raycast.
      * @param maxDistance Maximum **inclusive** hit distance. Defaults to `100`.
      *
-     * @returns The scene cached {@link RayHit} instance.
-     * @note The returned object is owned by the Scene instance
-     *   will be reused with the next {@link Scene#rayCast} call.
+     * @returns The {@link RayHit} instance, cached by this class.
+     *
+     * @note The returned {@link RayHit} object is owned by the {@link Scene}
+     *       instance and will be reused with the next {@link Scene#rayCast} call.
      */
     rayCast(
         o: Readonly<NumberArray>,
         d: Readonly<NumberArray>,
-        group: number,
+        groupMask: number,
         maxDistance = 100.0
     ): RayHit {
-        this._engine.wasm._wl_scene_ray_cast(
+        this.engine.wasm._wl_scene_ray_cast(
+            this._index,
             o[0],
             o[1],
             o[2],
             d[0],
             d[1],
             d[2],
-            group,
+            groupMask,
             this._rayHit,
             maxDistance
         );
         return this._hit;
-    }
-
-    /**
-     * Add an object to the scene.
-     *
-     * @param parent Parent object or `null`.
-     * @returns A newly created object.
-     */
-    addObject(parent: Object3D | null = null): Object3D {
-        const parentId = parent ? parent.objectId : 0;
-        const objectId = this._engine.wasm._wl_scene_add_object(parentId);
-        return this._engine.wrapObject(objectId);
-    }
-
-    /**
-     * Batch-add objects to the scene.
-     *
-     * Will provide better performance for adding multiple objects (e.g. > 16)
-     * than calling {@link Scene#addObject} repeatedly in a loop.
-     *
-     * By providing upfront information of how many objects will be required,
-     * the engine is able to batch-allocate the required memory rather than
-     * convervatively grow the memory in small steps.
-     *
-     * **Experimental:** This API might change in upcoming versions.
-     *
-     * @param count Number of objects to add.
-     * @param parent Parent object or `null`, default `null`.
-     * @param componentCountHint Hint for how many components in total will
-     *      be added to the created objects afterwards, default `0`.
-     * @returns Newly created objects
-     */
-    addObjects(
-        count: number,
-        parent: Object3D | null = null,
-        componentCountHint: number = 0
-    ): Object3D[] {
-        const parentId = parent ? parent.objectId : 0;
-        this._engine.wasm.requireTempMem(count * 2);
-        const actualCount = this._engine.wasm._wl_scene_add_objects(
-            parentId,
-            count,
-            componentCountHint || 0,
-            this._engine.wasm._tempMem,
-            this._engine.wasm._tempMemSize >> 1
-        );
-        const ids = this._engine.wasm._tempMemUint16.subarray(0, actualCount);
-        const wrapper = this._engine.wrapObject.bind(this._engine);
-        const objects = Array.from(ids, wrapper);
-        return objects;
-    }
-
-    /**
-     * Pre-allocate memory for a given amount of objects and components.
-     *
-     * Will provide better performance for adding objects later with {@link Scene#addObject}
-     * and {@link Scene#addObjects}.
-     *
-     * By providing upfront information of how many objects will be required,
-     * the engine is able to batch-allocate the required memory rather than
-     * conservatively grow the memory in small steps.
-     *
-     * **Experimental:** This API might change in upcoming versions.
-     *
-     * @param objectCount Number of objects to add.
-     * @param componentCountPerType Amount of components to
-     *      allocate for {@link Object3D.addComponent}, e.g. `{mesh: 100, collision: 200, "my-comp": 100}`.
-     * @since 0.8.10
-     */
-    reserveObjects(objectCount: number, componentCountPerType: Record<string, number>) {
-        const wasm = this._engine.wasm;
-        componentCountPerType = componentCountPerType || {};
-        const jsManagerIndex = wasm._jsManagerIndex;
-        let countsPerTypeIndex = wasm._tempMemInt.subarray();
-        countsPerTypeIndex.fill(0);
-        for (const e of Object.entries(componentCountPerType)) {
-            const typeIndex = wasm._typeIndexFor(e[0]);
-            countsPerTypeIndex[typeIndex < 0 ? jsManagerIndex : typeIndex] += e[1];
-        }
-        wasm._wl_scene_reserve_objects(objectCount, wasm._tempMem);
-    }
-
-    /**
-     * Top-level objects of this scene.
-     *
-     * See {@link Object3D.children} for more information.
-     *
-     * @since 1.2.0
-     */
-    get children(): Object3D[] {
-        const root = this._engine.wrapObject(0);
-        return root.getChildren();
-    }
-
-    /**
-     * The number of children of the root object.
-     */
-    get childrenCount(): number {
-        const rootObjectId = 0;
-        return this._engine.wasm._wl_object_get_children_count(rootObjectId);
-    }
-
-    /**
-     * Root object's children.
-     *
-     * See {@link Object3D.getChildren} for more information.
-     *
-     * @param out Destination array, expected to have at least `this.childrenCount` elements.
-     * @returns The `out` parameter.
-     */
-    getChildren(out: Object3D[] = new Array(this.childrenCount)): Object3D[] {
-        const root = this._engine.wrapObject(0);
-        return root.getChildren(out);
-    }
-
-    /**
-     * Search for objects matching the name.
-     *
-     * See {@link Object3D.findByName} for more information.
-     *
-     * @param name The name to search for.
-     * @param recursive If `true`, the method will look at all the objects of
-     *     this scene. If `false`, this method will only perform the search in
-     *     root objects.
-     * @returns An array of {@link Object3D} matching the name.
-     *
-     * @since 1.2.0
-     */
-    findByName(name: string, recursive = false): Object3D[] {
-        const root = this._engine.wrapObject(0);
-        return root.findByName(name, recursive);
-    }
-
-    /**
-     * Search for all **top-level** objects matching the name.
-     *
-     * See {@link Object3D.findByNameDirect} for more information.
-     *
-     * @param name The name to search for.
-     * @returns An array of {@link Object3D} matching the name.
-     *
-     * @since 1.2.0
-     */
-    findByNameDirect(name: string): Object3D[] {
-        const root = this._engine.wrapObject(0);
-        return root.findByNameDirect(name);
-    }
-
-    /**
-     * Search for **all objects** matching the name.
-     *
-     * See {@link Object3D.findByNameRecursive} for more information.
-     *
-     * @param name The name to search for.
-     * @returns An array of {@link Object3D} matching the name.
-     *
-     * @since 1.2.0
-     */
-    findByNameRecursive(name: string): Object3D[] {
-        const root = this._engine.wrapObject(0);
-        return root.findByNameRecursive(name);
     }
 
     /**
@@ -330,7 +286,7 @@ export class Scene {
      * @since 0.8.5
      */
     set clearColor(color: number[]) {
-        this._engine.wasm._wl_scene_set_clearColor(color[0], color[1], color[2], color[3]);
+        this.engine.wasm._wl_scene_set_clearColor(color[0], color[1], color[2], color[3]);
     }
 
     /**
@@ -344,12 +300,7 @@ export class Scene {
      * @since 0.9.4
      */
     set colorClearEnabled(b: boolean) {
-        this._engine.wasm._wl_scene_enableColorClear(b);
-    }
-
-    /** Hosting engine instance. */
-    get engine() {
-        return this._engine;
+        this.engine.wasm._wl_scene_enableColorClear(b);
     }
 
     /**
@@ -378,63 +329,32 @@ export class Scene {
      * Use {@link Scene.setLoadingProgress} to update the loading progress bar
      * when using an ArrayBuffer.
      *
-     * @param opts Path to the file to load, or an option object.
+     * @deprecated Use the new {@link Scene} and {@link Scene} API.
+     *
+     * @param options Path to the file to load, or an option object.
      *     For more information about the options, see the {@link SceneLoadOptions} documentation.
      * @returns Promise that resolves when the scene was loaded.
      */
-    async load(options: string | SceneLoadOptions): Promise<void> {
-        let buffer: ArrayBuffer | null = null;
-        let baseURL: string | null = null;
-        let filename: string = null!;
+    async load(options: string | SceneLoadOptions): Promise<Scene> {
+        /** @todo(2.0.0): Remove this method. */
+        let dispatchReadyEvent = false;
+        let opts: InMemoryLoadOptions;
         if (isString(options)) {
-            filename = options;
-            buffer = await fetchWithProgress(filename, (bytes, size) => {
+            opts = await Scene.loadBuffer(options, (bytes: number, size: number) => {
                 this.engine.log.info(LogTag.Scene, `Scene downloading: ${bytes} / ${size}`);
                 this.setLoadingProgress(bytes / size);
             });
-            baseURL = getBaseUrl(filename);
-            this.engine.log.info(
-                LogTag.Scene,
-                `Scene download of ${buffer.byteLength} bytes successful.`
-            );
         } else {
-            ({buffer, baseURL} = options);
-            filename = baseURL ? `${baseURL}/scene.bin` : 'scene.bin';
+            opts = options;
+            dispatchReadyEvent = options.dispatchReadyEvent ?? false;
         }
 
-        if (!buffer) {
-            throw new Error('Failed to load scene, buffer not provided');
-        }
-        if (!isString(baseURL)) {
-            throw new Error('Failed to load scene, baseURL not provided');
-        }
-
-        if (!this._engine.onLoadingScreenEnd.isDataRetained) {
-            this._engine.onLoadingScreenEnd.notify();
-        }
-
-        this._baseURL = baseURL;
-
-        const wasm = this._engine.wasm;
-
-        const size = buffer.byteLength;
-        const ptr = wasm._malloc(size);
-        new Uint8Array(wasm.HEAPU8.buffer, ptr, size).set(new Uint8Array(buffer));
-
-        try {
-            /** @todo: Remove third parameter at 1.2.0 */
-            wasm._wl_load_scene_bin(ptr, size, wasm.tempUTF8(filename));
-        } finally {
-            /* Catch calls to abort(), e.g. via asserts */
-            wasm._free(ptr);
-        }
-
-        const i18n = this._engine.i18n;
-        const langPromise = i18n.setLanguage(i18n.languageCode(0));
-
-        await Promise.all([langPromise, this._flushAppend(this._baseURL)]);
-
-        this._engine.onSceneLoaded.notify();
+        const scene = await this.engine.loadMainSceneFromBuffer({
+            ...opts,
+            dispatchReadyEvent,
+        });
+        this.engine.onSceneLoaded.notify();
+        return scene;
     }
 
     /**
@@ -479,6 +399,8 @@ export class Scene {
      * });
      * ```
      *
+     * @deprecated Use the new {@link Prefab} and {@link Scene} API.
+     *
      * @param file The .bin, .gltf or .glb file to append. Should be a URL or
      *   an `ArrayBuffer` with the file content.
      * @param options Additional options for loading.
@@ -488,76 +410,38 @@ export class Scene {
         file: string | ArrayBuffer,
         options: Partial<SceneAppendParameters> = {}
     ): Promise<SceneAppendResult> {
-        const {
-            loadGltfExtensions = false,
-            baseURL = isString(file) ? getBaseUrl(file) : this._baseURL,
-        } = options;
+        /** @todo(2.0.0): Remove this method. */
 
-        const wasm = this._engine.wasm;
+        const {baseURL = isString(file) ? getBaseUrl(file) : this.baseURL} = options;
+
         const buffer = isString(file) ? await fetchWithProgress(file) : file;
-
-        let error: Error | null = null;
-        let result: SceneAppendResult | undefined = undefined;
-
-        let callback = wasm.addFunction(
-            (objectId: number, extensionData: number, extensionDataSize: number) => {
-                if (objectId < 0) {
-                    error = new Error(
-                        `Scene.append(): Internal runtime error, found root id = ${objectId}`
-                    );
-                    return;
-                }
-                const root = objectId ? this._engine.wrapObject(objectId) : null;
-                result = root;
-
-                if (!extensionData || !extensionDataSize) return;
-
-                const marshalled = new Uint32Array(
-                    wasm.HEAPU32.buffer,
-                    extensionData,
-                    extensionDataSize / 4
-                );
-                const extensions = this._unmarshallGltfExtensions(marshalled);
-                result = {root, extensions};
-            },
-            'viii'
-        );
-
-        const size = buffer.byteLength;
-        const ptr = wasm._malloc(size);
-        const data = new Uint8Array(wasm.HEAPU8.buffer, ptr, size);
-        data.set(new Uint8Array(buffer));
-
+        const data = new Uint8Array(buffer);
         const isBinFile =
             data.byteLength > MAGIC_BIN.length &&
             data
                 .subarray(0, MAGIC_BIN.length)
                 .every((value, i) => value === MAGIC_BIN.charCodeAt(i));
 
-        try {
-            if (isBinFile) {
-                wasm._wl_append_scene_bin(ptr, size, callback);
-            } else {
-                wasm._wl_append_scene_gltf(ptr, size, loadGltfExtensions, callback);
-            }
-        } catch (e) {
-            wasm.removeFunction(callback);
-            throw e;
-        } finally {
-            wasm._free(ptr);
+        const scene = isBinFile
+            ? this.engine.loadPrefabFromBuffer({buffer, baseURL})
+            : this.engine.loadGLTFFromBuffer({
+                  buffer,
+                  baseURL,
+                  extensions: options.loadGltfExtensions,
+              });
+
+        const result = this.instantiate(scene)!;
+        if (scene instanceof PrefabGLTF) {
+            if (!scene.extensions) return result.root;
+            return {
+                root: result.root,
+                extensions: {
+                    ...(result as InstantiateGltfResult).extensions,
+                    root: scene.extensions.root,
+                },
+            } as SceneAppendResultWithExtensions;
         }
-
-        /* Debounce this call to allow the animation loop to be scheduled.
-         * Without this, the promise might hang forever. */
-        while (result === undefined && !error) await timeout(4);
-
-        wasm.removeFunction(callback);
-
-        if (error) throw error;
-
-        if (isBinFile) await this._flushAppend(baseURL);
-
-        return result!;
+        return result.root;
     }
 
     /**
@@ -571,117 +455,82 @@ export class Scene {
     }
 
     /**
+     * Dispatch an event 'wle-scene-ready' in the document.
+     *
+     * @note This is used for automatic testing.
+     */
+    dispatchReadyEvent() {
+        document.dispatchEvent(
+            new CustomEvent('wle-scene-ready', {
+                detail: {filename: this.filename},
+            })
+        );
+    }
+
+    /**
      * Set the current material to render the sky.
      *
      * @note The sky needs to be enabled in the editor when creating the scene.
      * For more information, please refer to the background [tutorial](https://wonderlandengine.com/tutorials/background-effect/).
      */
     set skyMaterial(material: Material | null) {
-        this._engine.wasm._wl_scene_set_sky_material(material?._index ?? 0);
+        this.engine.wasm._wl_scene_set_sky_material(this._index, material?._id ?? 0);
     }
 
     /** Current sky material, or `null` if no sky is set. */
     get skyMaterial(): Material | null {
-        const id = this._engine.wasm._wl_scene_get_sky_material();
-        return id > 0 ? new Material(this._engine, id) : null;
-    }
-
-    /**
-     * Load all currently queued bin files.
-     *
-     * Used by {@link Scene.append} and {@link Scene.load}
-     * to load all delay-load bins.
-     *
-     * Used by {@link I18N.language} to trigger loading the
-     * associated language bin, after it was queued.
-     *
-     * @param baseURL Url that is added to each path.
-     * @param options Additional options for loading.
-     *
-     * @hidden
-     */
-    _flushAppend(baseURL: string) {
-        const wasm = this._engine.wasm;
-        const count = wasm._wl_scene_queued_bin_count();
-        if (!count) return Promise.resolve();
-
-        const urls = new Array(count).fill(0).map((_, i: number) => {
-            const ptr = wasm._wl_scene_queued_bin_path(i);
-            return wasm.UTF8ToString(ptr);
-        });
-
-        wasm._wl_scene_clear_queued_bin_list();
-
-        const promises = urls.map((path: string) =>
-            this.append(baseURL.length ? `${baseURL}/${path}` : path)
-        );
-
-        return Promise.all(promises).then((data) => {
-            const i18n = this._engine.i18n;
-            this._engine.i18n.onLanguageChanged.notify(
-                i18n.previousIndex,
-                i18n.currentIndex
-            );
-            return data;
-        });
-    }
-
-    /**
-     * Unmarshalls the GltfExtensions from an Uint32Array.
-     *
-     * @param data Array containing the gltf extension data.
-     * @returns The extensions stored in an object literal.
-     *
-     * @hidden
-     */
-    _unmarshallGltfExtensions(data: Uint32Array): GLTFExtensions {
-        /* @todo: This method should be moved in the internal Emscripten library. */
-        const extensions: GLTFExtensions = {
-            root: {},
-            mesh: {},
-            node: {},
-            idMapping: [],
-        };
-
-        let index = 0;
-        const readString = () => {
-            const strPtr = data[index++];
-            const strLen = data[index++];
-            return this._engine.wasm.UTF8ViewToString(strPtr, strPtr + strLen);
-        };
-
-        const idMappingSize = data[index++];
-        const idMapping: number[] = new Array(idMappingSize);
-        for (let i = 0; i < idMappingSize; ++i) {
-            idMapping[i] = data[index++];
-        }
-        extensions.idMapping = idMapping;
-
-        const meshExtensionsSize = data[index++];
-        for (let i = 0; i < meshExtensionsSize; ++i) {
-            const objectId = data[index++];
-            extensions.mesh[idMapping[objectId]] = JSON.parse(readString());
-        }
-        const nodeExtensionsSize = data[index++];
-        for (let i = 0; i < nodeExtensionsSize; ++i) {
-            const objectId = data[index++];
-            extensions.node[idMapping[objectId]] = JSON.parse(readString());
-        }
-        const rootExtensionsStr = readString();
-        if (rootExtensionsStr) {
-            extensions.root = JSON.parse(rootExtensionsStr);
-        }
-
-        return extensions;
+        const index = this.engine.wasm._wl_scene_get_sky_material(this._index);
+        return this.engine.materials.wrap(index);
     }
 
     /**
      * Reset the scene.
      *
      * This method deletes all used and allocated objects, and components.
+     *
+     * @deprecated Load a new scene and activate it instead.
      */
     reset() {
-        this._engine.wasm._wl_scene_reset();
-        this._baseURL = '';
+        /** @todo(2.0.0): Remove this method. */
+    }
+
+    /**
+     * Download and apply queued dependency files (.bin).
+     *
+     * @hidden
+     */
+    async _downloadDependency(url: string) {
+        const wasm = this.engine.wasm;
+
+        const buffer = await fetchWithProgress(url);
+        const ptr = wasm.copyBufferToHeap(buffer);
+        try {
+            wasm._wl_scene_load_queued_bin(this._index, ptr, buffer.byteLength);
+        } finally {
+            /* Catch calls to abort(), e.g. via asserts */
+            wasm._free(ptr);
+        }
+    }
+
+    /**
+     * Download and apply queued dependency files (.bin).
+     *
+     * @hidden
+     */
+    async _downloadDependencies() {
+        const wasm = this.engine.wasm;
+
+        const count = wasm._wl_scene_queued_bin_count(this._index);
+        if (!count) return Promise.resolve();
+
+        const urls = new Array(count).fill(0).map((_, i: number) => {
+            const ptr = wasm._wl_scene_queued_bin_path(this._index, i);
+            const url = wasm.UTF8ToString(ptr);
+            return url;
+        });
+
+        wasm._wl_scene_clear_queued_bin_list(this._index);
+
+        return Promise.all(urls.map((url: string) => this._downloadDependency(url)));
     }
 }

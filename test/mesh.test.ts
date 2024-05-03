@@ -2,7 +2,8 @@ import {expect, use} from '@esm-bundle/chai';
 import {chaiAlmost} from './chai/almost.js';
 
 import {Mesh, MeshAttribute, MeshAttributeAccessor, MeshSkinningType, Object3D} from '..';
-import {init, reset, WL} from './setup.js';
+import {init, reset, resourceURL, WL} from './setup.js';
+import {fetchWithProgress} from '../src/utils/fetch.js';
 
 use(chaiAlmost(0.001));
 
@@ -33,12 +34,30 @@ const MeshLayoutFlags = {
     Slug: 1 << 9,
 };
 
+/* Use in-memory .bin as much as possible to speed up the tests. */
+const bins: ArrayBuffer[] = [];
+try {
+    bins.push(
+        ...(await Promise.all([
+            fetchWithProgress(resourceURL('Cube.glb')),
+            fetchWithProgress(resourceURL('UVcube.glb')),
+            fetchWithProgress(resourceURL('SimpleSkin.glb')),
+        ]))
+    );
+} catch (e) {
+    console.error('Failed to load required test scenes');
+    throw e;
+}
+const cubeGLB = {buffer: bins[0], baseURL: ''};
+const cubeUvGLB = {buffer: bins[1], baseURL: ''};
+const simpleSkinGBL = {buffer: bins[2], baseURL: ''};
+
 before(() => init({loader: true}));
 beforeEach(reset);
 
 describe('Mesh', function () {
     it('getBoundingSphere', function () {
-        const mesh = new Mesh(WL, {vertexCount: 3, indexData: [0, 1, 2]});
+        const mesh = WL.meshes.create({vertexCount: 3, indexData: [0, 1, 2]});
         const position = mesh.attribute(MeshAttribute.Position)!;
         position.set(0, [1, 2, 3]);
         position.set(1, [0, 1, 6]);
@@ -46,6 +65,17 @@ describe('Mesh', function () {
         mesh.update();
         const result = mesh.getBoundingSphere();
         expect(result).to.be.deep.almost([0.581, 0.781, 3.457, 2.617]);
+    });
+
+    it('.destroy() with prototype destruction', async function () {
+        WL.erasePrototypeOnDestroy = true;
+
+        const mesh = WL.meshes.create({vertexCount: 1, indexData: [0]});
+        mesh.destroy();
+        expect(() => mesh.attribute(MeshAttribute.Position)).to.throw(
+            `Cannot read 'attribute' of destroyed 'Mesh' resource from ${WL}`
+        );
+        expect(mesh.isDestroyed).to.be.true;
     });
 
     describe('MeshAttribute', function () {
@@ -59,10 +89,15 @@ describe('Mesh', function () {
                     MeshLayoutFlags.TextureCoordinates
             );
 
-            /* Cube has positions, normals, and tangents */
-            const root = (await WL.scene.append('test/resources/Cube.glb')) as Object3D;
-            const child = root.children[0];
-            const mesh = child.getComponent('mesh')?.mesh;
+            const gltf = await WL.loadGLTFFromBuffer(cubeGLB);
+            const instance = WL.scene.instantiate(gltf)!;
+            expect(instance).to.not.be.undefined;
+
+            const child = instance.root.children[0];
+            const meshComp = child.getComponent('mesh')!;
+            expect(meshComp).to.not.be.null;
+            const mesh = meshComp.mesh!;
+            expect(mesh).to.not.be.null;
 
             /* Tangents must not be in the resulting mesh */
             const tangentAttr = mesh?.attribute(MeshAttribute.Tangent);
@@ -79,8 +114,11 @@ describe('Mesh', function () {
             );
 
             /* Cube has positions, normals, and tangents */
-            const root = (await WL.scene.append('test/resources/Cube.glb')) as Object3D;
-            const child = root.children[0];
+            const gltf = await WL.loadGLTFFromBuffer(cubeGLB);
+            const instance = WL.scene.instantiate(gltf)!;
+            expect(instance).to.not.be.undefined;
+
+            const child = instance.root.children[0];
             const mesh = child.getComponent('mesh')?.mesh;
 
             const tangentAttr = mesh?.attribute(
@@ -116,8 +154,11 @@ describe('Mesh', function () {
             );
 
             /* UVcube has positions, normals, UVs, but no tangents, so they should be generated */
-            const root = (await WL.scene.append('test/resources/UVcube.glb')) as Object3D;
-            const child = root.children[0];
+            const gltf = await WL.loadGLTFFromBuffer(cubeUvGLB);
+            const instance = WL.scene.instantiate(gltf)!;
+            expect(instance).to.not.be.undefined;
+
+            const child = instance.root.children[0];
             const mesh = child.getComponent('mesh')?.mesh;
             const tangentAttr = mesh?.attribute(MeshAttribute.Tangent);
 
@@ -141,10 +182,11 @@ describe('Mesh', function () {
 
         it('import joints', async function () {
             /* Loading models with joints would crash after JointIds migration (0cb69af2, post 0.9.5) */
-            const root = (await WL.scene.append(
-                'test/resources/SimpleSkin.glb'
-            )) as Object3D;
-            const child = root.children[0];
+            const gltf = await WL.loadGLTFFromBuffer(simpleSkinGBL);
+            const instance = WL.scene.instantiate(gltf)!;
+            expect(instance).to.not.be.undefined;
+
+            const child = instance.root.children[0];
             const mesh = child.getComponent('mesh')?.mesh;
             expect(mesh).to.not.be.null;
 
@@ -162,7 +204,7 @@ describe('Mesh', function () {
         it('set / get position', function () {
             const expected = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
-            const mesh = new Mesh(WL, {vertexCount: 3, indexData: [0, 1, 2]});
+            const mesh = WL.meshes.create({vertexCount: 3, indexData: [0, 1, 2]});
             const positionAttr = mesh.attribute(MeshAttribute.Position);
             expect(positionAttr).to.not.be.null;
 
@@ -174,7 +216,7 @@ describe('Mesh', function () {
         it('set / get joint id', function () {
             const expected = [2, 4, 8, 16, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768];
 
-            const mesh = new Mesh(WL, {
+            const mesh = WL.meshes.create({
                 vertexCount: 3,
                 indexData: [0, 1, 2],
                 skinningType: MeshSkinningType.FourJoints,
@@ -193,7 +235,7 @@ describe('Mesh', function () {
                 8192, 16384, 32768, 4096, 8192, 16384, 32768,
             ];
 
-            const mesh = new Mesh(WL, {
+            const mesh = WL.meshes.create({
                 vertexCount: 3,
                 indexData: [0, 1, 2],
                 skinningType: MeshSkinningType.EightJoints,
@@ -207,15 +249,15 @@ describe('Mesh', function () {
         });
 
         it('set / get normals', function () {
-            const expected = [1, 1, 1, 0, 1, 0, 0, 0, 1];
-
             WL.wasm._wl_renderer_set_mesh_layout(
                 MeshLayoutFlags.Position | MeshLayoutFlags.Normals
             );
-            const mesh = new Mesh(WL, {vertexCount: 3, indexData: [0, 1, 2]});
+
+            const mesh = WL.meshes.create({vertexCount: 3, indexData: [0, 1, 2]});
             const normalsAttr = mesh.attribute(MeshAttribute.Normal);
             expect(normalsAttr).to.not.be.null;
 
+            const expected = [1, 1, 1, 0, 1, 0, 0, 0, 1];
             const out = normalsAttr!.set(0, expected).createArray(3);
             expect(out).instanceOf(Float32Array);
             expect(normalsAttr!.get(0, out)).to.deep.almost(new Float32Array(expected));
@@ -227,7 +269,8 @@ describe('Mesh', function () {
             WL.wasm._wl_renderer_set_mesh_layout(
                 MeshLayoutFlags.Position | MeshLayoutFlags.Colors
             );
-            const mesh = new Mesh(WL, {vertexCount: 2, indexData: [0, 1, 2]});
+
+            const mesh = WL.meshes.create({vertexCount: 2, indexData: [0, 1, 2]});
             const colorsAttr = mesh.attribute(MeshAttribute.Color);
             expect(colorsAttr).to.not.be.null;
 
@@ -237,7 +280,7 @@ describe('Mesh', function () {
         });
 
         it('set / get with non-zero index', function () {
-            const mesh = new Mesh(WL, {vertexCount: 3, indexData: [0, 1, 2]});
+            const mesh = WL.meshes.create({vertexCount: 3, indexData: [0, 1, 2]});
             const attr = mesh.attribute(MeshAttribute.Position) as MeshAttributeAccessor;
             expect(attr).to.not.be.null;
 
@@ -254,8 +297,9 @@ describe('Mesh', function () {
             WL.wasm._wl_renderer_set_mesh_layout(
                 MeshLayoutFlags.Position | MeshLayoutFlags.Colors
             );
+
             const vertexCount = 3;
-            const mesh = new Mesh(WL, {
+            const mesh = WL.meshes.create({
                 vertexCount,
                 indexData: [0, 1, 2],
                 skinningType: MeshSkinningType.FourJoints,
@@ -300,17 +344,35 @@ describe('Mesh', function () {
             );
         });
     });
+});
 
-    it('equals', function () {
-        const mesh1 = new Mesh(WL, {vertexCount: 3, indexData: [0, 1, 2]});
-        const mesh2 = new Mesh(WL, {vertexCount: 3, indexData: [0, 1, 2]});
-        const mesh3 = new Mesh(WL, mesh1._index);
-        expect(mesh1.equals(null)).to.be.false;
-        expect(mesh1.equals(undefined)).to.be.false;
-        expect(mesh1.equals(mesh1)).to.be.true;
-        expect(mesh1.equals(mesh2)).to.be.false;
-        expect(mesh2.equals(mesh1)).to.be.false;
-        expect(mesh1.equals(mesh3)).to.be.true;
-        expect(mesh3.equals(mesh1)).to.be.true;
+describe('Mesh Legacy', function () {
+    it('create', function () {
+        expect(WL.meshes.get(1)).to.be.null;
+
+        const indexData = [0, 1, 2];
+        const mesh = new Mesh(WL, {vertexCount: indexData.length, indexData});
+        const position = mesh.attribute(MeshAttribute.Position)!;
+        expect(WL.meshes.get(1)).to.equal(mesh);
+
+        for (let i = 0; i < indexData.length; ++i) {
+            const v = i * indexData.length;
+            position.set(i, [v, v + 1, v + 2]);
+        }
+        for (let i = 0; i < indexData.length; ++i) {
+            const v = i * indexData.length;
+            expect(position.get(i)).to.deep.almost([v, v + 1, v + 2]);
+        }
+    });
+
+    it('getBoundingSphere', function () {
+        const mesh = new Mesh(WL, {vertexCount: 3, indexData: [0, 1, 2]});
+        const position = mesh.attribute(MeshAttribute.Position)!;
+        position.set(0, [1, 2, 3]);
+        position.set(1, [0, 1, 6]);
+        position.set(2, [1, 0, 1]);
+        mesh.update();
+        const result = mesh.getBoundingSphere();
+        expect(result).to.be.deep.almost([0.581, 0.781, 3.457, 2.617]);
     });
 });

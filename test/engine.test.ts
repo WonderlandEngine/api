@@ -71,6 +71,22 @@ describe('Engine', function () {
         expect(WL.vrSupported).to.equal(vrSupported);
     });
 
+    it('.switchTo()', async function () {
+        const sceneA = WL._createEmpty();
+        const sceneB = WL._createEmpty();
+
+        expect(sceneA.isActive).to.be.false;
+        expect(sceneB.isActive).to.be.false;
+
+        WL.switchTo(sceneA);
+        expect(sceneA.isActive).to.be.true;
+        expect(sceneB.isActive).to.be.false;
+
+        WL.switchTo(sceneB);
+        expect(sceneB.isActive).to.be.true;
+        expect(sceneA.isActive).to.be.false;
+    });
+
     it('multiple instances', async function () {
         this.timeout(20000);
 
@@ -91,6 +107,14 @@ describe('Engine', function () {
         engine.registerComponent(TestComponent);
         expect(WL.isRegistered(TestComponent)).to.be.false;
         expect(engine.isRegistered(TestComponent)).to.be.true;
+
+        /* Loading screen event test */
+
+        const events: ('loading-screen' | 'loaded')[] = [];
+        engine.onLoadingScreenEnd.add(() => events.push('loading-screen'));
+        const scene = engine._createEmpty();
+        engine.switchTo(scene);
+        expect(events).to.eql(['loading-screen']);
     });
 
     describe('Runtime <> API compatibility', function () {
