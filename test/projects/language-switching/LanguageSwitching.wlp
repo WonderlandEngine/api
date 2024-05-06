@@ -16,8 +16,11 @@
             "enableZipCompression": false
         },
         "scripting": {
+            "sourcePaths": [
+                "js"
+            ],
             "bundlingType": "none",
-            "autoManageEntryPoint": false
+            "entryPoint": null
         }
     },
     "files": {},
@@ -267,6 +270,61 @@
                     "type": "text",
                     "text": {
                         "text": "Hello Wonderland!"
+                    }
+                }
+            ]
+        },
+        "49": {
+            "name": "JS",
+            "components": [
+                {
+                    "type": "test-component-translate-params",
+                    "test-component-translate-params": {
+                        "animationProp": null,
+                        "stringProp": "Yahallo Wonderland!",
+                        "floatProp": 4.5
+                    }
+                }
+            ]
+        },
+        "50": {
+            "name": "Mixed",
+            "components": [
+                {
+                    "type": "input"
+                },
+                {
+                    "type": "text",
+                    "text": {
+                        "text": "Hi Wonderland?"
+                    }
+                },
+                {
+                    "type": "test-component-translate-params",
+                    "test-component-translate-params": {
+                        "floatProp": 0.0,
+                        "stringProp": "First Wonderland!"
+                    }
+                },
+                {
+                    "type": "view"
+                },
+                {
+                    "type": "test-component-translate-params",
+                    "test-component-translate-params": {
+                        "floatProp": 1.0,
+                        "stringProp": "Second Wonderland!"
+                    }
+                }
+            ]
+        },
+        "51": {
+            "name": "Text unchanged",
+            "components": [
+                {
+                    "type": "text",
+                    "text": {
+                        "text": "No translation"
                     }
                 }
             ]

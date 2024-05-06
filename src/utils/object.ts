@@ -1,3 +1,5 @@
+import {ImageLike} from '../types.js';
+
 /**
  * Check if a given value is a native string or a `String` instance.
  *
@@ -18,4 +20,18 @@ export function isString(value: any): value is string {
 export function isNumber(value: any): value is number {
     if (value === null || value === undefined) return false;
     return typeof value === 'number' || value.constructor === Number;
+}
+
+/**
+ * Check whether a given value is a visual media.
+ *
+ * @param value The value to check
+ * @returns `true` if the `value` is an image, video, or canvas.
+ */
+export function isImageLike(value: any): value is ImageLike {
+    return (
+        value instanceof HTMLImageElement ||
+        value instanceof HTMLVideoElement ||
+        value instanceof HTMLCanvasElement
+    );
 }

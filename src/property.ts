@@ -9,7 +9,7 @@ export enum Type {
      *
      * @hidden
      */
-    Native = 1 << 0,
+    Native = 0,
 
     /**
      * **Bool**:
@@ -18,7 +18,7 @@ export enum Type {
      *
      * Initial value is `false`, unless overridden by the `default` property.
      */
-    Bool = 1 << 1,
+    Bool = 1,
 
     /**
      * **Int**:
@@ -27,7 +27,7 @@ export enum Type {
      *
      * Initial value is `0`, unless overridden by the `default` property.
      */
-    Int = 1 << 2,
+    Int = 2,
 
     /**
      * **Float**:
@@ -36,7 +36,7 @@ export enum Type {
      *
      * Initial value is `0.0`, unless overridden by the `default` property.
      */
-    Float = 1 << 3,
+    Float = 3,
 
     /**
      * **String / Text**:
@@ -46,7 +46,7 @@ export enum Type {
      * Initial value is an empty string, unless overridden by the `default`
      * property.
      */
-    String = 1 << 4,
+    String = 4,
 
     /**
      * **Enumeration**:
@@ -66,7 +66,7 @@ export enum Type {
      *     camera: {type: Type.Enum, values: ['auto', 'back', 'front'], default: 'auto'},
      * ```
      */
-    Enum = 1 << 5,
+    Enum = 5,
 
     /**
      * **Object reference**:
@@ -76,7 +76,7 @@ export enum Type {
      *
      * Initial value is `null`.
      */
-    Object = 1 << 6,
+    Object = 6,
 
     /**
      * **Mesh reference**:
@@ -85,7 +85,7 @@ export enum Type {
      *
      * Initial value is `null`.
      */
-    Mesh = 1 << 7,
+    Mesh = 7,
 
     /**
      * **Texture reference**:
@@ -94,7 +94,7 @@ export enum Type {
      *
      * Initial value is `null`.
      */
-    Texture = 1 << 8,
+    Texture = 8,
 
     /**
      * **Material reference**:
@@ -103,7 +103,7 @@ export enum Type {
      *
      * Initial value is `null`.
      */
-    Material = 1 << 9,
+    Material = 9,
 
     /**
      * **Animation reference**:
@@ -112,7 +112,7 @@ export enum Type {
      *
      * Initial value is `null`.
      */
-    Animation = 1 << 10,
+    Animation = 10,
 
     /**
      * **Skin reference**:
@@ -121,7 +121,7 @@ export enum Type {
      *
      * Initial value is `null`.
      */
-    Skin = 1 << 11,
+    Skin = 11,
 
     /**
      * **Color**:
@@ -131,8 +131,75 @@ export enum Type {
      * Initial value is `[0.0, 0.0, 0.0, 1.0]`, unless overridden by the
      * `default` property.
      */
-    Color = 1 << 12,
+    Color = 12,
+
+    /**
+     * **Vector of two floats**:
+     *
+     * Appears in the editor as a two-element floating point input field.
+     *
+     * Initial value is `[0.0, 0.0]`, unless overridden by the
+     * `default` property.
+     */
+    Vector2 = 13,
+
+    /**
+     * **Vector of three floats**:
+     *
+     * Appears in the editor as a three-element floating point input field.
+     *
+     * Initial value is `[0.0, 0.0, 0.0]`, unless overridden by the
+     * `default` property.
+     */
+    Vector3 = 14,
+
+    /**
+     * **Vector of four floats**:
+     *
+     * Appears in the editor as a four-element floating point input field.
+     *
+     * Initial value is `[0.0, 0.0, 0.0, 0.0]`, unless overridden by the
+     * `default` property.
+     */
+    Vector4 = 15,
 }
+
+/**
+ * Cloning interface for component properties.
+ *
+ * Used for component initialization and cloning.
+ */
+export interface PropertyCloner {
+    /**
+     * Clone a property value.
+     * @param type Type of the property.
+     * @param value Value of the property.
+     * @returns The cloned value.
+     */
+    clone(type: Type, value: any): any;
+}
+
+/**
+ * Default cloner implementation.
+ *
+ * Clones array-like properties and leaves all other types unchanged.
+ */
+export class DefaultPropertyCloner implements PropertyCloner {
+    clone(type: Type, value: any): any {
+        switch (type) {
+            case Type.Color:
+            case Type.Vector2:
+            case Type.Vector3:
+            case Type.Vector4:
+                return value.slice();
+            default:
+                return value;
+        }
+    }
+}
+
+/** Default cloner for property values. */
+export const defaultPropertyCloner = new DefaultPropertyCloner();
 
 /**
  * Custom component property.
@@ -148,6 +215,13 @@ export interface ComponentProperty {
     /** Values for {@link Type.Enum} */
     values?: string[];
     required?: boolean;
+    /**
+     * Cloner for the property.
+     *
+     * If not defined, falls back to {@link defaultPropertyCloner}. To prevent
+     * any cloning, set a custom cloner that passes the original value back
+     * from {@link PropertyCloner.clone}. */
+    cloner?: PropertyCloner;
 }
 
 /**
@@ -258,6 +332,39 @@ export const Property = {
      */
     color(r = 0.0, g = 0.0, b = 0.0, a = 1.0): ComponentProperty {
         return {type: Type.Color, default: [r, g, b, a]};
+    },
+
+    /**
+     * Create a two-element vector property.
+     *
+     * @param x The x component.
+     * @param y The y component.
+     */
+    vector2(x = 0.0, y = 0.0): ComponentProperty {
+        return {type: Type.Vector2, default: [x, y]};
+    },
+
+    /**
+     * Create a three-element vector property.
+     *
+     * @param x The x component.
+     * @param y The y component.
+     * @param z The z component.
+     */
+    vector3(x = 0.0, y = 0.0, z = 0.0): ComponentProperty {
+        return {type: Type.Vector3, default: [x, y, z]};
+    },
+
+    /**
+     * Create a four-element vector property.
+     *
+     * @param x The x component.
+     * @param y The y component.
+     * @param z The z component.
+     * @param w The w component.
+     */
+    vector4(x = 0.0, y = 0.0, z = 0.0, w = 0.0): ComponentProperty {
+        return {type: Type.Vector4, default: [x, y, z, w]};
     },
 };
 

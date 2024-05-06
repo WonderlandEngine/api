@@ -3,6 +3,14 @@ import {expect} from '@esm-bundle/chai';
 import {Emitter, RetainEmitter} from '..';
 
 describe('Emitter', function () {
+    const error = console.error;
+
+    afterEach(() => {
+        /* Reset `console.error` in test runner to avoid breaking
+         * it for other tests. */
+        console.error = error;
+    });
+
     it('.add()', function () {
         const emitter = new Emitter();
         let data1 = 0;
@@ -76,6 +84,9 @@ describe('Emitter', function () {
         emitter.add(() => ++count.b);
         expect(count).to.deep.equal({a: 0, b: 0});
 
+        /* Disable the error logs to avoid spamming the test output */
+        console.error = () => {};
+
         expect(emitter.notify.bind(emitter)).to.not.throw();
         expect(count).to.deep.equal({a: 0, b: 1});
         expect(emitter.notify.bind(emitter)).to.not.throw();
@@ -94,6 +105,7 @@ describe('Emitter', function () {
         expect(count).to.deep.equal({a: 0, b: 0});
 
         expect(emitter.notifyUnsafe.bind(emitter)).to.throw();
+        console.error = error;
         expect(count).to.deep.equal({a: 1, b: 0});
     });
 

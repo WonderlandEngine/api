@@ -1,9 +1,8 @@
 import {expect, use} from '@esm-bundle/chai';
 import {chaiAlmost} from './chai/almost.js';
 
-import {init, reset, WL} from './setup.js';
-import {objectSort} from './utils';
-import {Object3D} from '..';
+import {describeScene, init, reset, WL} from './setup.js';
+import {ComponentConstructor, Object3D} from '..';
 
 before(init);
 beforeEach(reset);
@@ -14,23 +13,58 @@ function objectsToIds(objects: Object3D[]): number[] {
     return objects.map((o) => o.objectId).sort();
 }
 
-describe('Object', function () {
+describeScene('Object', function (ctx) {
     it('get and set name', function () {
-        const obj = WL.scene.addObject();
+        const obj = ctx.scene.addObject();
         obj.name = 'Object1';
         expect(obj.name).to.equal('Object1');
 
         /* Test with a second object to ensure no clash occurs. */
-        const obj2 = WL.scene.addObject();
+        const obj2 = ctx.scene.addObject();
         obj2.name = 'Object2';
         expect(obj.name).to.equal('Object1');
         expect(obj2.name).to.equal('Object2');
     });
 
-    it('equals', function () {
-        const obj1 = WL.scene.addObject();
-        const obj2 = WL.scene.addObject();
-        const obj3 = WL.wrapObject(obj1.objectId);
+    it('get children', function () {
+        /*
+         * |-> parent
+         *     |-> childA
+         *     |-> childB
+         */
+        const parent = ctx.scene.addObject();
+        expect(parent.children).to.eql([]);
+        expect(parent.getChildren()).to.eql([]);
+
+        const childA = ctx.scene.addObject(parent);
+        expect(childA.children).to.eql([]);
+        expect(parent.children).to.eql([childA]);
+
+        const childB = ctx.scene.addObject();
+        expect(childB.children).to.eql([]);
+        childB.parent = parent;
+        expect(parent.children).to.eql([childA, childB]);
+
+        /* Check that the accessor and the method return the same thing */
+        expect(parent.getChildren()).to.eql([childA, childB]);
+
+        const out: Object3D[] = [null!, null!];
+        expect(parent.getChildren(out)).to.equal(out);
+        expect(out).to.deep.equal([childA, childB]);
+    });
+
+    it('.wrap() and references equality', function () {
+        const obj1 = ctx.scene.addObject();
+        const obj2 = ctx.scene.addObject();
+        const obj3 = ctx.scene.wrap(obj1._localId);
+        expect(obj1).to.not.equal(obj2);
+        expect(obj1).to.equal(obj3);
+    });
+
+    it('deprecated .equals()', function () {
+        const obj1 = ctx.scene.addObject();
+        const obj2 = ctx.scene.addObject();
+        const obj3 = ctx.scene.wrap(obj1._localId);
         expect(obj1.equals(null)).to.be.false;
         expect(obj1.equals(undefined)).to.be.false;
         expect(obj1.equals(obj1)).to.be.true;
@@ -41,10 +75,10 @@ describe('Object', function () {
     });
 
     it('get changed', function () {
-        /* @TODO Test unchanged state once it can be replicated in tests */
-        const x = WL.scene.addObject();
-        const a = WL.scene.addObject(x);
-        const b = WL.scene.addObject(a);
+        /** @todo Test unchanged state once it can be replicated in tests */
+        const x = ctx.scene.addObject();
+        const a = ctx.scene.addObject(x);
+        const b = ctx.scene.addObject(a);
 
         expect(x.changed).to.be.false;
         expect(a.changed).to.be.true;
@@ -52,10 +86,10 @@ describe('Object', function () {
     });
 
     it('.destroy() without prototype destruction', function () {
-        const x = WL.scene.addObject();
-        const a = WL.scene.addObject(x);
-        const b = WL.scene.addObject(x);
-        WL.scene.addObject(a);
+        const x = ctx.scene.addObject();
+        const a = ctx.scene.addObject(x);
+        const b = ctx.scene.addObject(x);
+        ctx.scene.addObject(a);
 
         a.destroy();
 
@@ -68,28 +102,58 @@ describe('Object', function () {
     it('.destroy() with prototype destruction', function () {
         WL.erasePrototypeOnDestroy = true;
 
-        const a = WL.scene.addObject();
-        const b = WL.scene.addObject();
+        const a = ctx.scene.addObject();
+        const b = ctx.scene.addObject();
         const bId = b.objectId;
 
         a.destroy();
         expect(() => a.translateLocal([1, 1, 1])).to.throw(
-            `Canno't read 'translateLocal' of destroyed object`
+            `Cannot read 'translateLocal' of destroyed object`
         );
         expect(() => (a.active = false)).to.throw(
-            `Canno't write 'active' of destroyed object`
+            `Cannot write 'active' of destroyed object`
         );
         expect(() => ((a as Record<string, any>).test = 5)).to.throw(
-            `Canno't write 'test' of destroyed object`
+            `Cannot write 'test' of destroyed object`
         );
 
         /* Ensure destroying `a` didn't destroy `b` as well */
         expect(b.objectId).to.equal(bId);
     });
 
+    it('.destroy() parent should destroy children', function () {
+        const notDestroyed1 = ctx.scene.addObject(); /* Should be untouched */
+        ctx.scene.addObject(notDestroyed1);
+
+        const parent = ctx.scene.addObject();
+        const child = ctx.scene.addObject(parent);
+        const grandchild = ctx.scene.addObject(child);
+
+        const notDestroyed2 = ctx.scene.addObject(); /* Should be untouched */
+        ctx.scene.addObject(notDestroyed2);
+
+        const light = child.addComponent('light');
+        const view = child.addComponent('view');
+        const mesh = grandchild.addComponent('mesh');
+        const input = grandchild.addComponent('input');
+
+        parent.destroy();
+        expect(child.isDestroyed).to.be.true;
+        expect(grandchild.isDestroyed).to.be.true;
+        expect(light.isDestroyed).to.be.true;
+        expect(view.isDestroyed).to.be.true;
+        expect(mesh.isDestroyed).to.be.true;
+        expect(input.isDestroyed).to.be.true;
+        /* `notDestroyed1` and `notDestroyed2` should be unaffected */
+        expect(notDestroyed1.isDestroyed).to.be.false;
+        expect(notDestroyed1.children[0].isDestroyed).to.be.false;
+        expect(notDestroyed2.isDestroyed).to.be.false;
+        expect(notDestroyed2.children[0].isDestroyed).to.be.false;
+    });
+
     it('(set|get)Position(World|Local)', function () {
-        const obj = WL.scene.addObject();
-        const objB = WL.scene.addObject(obj);
+        const obj = ctx.scene.addObject();
+        const objB = ctx.scene.addObject(obj);
         const out = new Float32Array(3);
         expect(obj.transformWorld).to.eql(new Float32Array([0, 0, 0, 1, 0, 0, 0, 0]));
 
@@ -132,19 +196,19 @@ describe('Object', function () {
     });
 
     it('transformation reset', function () {
-        const obj = WL.scene.addObject();
+        const obj = ctx.scene.addObject();
         obj.resetTransform();
         expect(obj.transformLocal).to.eql(new Float32Array([0, 0, 0, 1, 0, 0, 0, 0]));
     });
 
     it('translate', function () {
-        const obj = WL.scene.addObject();
+        const obj = ctx.scene.addObject();
         obj.translate([1, 2, 3]);
         expect(obj.transformLocal).to.eql(new Float32Array([0, 0, 0, 1, 0.5, 1, 1.5, 0]));
     });
 
     it('rotation', function () {
-        const obj = WL.scene.addObject();
+        const obj = ctx.scene.addObject();
         obj.rotateAxisAngleDeg([1, 0, 0], 45);
 
         expect(obj.transformLocal).to.be.deep.almost(
@@ -166,13 +230,13 @@ describe('Object', function () {
     });
 
     it('scaling', function () {
-        const obj = WL.scene.addObject();
+        const obj = ctx.scene.addObject();
         obj.scale([0.1, 0.2, 0.3]);
         expect(obj.scalingLocal).to.eql(new Float32Array([0.1, 0.2, 0.3]));
     });
 
     it('object component', function () {
-        const obj = WL.scene.addObject();
+        const obj = ctx.scene.addObject();
         obj.addComponent('light');
         obj.addComponent('light');
         expect(obj.getComponent('view', 0)).to.be.null;
@@ -180,7 +244,7 @@ describe('Object', function () {
     });
 
     it('object components', function () {
-        const obj = WL.scene.addObject();
+        const obj = ctx.scene.addObject();
         obj.addComponent('light');
         obj.addComponent('light');
 
@@ -188,22 +252,22 @@ describe('Object', function () {
         const compA = obj.getComponent('light', 0);
         const compB = obj.getComponent('light', 1);
         expect(comps.length).to.equal(2);
-        expect(comps[0].equals(compA)).to.be.true;
-        expect(comps[1].equals(compB)).to.be.true;
+        expect(comps[0]).to.equal(compA);
+        expect(comps[1]).to.equal(compB);
     });
 
     it('object components without type', function () {
-        const obj = WL.scene.addObject();
+        const obj = ctx.scene.addObject();
         const compA = obj.addComponent('light');
 
         const comps = obj.getComponents();
         expect(comps.length).to.equal(1);
-        expect(comps[0].equals(compA)).to.be.true;
+        expect(comps[0]).to.equal(compA);
     });
 
     it('parent', function () {
-        const obj = WL.scene.addObject();
-        const objB = WL.scene.addObject(obj);
+        const obj = ctx.scene.addObject();
+        const objB = ctx.scene.addObject(obj);
 
         expect(objB.parent?.objectId).to.equal(obj.objectId);
 
@@ -219,13 +283,13 @@ describe('Object', function () {
     it('.findByNameDirect()', function () {
         const NAME = 'target';
         const expected: Object3D[] = [];
-        const parent = WL.scene.addObject();
+        const parent = ctx.scene.addObject();
 
         expect(parent.findByNameDirect('toto')).to.eql([]);
 
         /* Add dummy objects */
         for (let i = 0; i < 32; ++i) {
-            const obj = WL.scene.addObject(parent);
+            const obj = ctx.scene.addObject(parent);
             obj.name = `target-${i}`;
         }
 
@@ -233,31 +297,31 @@ describe('Object', function () {
         expect(parent.findByNameDirect(NAME)).to.eql([]);
 
         /* Add a single child with the target name */
-        expected.push(WL.scene.addObject(parent));
+        expected.push(ctx.scene.addObject(parent));
         expected[0].name = NAME;
-        expect(parent.findByNameDirect(NAME)).to.eql(expected);
+        expect(objectsToIds(parent.findByNameDirect(NAME))).to.eql(objectsToIds(expected));
 
         /* Add more dummy objects to ensure it works on sparsed data */
-        const d = WL.scene.addObject(parent);
+        const d = ctx.scene.addObject(parent);
         d.name = 'dummy';
-        const dummy = WL.scene.addObject(parent);
+        const dummy = ctx.scene.addObject(parent);
         dummy.name = 'hello';
 
         /* Ensure only direct descendants are accounted */
-        const childA = WL.scene.addObject(dummy);
+        const childA = ctx.scene.addObject(dummy);
         childA.name = NAME;
-        const childB = WL.scene.addObject(expected[0]);
+        const childB = ctx.scene.addObject(expected[0]);
         childB.name = NAME;
-        expect(parent.findByNameDirect(NAME)).to.eql(expected);
+        expect(objectsToIds(parent.findByNameDirect(NAME))).to.eql(objectsToIds(expected));
 
         /* Ensures targets count > half temporary works */
         const count = 140;
         WL.wasm.allocateTempMemory(256);
         for (let i = 0; i < count; ++i) {
-            const obj = WL.scene.addObject(parent);
+            const obj = ctx.scene.addObject(parent);
             obj.name = NAME;
             expected.push(obj);
-            const dummy = WL.scene.addObject(parent);
+            const dummy = ctx.scene.addObject(parent);
             dummy.name = `dummy-${i}`;
         }
         expect(objectsToIds(parent.findByNameDirect(NAME))).to.eql(objectsToIds(expected));
@@ -266,14 +330,14 @@ describe('Object', function () {
     it('.findByNameRecursive()', function () {
         const NAME = 'target';
         const expected: Object3D[] = [];
-        const parent = WL.scene.addObject();
+        const parent = ctx.scene.addObject();
 
         expect(parent.findByNameRecursive('toto')).to.eql([]);
 
         /* Add chain of dummies */
-        let dummy = WL.scene.addObject(parent);
+        let dummy = ctx.scene.addObject(parent);
         for (let i = 0; i < 5; ++i) {
-            const obj = WL.scene.addObject(dummy);
+            const obj = ctx.scene.addObject(dummy);
             obj.name = `target dummy-${i}`;
             dummy = obj;
         }
@@ -281,26 +345,28 @@ describe('Object', function () {
         expect(parent.findByNameRecursive(NAME)).to.eql([]);
 
         /* Ensure direct descendant are found */
-        expected.push(WL.scene.addObject(parent));
+        expected.push(ctx.scene.addObject(parent));
         expected[0].name = NAME;
-        expect(parent.findByNameRecursive(NAME)).to.eql(expected);
+        expect(objectsToIds(parent.findByNameRecursive(NAME))).to.eql(
+            objectsToIds(expected)
+        );
 
         /* Ensure deep objects are found */
-        expected.push(WL.scene.addObject(dummy));
+        expected.push(ctx.scene.addObject(dummy));
         expected[1].name = NAME;
-        expect(parent.findByNameRecursive(NAME).sort(objectSort)).to.eql(
-            expected.sort(objectSort)
+        expect(objectsToIds(parent.findByNameRecursive(NAME))).to.eql(
+            objectsToIds(expected)
         );
 
         /* Ensures targets count > MAX_COUNT works */
-        const child = WL.scene.addObject(parent);
+        const child = ctx.scene.addObject(parent);
         const count = 140;
         WL.wasm.allocateTempMemory(256);
         for (let i = 0; i < count; ++i) {
-            const obj = WL.scene.addObject(child);
+            const obj = ctx.scene.addObject(child);
             obj.name = NAME;
             expected.push(obj);
-            const dummy = WL.scene.addObject(child);
+            const dummy = ctx.scene.addObject(child);
             dummy.name = `new-dummy-${i}`;
         }
         expect(objectsToIds(parent.findByNameRecursive(NAME))).to.eql(
@@ -316,14 +382,14 @@ describe('Object', function () {
              *         |-> chilchild0
              *     |-> child1
              */
-            const src = WL.scene.addObject();
+            const src = ctx.scene.addObject();
             src.name = 'parent';
             {
-                const child = WL.scene.addObject(src);
+                const child = ctx.scene.addObject(src);
                 child.name = 'child0';
-                const childchild = WL.scene.addObject(child);
+                const childchild = ctx.scene.addObject(child);
                 childchild.name = 'childchild0';
-                const child1 = WL.scene.addObject(src);
+                const child1 = ctx.scene.addObject(src);
                 child1.name = 'child1';
             }
 
@@ -343,12 +409,12 @@ describe('Object', function () {
         });
 
         it('clone into specific parent', function () {
-            const src = WL.scene.addObject();
+            const src = ctx.scene.addObject();
             src.name = 'source';
-            const child = WL.scene.addObject(src);
+            const child = ctx.scene.addObject(src);
             child.name = 'child';
 
-            const parent = WL.scene.addObject();
+            const parent = ctx.scene.addObject();
 
             const clone = src.clone(parent);
             expect(clone.parent).to.equal(parent);
@@ -363,13 +429,13 @@ describe('Object', function () {
              *     |-> child
              *         |-> child
              */
-            const src = WL.scene.addObject();
-            const child = WL.scene.addObject(src);
+            const src = ctx.scene.addObject();
+            const child = ctx.scene.addObject(src);
             child.name = 'child';
             const childcomp = child.addComponent('light')!;
             childcomp.color = [0.1, 0.2, 0.3];
 
-            const childchild = WL.scene.addObject(child);
+            const childchild = ctx.scene.addObject(child);
             childchild.name = 'child';
             const childchildcomp = childchild.addComponent('light')!;
             childchildcomp.color = [0.4, 0.5, 0.6];
@@ -385,13 +451,28 @@ describe('Object', function () {
                 0.4, 0.5, 0.6,
             ]);
         });
+
+        it('clone source with several components multiple times', function () {
+            const srcComponents = ['input', 'light', 'mesh', 'view'];
+            const src = ctx.scene.addObject();
+            for (const name of srcComponents) src.addComponent(name);
+
+            for (let i = 0; i < 10; ++i) {
+                const dst = src.clone();
+                const components = dst
+                    .getComponents()
+                    .map((c) => (c.constructor as ComponentConstructor).TypeName)
+                    .sort();
+                expect(components).to.deep.equal(srcComponents);
+            }
+        });
     });
 
     describe('Object Transform', function () {
         it('(set|get)Translation(World|Local)', function () {
             // TODO: potentially add the rotation transformations from ApiTest.cpp?
-            const parent = WL.scene.addObject();
-            const child = WL.scene.addObject(parent);
+            const parent = ctx.scene.addObject();
+            const child = ctx.scene.addObject(parent);
 
             const translationLocal = new Float32Array([3.0, -2.0, -1.0]);
             const translationWorld = new Float32Array([0.5, 1.0, 1.5]);
@@ -417,13 +498,13 @@ describe('Object', function () {
 
         it('(set|get)Scaling(World|Local)', function () {
             const out = new Float32Array(3);
-            const obj = WL.scene.addObject();
+            const obj = ctx.scene.addObject();
             obj.setScalingLocal([3, 2, 1]);
             expect(obj.getScalingLocal(out)).to.eql(new Float32Array([3, 2, 1]));
 
             obj.setScalingLocal([1, 1, 1]);
 
-            const parent = WL.scene.addObject();
+            const parent = ctx.scene.addObject();
             obj.parent = parent;
             parent.setScalingLocal([2, 2, 2]);
             obj.setScalingWorld([1.5, 1.5, 1.5]);
@@ -434,7 +515,7 @@ describe('Object', function () {
 
             /* Deprecated accessors. */
             {
-                const obj = WL.scene.addObject();
+                const obj = ctx.scene.addObject();
                 obj.scalingLocal = [3, 2, 1];
                 obj.scalingLocal[0] = 1.5;
                 expect(obj.scalingLocal).to.eql(new Float32Array([1.5, 2, 1]));
@@ -448,12 +529,12 @@ describe('Object', function () {
 
         it('(set|get)Rotation(World|Local)', function () {
             const out = new Float32Array(4);
-            const obj = WL.scene.addObject();
+            const obj = ctx.scene.addObject();
 
             obj.setRotationLocal([0, 1, 0, 1]);
             expect(obj.getRotationLocal(out)).to.eql(new Float32Array([0, 1, 0, 1]));
 
-            const parent = WL.scene.addObject();
+            const parent = ctx.scene.addObject();
             obj.parent = parent;
             parent.setRotationWorld([1, 0, 0, 1]);
 
@@ -467,7 +548,7 @@ describe('Object', function () {
 
         it('(set|get)Transform(World|Local)', function () {
             const out = new Float32Array(8);
-            const obj = WL.scene.addObject();
+            const obj = ctx.scene.addObject();
 
             expect(obj.getTransformLocal(out)).to.eql(
                 new Float32Array([0, 0, 0, 1, 0, 0, 0, 0])
@@ -479,7 +560,7 @@ describe('Object', function () {
 
             obj.resetTransform();
 
-            const parent = WL.scene.addObject();
+            const parent = ctx.scene.addObject();
             obj.parent = parent;
 
             expect(obj.getTransformWorld()).to.eql(
@@ -498,7 +579,7 @@ describe('Object', function () {
             /* Deprecated accessors. */
 
             {
-                const obj = WL.scene.addObject();
+                const obj = ctx.scene.addObject();
                 expect(obj.transformLocal).to.eql(
                     new Float32Array([0, 0, 0, 1, 0, 0, 0, 0])
                 );
@@ -508,7 +589,7 @@ describe('Object', function () {
                 );
             }
             {
-                const obj = WL.scene.addObject();
+                const obj = ctx.scene.addObject();
                 expect(obj.transformWorld).to.eql(
                     new Float32Array([0, 0, 0, 1, 0, 0, 0, 0])
                 );
@@ -521,7 +602,7 @@ describe('Object', function () {
 
         it('getForwardWorld', function () {
             const out = new Float32Array(3);
-            const obj = WL.scene.addObject();
+            const obj = ctx.scene.addObject();
             expect(obj.getForwardWorld(out)).to.deep.almost([0, 0, -1]);
             obj.rotateAxisAngleRad([0, 1, 0], Math.PI);
             expect(obj.getForwardWorld(out)).to.deep.almost([0, 0, 1]);
@@ -529,7 +610,7 @@ describe('Object', function () {
 
         it('getUpWorld', function () {
             const out = new Float32Array(3);
-            const obj = WL.scene.addObject();
+            const obj = ctx.scene.addObject();
             expect(obj.getUpWorld(out)).to.eql(new Float32Array([0, 1, 0]));
             obj.rotateAxisAngleRad([0, 1, 0], Math.PI);
             expect(obj.getUpWorld(out)).to.deep.almost([0, 1, 0]);
@@ -539,15 +620,15 @@ describe('Object', function () {
 
         it('getRightWorld', function () {
             const out = new Float32Array(3);
-            const obj = WL.scene.addObject();
+            const obj = ctx.scene.addObject();
             expect(obj.getRightWorld(out)).to.deep.almost([1, 0, 0]);
             obj.rotateAxisAngleRad([0, 1, 0], Math.PI);
             expect(obj.getRightWorld(out)).to.deep.almost([-1, 0, 0]);
         });
 
         it('translation', function () {
-            const parent = WL.scene.addObject();
-            const child = WL.scene.addObject(parent);
+            const parent = ctx.scene.addObject();
+            const child = ctx.scene.addObject(parent);
             const out = new Float32Array(3);
 
             child.translate([1, 2, 3]);
@@ -566,8 +647,8 @@ describe('Object', function () {
         });
 
         it('scaling', function () {
-            const parent = WL.scene.addObject();
-            const child = WL.scene.addObject(parent);
+            const parent = ctx.scene.addObject();
+            const child = ctx.scene.addObject(parent);
             const out = new Float32Array(3);
 
             out.set(child.scalingLocal);
@@ -588,13 +669,26 @@ describe('Object', function () {
         });
 
         it('look at', function () {
-            const parent = WL.scene.addObject();
-            const child = WL.scene.addObject(parent);
+            const parent = ctx.scene.addObject();
+            const child = ctx.scene.addObject(parent);
             const out = new Float32Array(3);
 
             child.lookAt([0.0, 0.0, 1.0], [0, 1, 0]);
             child.getPositionWorld(out);
             expect(out).to.eql(new Float32Array([0, 0, 0]));
         });
+    });
+});
+
+describe('Object3D Legacy', function () {
+    it('constructor', function () {
+        const obj = new Object3D(WL, 0);
+        expect(obj._id).to.equal(WL.scene.wrap(0)._id);
+
+        const nextScene = WL._createEmpty();
+        WL.switchTo(nextScene);
+        const obj2 = new Object3D(WL, 0);
+        expect(obj2._id).to.not.equal(obj._id);
+        expect(obj2._id).to.equal(WL.scene.wrap(0)._id);
     });
 });

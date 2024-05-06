@@ -1,4 +1,15 @@
-import {loadRuntime, LoadRuntimeOptions, LogLevel, WonderlandEngine} from '..';
+import {
+    InMemoryLoadOptions,
+    loadRuntime,
+    LoadRuntimeOptions,
+    LogLevel,
+    Scene,
+    Version,
+    WonderlandEngine,
+} from '..';
+
+export type DescribeSceneContext = {active: boolean; scene: Scene};
+export type DescribeSceneTestCallback = (ctx: DescribeSceneContext) => void;
 
 export let WL: WonderlandEngine = null!;
 
@@ -45,6 +56,8 @@ export async function init(options: Partial<LoadRuntimeOptions> = {}) {
  */
 export function reset() {
     if (!WL) return;
+    WL.erasePrototypeOnDestroy = false;
+    WL.log.levels.disableAll().enable(LogLevel.Error);
     WL._reset();
 }
 
@@ -62,8 +75,96 @@ export function projectURL(filename: string) {
  * Create a URL pointing inside the test resources folder.
  *
  * @param filename The name of the file to point to
- * @returns A string pointing inside `test/resources/projects`
+ * @returns A string pointing inside `test/resources`
  */
 export function resourceURL(filename: string) {
     return `test/resources/${filename}`;
+}
+
+/*
+ * Check whether the `target` version is anterior to `base`.
+ *
+ * @param target The version to check.
+ * @param base The base version to compare against.
+ * @returns `true` if `target` is less than `base`, `false` otherwise.
+ */
+export function versionLess(target: Version, base: Version) {
+    for (const component of ['major', 'minor', 'patch'] as (keyof Version)[]) {
+        if (target[component] == base[component]) continue;
+        if (target[component] < base[component]) return true;
+        if (target[component] > base[component]) return false;
+    }
+    return target.rc !== 0 && (base.rc == 0 || target.rc < base.rc);
+}
+
+/**
+ * Create two describe blocks, for active and inactive scene tests.
+ *
+ * @note The scene will be reset between each test.
+ *
+ * @param cb The test callback to register.
+ */
+export function describeScene(name: string, cb: DescribeSceneTestCallback) {
+    describe('Active Scene', function () {
+        describe(name, function () {
+            const ctx: {active: boolean; scene: Scene} = {active: true, scene: null!};
+            beforeEach(() => {
+                reset();
+                ctx.active = true;
+                ctx.scene = WL.scene;
+            });
+            cb(ctx);
+        });
+    });
+    describe('Inactive Scene', function () {
+        describe(name, function () {
+            const ctx: {active: boolean; scene: Scene} = {active: false, scene: null!};
+            beforeEach(() => {
+                reset();
+                ctx.active = false;
+                ctx.scene = WL._createEmpty();
+            });
+            cb(ctx);
+        });
+    });
+}
+
+/**
+ * Create two describe blocks, for active and inactive scene tests.
+ *
+ * @note The bin is loaded as a new scene group, and the loading is performed
+ * only once before tests start. Scene isn't discarded between two tests.
+ *
+ * @param name The name of the inner describe.
+ * @param bin The options to load the group from memory.
+ * @param cb The test callback to register.
+ */
+export function describeMainScene(
+    name: string,
+    bin: InMemoryLoadOptions,
+    cb: DescribeSceneTestCallback
+) {
+    describe('Active Scene', function () {
+        describe(name, function () {
+            const ctx: {active: boolean; scene: Scene} = {active: true, scene: null!};
+            before(async function () {
+                reset();
+                ctx.scene = await WL.loadMainSceneFromBuffer(bin);
+                return WL.switchTo(ctx.scene);
+            });
+            cb(ctx);
+        });
+    });
+    describe('Inactive Scene', function () {
+        describe(name, function () {
+            const ctx: {active: boolean; scene: Scene} = {active: false, scene: null!};
+            before(async function () {
+                reset();
+                ctx.scene = await WL.loadMainSceneFromBuffer(bin);
+                const dummyScene = WL._createEmpty();
+                return WL.switchTo(dummyScene);
+            });
+            cb(ctx);
+        });
+    });
 }

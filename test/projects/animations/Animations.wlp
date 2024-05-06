@@ -1,0 +1,528 @@
+{
+    "settings": {
+        "project": {
+            "name": "Animations",
+            "version": [
+                1,
+                1,
+                6
+            ]
+        },
+        "vr": {
+            "enable": false
+        },
+        "scripting": {
+            "bundlingType": "none",
+            "entryPoint": null
+        }
+    },
+    "files": {
+        "123": {
+            "fileName": "Walking.fbx",
+            "importerName": ""
+        },
+        "129": {
+            "fileName": "animation.glb",
+            "importerName": ""
+        },
+        "135": {
+            "fileName": "animation2.glb",
+            "importerName": ""
+        }
+    },
+    "images": {},
+    "shaders": {
+        "1": {
+            "link": {
+                "name": "Background.frag",
+                "file": "default"
+            }
+        },
+        "2": {
+            "link": {
+                "name": "lib\\Color.glsl",
+                "file": "default"
+            }
+        },
+        "3": {
+            "link": {
+                "name": "lib\\Compatibility.frag",
+                "file": "default"
+            }
+        },
+        "4": {
+            "link": {
+                "name": "lib\\CoordinateSystems.glsl",
+                "file": "default"
+            }
+        },
+        "5": {
+            "link": {
+                "name": "Depth.frag",
+                "file": "default"
+            }
+        },
+        "7": {
+            "link": {
+                "name": "DistanceFieldVector.frag",
+                "file": "default"
+            }
+        },
+        "9": {
+            "link": {
+                "name": "Dynamic.vert",
+                "file": "default"
+            }
+        },
+        "10": {
+            "link": {
+                "name": "Flat.frag",
+                "file": "default"
+            }
+        },
+        "13": {
+            "link": {
+                "name": "FullScreenTriangle.vert",
+                "file": "default"
+            }
+        },
+        "14": {
+            "link": {
+                "name": "lib\\GI.frag",
+                "file": "default"
+            }
+        },
+        "15": {
+            "link": {
+                "name": "lib\\Inputs.frag",
+                "file": "default"
+            }
+        },
+        "16": {
+            "link": {
+                "name": "lib\\Lights.frag",
+                "file": "default"
+            }
+        },
+        "17": {
+            "link": {
+                "name": "lib\\Materials.frag",
+                "file": "default"
+            }
+        },
+        "18": {
+            "link": {
+                "name": "lib\\Math.glsl",
+                "file": "default"
+            }
+        },
+        "19": {
+            "link": {
+                "name": "MeshVisualizer.frag",
+                "file": "default"
+            }
+        },
+        "21": {
+            "link": {
+                "name": "lib\\Packing.frag",
+                "file": "default"
+            }
+        },
+        "22": {
+            "link": {
+                "name": "Phong.frag",
+                "file": "default"
+            }
+        },
+        "25": {
+            "link": {
+                "name": "Physical.frag",
+                "file": "default"
+            }
+        },
+        "28": {
+            "link": {
+                "name": "lib\\Quaternion.glsl",
+                "file": "default"
+            }
+        },
+        "29": {
+            "link": {
+                "name": "Skinning.vert",
+                "file": "default"
+            }
+        },
+        "30": {
+            "link": {
+                "name": "Sky.frag",
+                "file": "default"
+            }
+        },
+        "31": {
+            "link": {
+                "name": "lib\\Slug.frag",
+                "file": "default"
+            }
+        },
+        "32": {
+            "link": {
+                "name": "lib\\Slug.vert",
+                "file": "default"
+            }
+        },
+        "33": {
+            "link": {
+                "name": "lib\\Surface.frag",
+                "file": "default"
+            }
+        },
+        "34": {
+            "link": {
+                "name": "Text.frag",
+                "file": "default"
+            }
+        },
+        "36": {
+            "link": {
+                "name": "Text.vert",
+                "file": "default"
+            }
+        },
+        "37": {
+            "link": {
+                "name": "lib\\Textures.frag",
+                "file": "default"
+            }
+        },
+        "38": {
+            "link": {
+                "name": "TileFeedback.frag",
+                "file": "default"
+            }
+        },
+        "40": {
+            "link": {
+                "name": "lib\\Uniforms.glsl",
+                "file": "default"
+            }
+        },
+        "41": {
+            "link": {
+                "name": "Particle.frag",
+                "file": "default"
+            }
+        }
+    },
+    "meshes": {
+        "p0": {
+            "link": {
+                "name": "PrimitivePlane",
+                "file": "default"
+            }
+        },
+        "p1": {
+            "link": {
+                "name": "PrimitiveCube",
+                "file": "default"
+            }
+        },
+        "p2": {
+            "link": {
+                "name": "PrimitiveSphere",
+                "file": "default"
+            }
+        },
+        "p3": {
+            "link": {
+                "name": "PrimitiveCone",
+                "file": "default"
+            }
+        },
+        "p4": {
+            "link": {
+                "name": "PrimitiveCylinder",
+                "file": "default"
+            }
+        },
+        "p5": {
+            "link": {
+                "name": "PrimitiveCircle",
+                "file": "default"
+            }
+        },
+        "126": {
+            "link": {
+                "name": "Cube",
+                "file": "animation.glb"
+            }
+        },
+        "132": {
+            "link": {
+                "name": "Cube",
+                "file": "animation2.glb"
+            }
+        }
+    },
+    "textures": {},
+    "materials": {
+        "DefaultFontMaterial": {
+            "link": {
+                "name": "DefaultFontMaterial",
+                "file": "default"
+            }
+        },
+        "125": {
+            "link": {
+                "name": "Material",
+                "file": "animation.glb"
+            }
+        },
+        "131": {
+            "link": {
+                "name": "Material",
+                "file": "animation2.glb"
+            }
+        }
+    },
+    "objects": {
+        "124": {
+            "name": "View",
+            "components": [
+                {
+                    "type": "view"
+                }
+            ]
+        },
+        "127": {
+            "link": {
+                "name": "Cube",
+                "file": "animation.glb"
+            },
+            "components": [
+                null,
+                {
+                    "animation": {
+                        "preview": false,
+                        "playCount": 1
+                    }
+                }
+            ]
+        },
+        "130": {
+            "link": {
+                "name": "Cube",
+                "file": "animation.glb"
+            },
+            "components": [
+                null,
+                {
+                    "animation": {
+                        "preview": false,
+                        "playCount": 1
+                    }
+                }
+            ],
+            "name": "Cube2"
+        },
+        "133": {
+            "link": {
+                "name": "Cube",
+                "file": "animation2.glb"
+            },
+            "name": "Cube3",
+            "components": [
+                null,
+                {
+                    "animation": {
+                        "playCount": 1
+                    }
+                }
+            ]
+        },
+        "137": {
+            "link": {
+                "name": "Cube",
+                "file": "animation2.glb"
+            },
+            "name": "Cube4",
+            "components": [
+                null,
+                {
+                    "animation": {
+                        "playCount": 1,
+                        "blendType": "blend1D",
+                        "blendAnimations": {
+                            "animations": [
+                                "128",
+                                "134"
+                            ],
+                            "playbackSpeeds": [
+                                1.0,
+                                1.0
+                            ]
+                        },
+                        "blendFactor": 0.5
+                    }
+                }
+            ]
+        }
+    },
+    "animations": {
+        "128": {
+            "link": {
+                "name": "CubeAction",
+                "file": "animation.glb"
+            },
+            "events": [
+                {
+                    "time": 0.0,
+                    "name": "start"
+                },
+                {
+                    "time": 0.8333333,
+                    "name": "step1"
+                },
+                {
+                    "time": 1.6666666,
+                    "name": "Ώ"
+                },
+                {
+                    "time": 2.4583332,
+                    "name": "end"
+                }
+            ]
+        },
+        "134": {
+            "link": {
+                "name": "CubeAction",
+                "file": "animation2.glb"
+            },
+            "events": [
+                {
+                    "time": 0.0,
+                    "name": "other start"
+                },
+                {
+                    "time": 0.8333333,
+                    "name": "other step1"
+                },
+                {
+                    "time": 1.6666666,
+                    "name": "other Ώ"
+                },
+                {
+                    "time": 2.4583332,
+                    "name": "other end"
+                }
+            ]
+        }
+    },
+    "skins": {},
+    "pipelines": {
+        "6": {
+            "link": {
+                "name": "Depth",
+                "file": "default"
+            }
+        },
+        "8": {
+            "link": {
+                "name": "DistanceFieldVector",
+                "file": "default"
+            }
+        },
+        "11": {
+            "link": {
+                "name": "Flat Opaque",
+                "file": "default"
+            }
+        },
+        "12": {
+            "link": {
+                "name": "Flat Opaque Textured",
+                "file": "default"
+            }
+        },
+        "20": {
+            "link": {
+                "name": "MeshVisualizer",
+                "file": "default"
+            }
+        },
+        "23": {
+            "link": {
+                "name": "Phong Opaque",
+                "file": "default"
+            }
+        },
+        "24": {
+            "link": {
+                "name": "Phong Opaque Textured",
+                "file": "default"
+            }
+        },
+        "26": {
+            "link": {
+                "name": "Physical Opaque",
+                "file": "default"
+            }
+        },
+        "27": {
+            "link": {
+                "name": "Physical Opaque Textured",
+                "file": "default"
+            }
+        },
+        "35": {
+            "link": {
+                "name": "Text",
+                "file": "default"
+            }
+        },
+        "39": {
+            "link": {
+                "name": "TileFeedback",
+                "file": "default"
+            }
+        },
+        "42": {
+            "link": {
+                "name": "Phong Normalmapped",
+                "file": "default"
+            }
+        },
+        "43": {
+            "link": {
+                "name": "Phong Lightmapped",
+                "file": "default"
+            }
+        },
+        "44": {
+            "link": {
+                "name": "Foliage",
+                "file": "default"
+            }
+        },
+        "45": {
+            "link": {
+                "name": "Particle",
+                "file": "default"
+            }
+        },
+        "46": {
+            "link": {
+                "name": "Sky",
+                "file": "default"
+            }
+        }
+    },
+    "fonts": {
+        "47": {
+            "link": {
+                "name": "DejaVuSans.ttf",
+                "file": "default"
+            }
+        }
+    },
+    "languages": {}
+}

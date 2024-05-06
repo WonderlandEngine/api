@@ -13,6 +13,8 @@ import {
     Mesh,
     inheritProperties,
     PropertyKeys,
+    ComponentConstructor,
+    LogLevel,
 } from '..';
 import {property} from '../dist/decorators.js';
 
@@ -54,7 +56,10 @@ interface TestProperties {
     propMaterial: Material | null;
     propAnimation: Animation | null;
     propSkin: Skin | null;
-    propColor: number[];
+    propColor: Float32Array;
+    propVector2: Float32Array;
+    propVector3: Float32Array;
+    propVector4: Float32Array;
 }
 
 /**
@@ -95,6 +100,9 @@ class TestComponentProperties extends Component {
         propAnimation: {name: 'Animation', default: null},
         propSkin: {name: 'Skin', default: null},
         propColor: {name: 'Color', default: [1, 0, 0.5, 0.75]},
+        propVector2: {name: 'Vector2', default: [1, 2.5]},
+        propVector3: {name: 'Vector3', default: [2, 2.5, 0.5]},
+        propVector4: {name: 'Vector4', default: [3, 2.5, 0.5, 12.0]},
     };
 
     /**
@@ -121,7 +129,7 @@ class TestComponentProperties extends Component {
     }
 
     /**
-     * Create properties using the funcotr syntax `Property.Type()`.
+     * Create properties using the functor syntax `Property.type()`.
      *
      * @param setupDefaults If `true`, add defaults
      * @returns The properties to list in {@link Component.Properties}
@@ -161,6 +169,20 @@ class TestComponentProperties extends Component {
      */
     static assertDefaults(instance: TestComponentProperties) {
         const message = `failed on component '${instance.constructor.name}'`;
+
+        const properties = (instance.constructor as ComponentConstructor).Properties;
+        for (const name in properties) {
+            const propertyMessage = message + `, property '${name}'`;
+            const property = properties[name];
+            const value = (instance as any)[name];
+            /* Default values are set on the instance */
+            /* chai has an overload that doesn't check value, but it's broken */
+            expect(instance).to.have.own.property(name, value, propertyMessage);
+            if (ArrayBuffer.isView(value)) {
+                expect(value).to.not.equal(property.default, propertyMessage);
+            }
+        }
+
         expect(instance.propBool).to.equal(true, message);
         expect(instance.propInt).to.equal(12, message);
         expect(instance.propFloat).to.equal(3.75, message);
@@ -177,7 +199,18 @@ class TestComponentProperties extends Component {
         expect(instance.propMaterial).to.equal(null, message);
         expect(instance.propAnimation).to.equal(null, message);
         expect(instance.propSkin).to.equal(null, message);
-        expect(instance.propColor).to.deep.equal([1, 0, 0.5, 0.75], message);
+        expect(instance.propColor).to.be.instanceOf(Float32Array, message);
+        expect(instance.propColor).to.deep.almost([1, 0, 0.5, 0.75], undefined, message);
+        expect(instance.propVector2).to.be.instanceOf(Float32Array, message);
+        expect(instance.propVector2).to.deep.almost([1, 2.5], undefined, message);
+        expect(instance.propVector3).to.be.instanceOf(Float32Array, message);
+        expect(instance.propVector3).to.deep.almost([2, 2.5, 0.5], undefined, message);
+        expect(instance.propVector4).to.be.instanceOf(Float32Array, message);
+        expect(instance.propVector4).to.deep.almost(
+            [3, 2.5, 0.5, 12.0],
+            undefined,
+            message
+        );
     }
 
     /**
@@ -186,6 +219,19 @@ class TestComponentProperties extends Component {
      * @param instance The instance to read from
      */
     static assertNoDefaults(instance: TestComponentProperties) {
+        const properties = (instance.constructor as ComponentConstructor).Properties;
+        for (const name in properties) {
+            const property = properties[name];
+            /* Missing default is replaced with global default */
+            expect(property).to.have.own.property('default');
+            const value = (instance as any)[name];
+            /* Global default values are set on the instance */
+            expect(instance).to.have.own.property(name);
+            if (ArrayBuffer.isView(value)) {
+                expect(value).to.not.equal(property.default);
+            }
+        }
+
         expect(instance.propBool).to.equal(false);
         expect(instance.propInt).to.equal(0);
         expect(instance.propFloat).to.equal(0.0);
@@ -199,7 +245,14 @@ class TestComponentProperties extends Component {
         expect(instance.propMaterial).to.equal(null);
         expect(instance.propAnimation).to.equal(null);
         expect(instance.propSkin).to.equal(null);
-        expect(instance.propColor).to.deep.equal([0, 0, 0, 1]);
+        expect(instance.propColor).to.be.instanceOf(Float32Array);
+        expect(instance.propColor).to.deep.almost([0, 0, 0, 1]);
+        expect(instance.propVector2).to.be.instanceOf(Float32Array);
+        expect(instance.propVector2).to.deep.almost([0, 0]);
+        expect(instance.propVector3).to.be.instanceOf(Float32Array);
+        expect(instance.propVector3).to.deep.almost([0, 0, 0]);
+        expect(instance.propVector4).to.be.instanceOf(Float32Array);
+        expect(instance.propVector4).to.deep.almost([0, 0, 0, 0]);
     }
 }
 
@@ -257,7 +310,13 @@ class TestComponentPropertiesDecorator extends Component {
     @property.skin()
     propSkin!: Skin | null;
     @property.color(1, 0, 0.5, 0.75)
-    propColor!: number[];
+    propColor!: Float32Array;
+    @property.vector2(1, 2.5)
+    propVector2!: Float32Array;
+    @property.vector3(2, 2.5, 0.5)
+    propVector3!: Float32Array;
+    @property.vector4(3, 2.5, 0.5, 12.0)
+    propVector4!: Float32Array;
 }
 
 describe('Properties', function () {
@@ -272,6 +331,8 @@ describe('Properties', function () {
             (comp as any)[name] = null;
         }
         comp.resetProperties();
+        /* Also tests that properties are overwritten on the instance, not
+         * deleted to use the prototype */
         TestComponentProperties.assertDefaults(comp);
     });
 
@@ -298,12 +359,16 @@ describe('Properties', function () {
             }
             WL.registerComponent(TestOptionalProperty, TestRequiredProperty);
 
-            const optionalPropComp = new TestOptionalProperty(WL);
-            const requiredPropComp = new TestRequiredProperty(WL);
+            const optionalPropComp = new TestOptionalProperty(WL.scene);
+            const requiredPropComp = new TestRequiredProperty(WL.scene);
 
             expect(() => optionalPropComp.validateProperties()).to.not.throw;
+
             /* `validateProperties` only check for non-null references for now.
-             * Thus, there is no need to set the good type of reference (texture, etc...). */
+             * Thus, there is no need to set the good type of reference (texture, etc...).
+             *
+             * Disable the error logs to avoid spamming the test output */
+            WL.log.levels.disable(LogLevel.Error);
             expect(() => requiredPropComp.validateProperties()).to.throw(
                 `Property 'prop' is required but was not initialized`
             );
@@ -329,6 +394,8 @@ describe('Properties', function () {
         }
         WL.registerComponent(TestComponent, TestDecorator);
 
+        /* Disable the error logs to avoid spamming the test output */
+        WL.log.levels.disable(LogLevel.Error);
         const obj = WL.scene.addObject();
         for (const CompClass of [TestComponent, TestDecorator]) {
             const failed = obj.addComponent(CompClass, {active: true})!;
@@ -352,6 +419,25 @@ describe('Properties', function () {
         }
         expect(Object.keys(ParentComponent.Properties)).to.have.lengthOf(1);
         expect(ParentComponent.Properties.childProp).to.be.undefined;
+    });
+
+    it('Properties order', function () {
+        class A extends Component {
+            static TypeName = 'A';
+            @property.string()
+            someProp: string = '';
+        }
+        class B extends A {
+            static TypeName = 'B';
+            @property.float()
+            anotherProp: number = 0.0;
+            @property.mesh()
+            theLastProp: null = null;
+        }
+        WL.registerComponent(B);
+        const order = (B as ComponentConstructor)._propertyOrder;
+        /* Sorted by name to match editor serialization order */
+        expect(order).to.deep.equal(['anotherProp', 'someProp', 'theLastProp']);
     });
 
     describe('Merge Properties', function () {
@@ -381,6 +467,22 @@ describe('Properties', function () {
             expect(Child.Properties.grandParentProp.default).to.equal('grand-parent');
             expect(Child.Properties.parentProp.default).to.equal('parent');
             expect(Child.Properties.childProp.default).to.equal('child');
+        });
+
+        it('inheritProperties() returns new .Properties reference when not set', function () {
+            class SingleParent extends Component {
+                static TypeName = 'single-parent';
+
+                @property.string('parent')
+                prop: string = '';
+            }
+            class Child extends SingleParent {
+                static TypeName = 'child';
+                /* Leave the child without any properties */
+            }
+            inheritProperties(Child);
+            expect(Child.Properties).to.not.equal(Parent.Properties);
+            expect(Object.keys(Child.Properties)).to.deep.equal(['prop']);
         });
 
         it('inheritProperties() override', function () {

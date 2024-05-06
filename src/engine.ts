@@ -1,32 +1,32 @@
 import {
     Component,
     ComponentConstructor,
-    CollisionComponent,
-    AnimationComponent,
-    LightComponent,
-    MeshComponent,
     PhysXComponent,
-    InputComponent,
-    ViewComponent,
-    TextComponent,
     Object as Object3D,
     Physics,
     I18N,
     XR,
+    MorphTargets,
     Texture,
-    DestroyedObjectInstance,
-    DestroyedComponentInstance,
-    DestroyedTextureInstance,
+    Font,
+    DestroyedPrefabInstance,
 } from './wonderland.js';
 
 import {Emitter, RetainEmitter} from './utils/event.js';
 import {isString} from './utils/object.js';
-import {Scene} from './scene.js';
 import {Version} from './version.js';
 import {WASM} from './wasm.js';
-import {TextureManager} from './texture-manager.js';
 import {Logger} from './utils/logger.js';
+import {MaterialManager} from './resources/material-manager.js';
+import {MeshManager} from './resources/mesh-manager.js';
+import {ResourceManager} from './resources/resource.js';
+import {TextureManager} from './resources/texture-manager.js';
 import {LogTag} from './index.js';
+import {Constructor, ImageLike, ProgressCallback} from './types.js';
+import {Prefab, InMemoryLoadOptions, LoadOptions} from './prefab.js';
+import {Scene, ActivateOptions} from './scene.js';
+import {PrefabGLTF, GLTFOptions} from './scene-gltf.js';
+import {onImageReady} from './utils/fetch.js';
 
 function checkXRSupport() {
     if (!navigator.xr) {
@@ -138,13 +138,31 @@ export class WonderlandEngine {
      * ```js
      * this.engine.onSceneLoaded.add(() => console.log("Scene switched!"));
      * ```
+     *
+     * @deprecated Use {@link onSceneActivated} instead.
      */
     readonly onSceneLoaded = new Emitter();
 
     /**
-     * Current main scene.
+     * {@link Emitter} for scene activated events.
+     *
+     * This listener is notified with the old scene as first parameter, and
+     * the new scene as second.
+     *
+     * This listener is notified after all resources are loaded and all components had their
+     * {@link Component#init()} as well as (if active)
+     * {@link Component#start()} and {@link Component#onActivate()} methods
+     * called.
+     *
+     * Usage from within a component:
+     *
+     * ```js
+     * this.engine.onSceneActivated.add((oldScene, newScene) => {
+     *     console.log(`Scene switch from ${oldScene.filename} to ${newScene.filename}`);
+     * });
+     * ```
      */
-    readonly scene: Scene = null!;
+    readonly onSceneActivated = new Emitter<[Scene, Scene]>();
 
     /**
      * Access to internationalization.
@@ -216,16 +234,53 @@ export class WonderlandEngine {
     erasePrototypeOnDestroy = false;
 
     /**
-     * Component class instances per type to avoid GC.
+     * If `true`, the materials will be wrapped in a proxy to support pre-1.2.0
+     * material access, i.e.,
      *
-     * @note Maps the manager index to the list of components.
+     * ```js
+     * const material = new Material(engine, 'Phong Opaque');
+     * material.diffuseColor = [1.0, 0.0, 0.0, 1.0];
+     * ```
+     *
+     * If `false`, property accessors will not be available and material
+     * properties should be accessed via methods, i.e.,
+     *
+     * ```js
+     * const PhongOpaque = engine.materials.getTemplate('Phong Opaque');
+     * const material = new PhongOpaque();
+     * material.setDiffuseColor([1.0, 0.0, 0.0, 1.0]);
+     * ...
+     * const diffuse = material.getDiffuseColor();
+     * ```
+     *
+     * When disabled, reading/writing to materials is slightly more efficient on the CPU.
+     */
+    legacyMaterialSupport = true;
+
+    /**
+     * Scene cache in scene manager.
      *
      * @hidden
      */
-    _componentCache: Record<string, (Component | null)[]> = {};
+    _scenes: (Prefab | null)[] = [];
 
-    /** Object class instances to avoid GC. @hidden */
-    _objectCache: (Object3D | null)[] = [];
+    /**
+     * Currently active scene.
+     *
+     * @hidden
+     */
+    _scene: Scene = null!;
+
+    /** @hidden */
+    private _textures: TextureManager = null!;
+    /** @hidden */
+    private _materials: MaterialManager = null!;
+    /** @hidden */
+    private _meshes: MeshManager = null!;
+    /** @hidden */
+    private _morphTargets: ResourceManager<MorphTargets> = null!;
+    /** @hidden */
+    private _fonts: ResourceManager<Font> = null!;
 
     /**
      * WebAssembly bridge.
@@ -240,9 +295,6 @@ export class WonderlandEngine {
      * @hidden
      */
     #physics: Physics | null = null;
-
-    /** Texture manager. @hidden */
-    #textures: TextureManager = new TextureManager(this);
 
     /**
      * Resize observer to track for canvas size changes.
@@ -271,8 +323,6 @@ export class WonderlandEngine {
         this.#wasm = wasm;
         this.#wasm['_setEngine'](this); /* String lookup to bypass private. */
         this.#wasm._loadingScreen = loadingScreen;
-        this._componentCache = {};
-        this._objectCache.length = 0;
 
         this.canvas.addEventListener(
             'webglcontextlost',
@@ -326,6 +376,304 @@ export class WonderlandEngine {
     registerComponent(...classes: ComponentConstructor[]) {
         for (const arg of classes) {
             this.wasm._registerComponent(arg);
+        }
+    }
+
+    /**
+     * Switch the current active scene.
+     *
+     * Once active, the scene will be updated and rendered on the canvas.
+     *
+     * The currently active scene is accessed via {@link WonderlandEngine.scene}:
+     *
+     * ```js
+     * import {Component} from '@wonderlandengine/api';
+     *
+     * class MyComponent extends Component{
+     *     start() {
+     *         console.log(this.scene === this.engine.scene); // Prints `true`
+     *     }
+     * }
+     * ```
+     *
+     * @note This method will throw if the scene isn't activatable.
+     *
+     * #### Component Lifecycle
+     *
+     * Marking a scene as active will:
+     * * Call {@link Component#onDeactivate} for all active components of the previous scene
+     * * Call {@link Component#onActivate} for all active components of the new scene
+     *
+     * #### Usage
+     *
+     * ```js
+     * const scene = await engine.loadScene('Scene.bin');
+     * engine.switchTo(scene);
+     * ```
+     *
+     * @returns A promise that resolves once the scene is ready.
+     *
+     * @since 1.2.0
+     */
+    async switchTo(scene: Scene, opts: ActivateOptions = {}) {
+        this.wasm._wl_deactivate_activeScene();
+
+        /* Switch reference on engine **just** before activating, to allow
+         * component to use `this.engine.scene` in `onActivate()`/`start()`. */
+        const previous = this.scene;
+        this._scene = scene;
+
+        this.wasm._wl_scene_activate(scene._index);
+
+        if (!this.onLoadingScreenEnd.isDataRetained) {
+            this.onLoadingScreenEnd.notify();
+        }
+
+        /* For now, we always automatically download dependencies for
+         * the user, i.e., separate textures.bin and languages.bin.
+         *
+         * In the future, we can eventually expose this in the chunk API
+         * to give more control to the user if needed.
+         *
+         * We do not make the user wait until the textures download is complete. */
+        scene._downloadDependencies();
+
+        /* Update the current active scene in the physx manager */
+        if (this.physics) (this.physics._hit._scene as Scene) = scene;
+
+        await this.i18n.setLanguage(this.i18n.languageCode(0));
+
+        const {dispatchReadyEvent = false} = opts;
+
+        this.onSceneActivated.notify(previous, scene);
+
+        if (dispatchReadyEvent) scene.dispatchReadyEvent();
+    }
+
+    /**
+     * Load the scene from a URL, as the main scene of a new {@link Scene}.
+     *
+     * #### Usage
+     *
+     * ```js
+     * // The method returns the main scene
+     * const scene = await engine.loadMainScene();
+     * ```
+     *
+     * #### Destruction
+     *
+     * Loading a new main scene entirely resets the state of the engine, and destroys:
+     * - All loaded scenes, prefabs, and gltf files
+     * - Meshes
+     * - Textures
+     * - Materials
+     *
+     * @note This method can only load Wonderland Engine `.bin` files.
+     *
+     * @param url The URL pointing to the scene to load.
+     * @param progress Optional progress callback.
+     * @returns The main scene of the new {@link Scene}.
+     */
+    async loadMainScene(
+        opts: LoadOptions & ActivateOptions,
+        progress: ProgressCallback = () => {}
+    ) {
+        const options = await Scene.loadBuffer(opts, progress);
+        return this.loadMainSceneFromBuffer(options);
+    }
+
+    /**
+     * Similar to {@link WonderlandEngine.loadMainScene}, but loading is done from an ArrayBuffer.
+     *
+     * @param options An object containing the buffer and extra metadata.
+     * @returns The main scene of the new {@link Scene}.
+     */
+    async loadMainSceneFromBuffer(options: InMemoryLoadOptions & ActivateOptions) {
+        const {buffer, url} = Prefab.validateBufferOptions(options);
+
+        const wasm = this.#wasm;
+
+        /*
+         * - Deactivate currently active scene
+         * - Destroy all scenes
+         * - Mark all resources as destroyed
+         * - Activation of main scene to prevent the runtime to be in limbo
+         */
+
+        wasm._wl_deactivate_activeScene();
+
+        /* Only destroy all scene once the current active one is disabled */
+        for (let i = this._scenes.length - 1; i >= 0; --i) {
+            const scene = this._scenes[i];
+            if (scene) scene.destroy();
+        }
+
+        /* Mark all resources as destroyed */
+        this._textures._clear();
+        this._materials._clear();
+        this._meshes._clear();
+        this._morphTargets._clear();
+
+        const ptr = wasm.copyBufferToHeap(buffer);
+        let index = -1;
+        try {
+            index = wasm._wl_load_main_scene(ptr, buffer.byteLength, wasm.tempUTF8(url));
+        } finally {
+            /* Catch calls to abort(), e.g. via asserts */
+            wasm._free(ptr);
+        }
+
+        if (index === -1) throw new Error('Failed to load main scene');
+
+        const mainScene = this._reload(index);
+
+        /**
+         * @todo(2.0.0)
+         *
+         * Backward compatibility: We need to set this instance reference on the
+         * engine **before** component creation occurs, since users have been accessing
+         * the scene with `this.engine.scene` in `init()`.
+         */
+        let previous = this.scene;
+        this._scene = mainScene;
+
+        mainScene._initialize();
+        this._scene = previous;
+
+        await this.switchTo(mainScene, options);
+
+        return mainScene;
+    }
+
+    /**
+     * Load a {@link Prefab} from a URL.
+     *
+     * #### Usage
+     *
+     * ```js
+     * const prefab = await engine.loadPrefab('Prefab.bin');
+     * ```
+     *
+     * @note This method can only load Wonderland Engine `.bin` files.
+     * @note This method is a wrapper around {@link WonderlandEngine.loadPrefabFromBuffer}.
+     *
+     * @param url The URL pointing to the prefab to load.
+     * @param progress Optional progress callback.
+     * @returns The loaded {@link Prefab}.
+     */
+    async loadPrefab(opts: LoadOptions, progress: ProgressCallback = () => {}) {
+        const options = await Scene.loadBuffer(opts, progress);
+        return this.loadPrefabFromBuffer(options);
+    }
+
+    /**
+     * Similar to {@link WonderlandEngine.loadPrefab}, but loading is done from an ArrayBuffer.
+     *
+     * @param options An object containing the buffer and extra metadata.
+     * @returns A new loaded {@link Prefab}.
+     */
+    loadPrefabFromBuffer(options: InMemoryLoadOptions) {
+        const scene = this._loadSceneFromBuffer(Prefab, options);
+        if (this.wasm._wl_scene_activatable(scene._index)) {
+            this.wasm._wl_scene_destroy(scene._index);
+            throw new Error(
+                'File is not a prefab. To load a scene, use loadScene() instead'
+            );
+        }
+        scene._initialize();
+        return scene;
+    }
+
+    /**
+     * Load a scene from a URL.
+     *
+     * At the opposite of {@link WonderlandEngine.loadMainScene}, the scene loaded
+     * will be added to the list of existing scenes, and its resources will be made
+     * available for other scenes/prefabs/gltf to use.
+     *
+     * #### Resources Sharing
+     *
+     * Upon loading, the scene resources are added in the engine, and references
+     * to those resources are updated.
+     *
+     * It's impossible for a scene loaded with this method to import pipelines.
+     * Thus, the loaded scene will reference existing pipelines in the main scene,
+     * based on their names.
+     *
+     * #### Usage
+     *
+     * ```js
+     * const scene = await engine.loadScene('Scene.bin');
+     * ```
+     *
+     * @note This method can only load Wonderland Engine `.bin` files.
+     * @note This method is a wrapper around {@link WonderlandEngine#loadSceneFromBuffer}.
+     *
+     * @param url The URL pointing to the scene to load.
+     * @param progress Optional progress callback.
+     * @returns A new loaded {@link Scene}.
+     */
+    async loadScene(opts: LoadOptions, progress: ProgressCallback = () => {}) {
+        const options = await Scene.loadBuffer(opts, progress);
+        return this.loadSceneFromBuffer(options);
+    }
+
+    /**
+     * Create a glTF scene from a URL.
+     *
+     * @note This method is a wrapper around {@link WonderlandEngine.loadGLTFFromBuffer}.
+     *
+     * @param options The URL as a string, or an object of the form {@link GLTFOptions}.
+     * @param progress Optional progress callback.
+     * @returns A new loaded {@link PrefabGLTF}.
+     */
+    async loadGLTF(opts: LoadOptions<GLTFOptions>, progress: ProgressCallback = () => {}) {
+        const memOptions = await Scene.loadBuffer(opts as LoadOptions, progress);
+        const options = isString(opts) ? memOptions : {...opts, ...memOptions};
+        return this.loadGLTFFromBuffer(options);
+    }
+
+    /**
+     * Similar to {@link WonderlandEngine.loadScene}, but loading is done from an ArrayBuffer.
+     *
+     * @throws If the scene is streamable.
+     *
+     * @param options An object containing the buffer and extra metadata.
+     * @returns A new loaded {@link Scene}.
+     */
+    loadSceneFromBuffer(options: InMemoryLoadOptions) {
+        const scene = this._loadSceneFromBuffer(Scene, options);
+        if (!this.wasm._wl_scene_activatable(scene._index)) {
+            this.wasm._wl_scene_destroy(scene._index);
+            throw new Error(
+                'File is not a scene. To load a prefab, use loadPrefab() instead'
+            );
+        }
+        scene._initialize();
+        return scene;
+    }
+
+    /**
+     * Similar to {@link WonderlandEngine.loadGLTF}, but loading is done from an ArrayBuffer.
+     *
+     * @param options An object containing the buffer and extra glTF metadata.
+     * @returns A new loaded {@link PrefabGLTF}.
+     */
+    loadGLTFFromBuffer(options: InMemoryLoadOptions & GLTFOptions) {
+        Scene.validateBufferOptions(options);
+        const {buffer, extensions = false} = options;
+
+        const wasm = this.wasm;
+        const ptr = wasm.copyBufferToHeap(buffer);
+
+        try {
+            const index = wasm._wl_glTF_scene_create(extensions, ptr, buffer.byteLength);
+            const scene = new PrefabGLTF(this, index);
+            this._scenes[scene._index] = scene;
+            return scene;
+        } finally {
+            /* Catch calls to abort(), e.g. via asserts */
+            wasm._free(ptr);
         }
     }
 
@@ -432,16 +780,24 @@ export class WonderlandEngine {
      *
      * @param objectId ID of the object to create.
      *
+     * @deprecated Use {@link Scene#wrap} instead.
+     *
      * @returns The object
      */
     wrapObject(objectId: number): Object3D {
-        const cache = this._objectCache;
-        const o = cache[objectId] || (cache[objectId] = new Object3D(this, objectId));
-        (o['_objectId'] as number) = objectId;
-        return o;
+        return this.scene.wrap(objectId);
+    }
+
+    toString() {
+        return 'engine';
     }
 
     /* Public Getters & Setter */
+
+    /** Currently active scene. */
+    get scene(): Scene {
+        return this._scene;
+    }
 
     /**
      * WebAssembly bridge.
@@ -514,13 +870,53 @@ export class WonderlandEngine {
         return this.#physics;
     }
 
-    /**
-     * Texture managger.
-     *
-     * Use this to load or programmatically create new textures at runtime.
-     */
+    /** Texture resources */
     get textures() {
-        return this.#textures;
+        return this._textures;
+    }
+
+    /** Material resources */
+    get materials() {
+        return this._materials;
+    }
+
+    /** Mesh resources */
+    get meshes() {
+        return this._meshes;
+    }
+
+    /** Morph target set resources */
+    get morphTargets() {
+        return this._morphTargets;
+    }
+
+    /** Font resources */
+    get fonts() {
+        return this._fonts;
+    }
+
+    /** Get all uncompressed images. */
+    get images(): ImageLike[] {
+        const wasm = this.wasm;
+        const max = wasm._tempMemSize >> 1;
+        const count = wasm._wl_get_images(wasm._tempMem, max);
+        const result = new Array(count);
+        for (let i = 0; i < count; ++i) {
+            const index = wasm._tempMemUint16[i];
+            result[i] = wasm._images[index];
+        }
+        return result;
+    }
+
+    /**
+     * Promise that resolve once all uncompressed images are loaded.
+     *
+     * This is equivalent to calling {@link WonderlandEngine.images}, and wrapping each
+     * `load` listener into a promise.
+     */
+    get imagesPromise(): Promise<ImageLike[]> {
+        const promises = this.images.map((i) => onImageReady(i));
+        return Promise.all(promises);
     }
 
     /*
@@ -580,8 +976,6 @@ export class WonderlandEngine {
      * @hidden
      */
     _init() {
-        (this.scene as Scene) = new Scene(this);
-
         /* Force the reference space to 'local'/'viewer' for the loading screen
          * to make sure the head input is at the origin. Doing it this way to
          * avoid adding JS components to the loading screen. */
@@ -624,13 +1018,10 @@ export class WonderlandEngine {
             this.#wasm._wl_physx_set_collision_callback(
                 this.#wasm.addFunction(
                     (a: number, index: number, type: number, b: number) => {
-                        const callback = physics._callbacks[a][index];
-                        const component = new PhysXComponent(
-                            this,
-                            this.wasm._typeIndexFor('physx'),
-                            b
-                        );
-                        callback(type, component);
+                        const physxA = this.scene._components.wrapPhysx(a)!;
+                        const physxB = this.scene._components.wrapPhysx(b)!;
+                        const callback = physics._callbacks[physxA._id][index];
+                        callback(type, physxB as PhysXComponent);
                     },
                     'viiii'
                 )
@@ -639,6 +1030,7 @@ export class WonderlandEngine {
         }
 
         this.resize(this.canvas.clientWidth, this.canvas.clientHeight);
+        this._scene = this._reload(0);
     }
 
     /**
@@ -651,128 +1043,94 @@ export class WonderlandEngine {
      *
      * @hidden
      */
-    _reset(): void {
-        this._componentCache = {};
-        this._objectCache.length = 0;
-        this.#textures._reset();
-        this.scene.reset();
+    _reset() {
         this.wasm.reset();
+        this._scenes.length = 0;
+        this._scene = this._reload(0);
+        this.switchTo(this._scene);
     }
 
     /**
-     * Retrieves a component instance if it exists, or create and cache
-     * a new one.
+     * Add an empty scene.
      *
-     * @note This api is meant to be used internally. Please have a look at
-     * {@link Object3D.addComponent} instead.
-     *
-     * @param type component type name
-     * @param componentType Component manager index
-     * @param componentId Component id in the manager
-     *
-     * @returns JavaScript instance wrapping the native component
+     * @returns The newly created scene
      *
      * @hidden
      */
-    _wrapComponent(type: string, componentType: number, componentId: number) {
-        if (componentId < 0) return null;
-
-        /* @todo: extremely slow in JS to do that... Better to use a Map or allocate the array. */
-        const c =
-            this._componentCache[componentType] ||
-            (this._componentCache[componentType] = []);
-        if (c[componentId]) {
-            return c[componentId];
-        }
-
-        let component: Component;
-        if (type == 'collision') {
-            component = new CollisionComponent(this, componentType, componentId);
-        } else if (type == 'text') {
-            component = new TextComponent(this, componentType, componentId);
-        } else if (type == 'view') {
-            component = new ViewComponent(this, componentType, componentId);
-        } else if (type == 'mesh') {
-            component = new MeshComponent(this, componentType, componentId);
-        } else if (type == 'input') {
-            component = new InputComponent(this, componentType, componentId);
-        } else if (type == 'light') {
-            component = new LightComponent(this, componentType, componentId);
-        } else if (type == 'animation') {
-            component = new AnimationComponent(this, componentType, componentId);
-        } else if (type == 'physx') {
-            component = new PhysXComponent(this, componentType, componentId);
-        } else {
-            const typeIndex = this.wasm._componentTypeIndices[type];
-            const constructor = this.wasm._componentTypes[typeIndex];
-            component = new constructor(this);
-        }
-        /* Sets the manager and identifier from the outside, to
-         * simplify the user's constructor. */
-        /* @ts-ignore */
-        component._engine = this;
-        (component._manager as number) = componentType;
-        (component._id as number) = componentId;
-        c[componentId] = component;
-        return component;
+    _createEmpty(): Scene {
+        const wasm = this.wasm;
+        const index = wasm._wl_scene_create_empty();
+        const scene = new Scene(this, index);
+        this._scenes[index] = scene;
+        return scene;
     }
 
-    /**
-     * Perform cleanup upon object destruction.
-     *
-     * @param instance The instance to destroy.
-     *
-     * @hidden
-     */
-    _destroyObject(instance: Object3D) {
-        const id = instance.objectId;
-        (instance._objectId as number) = -1;
+    /** @hidden */
+    _destroyScene(instance: Prefab) {
+        const wasm = this.wasm;
+        wasm._wl_scene_destroy(instance._index);
 
-        /* Destroy the prototype of this instance to avoid using a dangling object */
-        if (this.erasePrototypeOnDestroy && instance) {
-            Object.setPrototypeOf(instance, DestroyedObjectInstance);
-        }
-
-        /* Remove from the cache to avoid side-effects when
-         * re-creating an object with the same id. */
-        this._objectCache[id] = null;
-    }
-
-    /**
-     * Perform cleanup upon component destruction.
-     *
-     * @param instance The instance to destroy.
-     *
-     * @hidden
-     */
-    _destroyComponent(instance: Component) {
-        const id = instance._id;
-        const manager = instance._manager;
-        (instance._id as number) = -1;
-        (instance._manager as number) = -1;
-
-        /* Destroy the prototype of this instance to avoid using a dangling component */
-        if (this.erasePrototypeOnDestroy && instance) {
-            Object.setPrototypeOf(instance, DestroyedComponentInstance);
-        }
-
-        /* Remove from the cache to avoid side-effects when
-         * re-creating a component with the same id. */
-        const cache = this._componentCache[manager];
-        if (cache) cache[id] = null;
-    }
-
-    /**
-     * Perform cleanup upon texture destruction.
-     *
-     * @param texture The instance to destroy.
-     *
-     * @hidden
-     */
-    _destroyTexture(texture: Texture) {
-        this.textures._destroy(texture);
+        const index = instance._index;
+        (instance._index as number) = -1;
         if (this.erasePrototypeOnDestroy) {
-            Object.setPrototypeOf(texture, DestroyedTextureInstance);
+            Object.setPrototypeOf(instance, DestroyedPrefabInstance);
         }
+
+        this._scenes[index] = null;
+    }
+
+    /**
+     * Reload the state of the engine with a new main scene.
+     *
+     * @param index Scene index.
+     *
+     * @hidden
+     */
+    private _reload(index: number) {
+        const scene = new Scene(this, index);
+        this._scenes[index] = scene;
+
+        this._textures = new TextureManager(this);
+        this._materials = new MaterialManager(this);
+        this._meshes = new MeshManager(this);
+        this._morphTargets = new ResourceManager(this, MorphTargets);
+        this._fonts = new ResourceManager(this, Font);
+
+        return scene;
+    }
+
+    /**
+     * Helper to load prefab and activatable scene.
+     *
+     * @param options Loading options.
+     * @returns The the loaded prefab.
+     *
+     * @hidden
+     */
+    private _loadSceneFromBuffer<T extends Prefab>(
+        PrefabClass: Constructor<T>,
+        options: InMemoryLoadOptions
+    ) {
+        const {buffer, url} = Scene.validateBufferOptions(options);
+
+        const wasm = this.wasm;
+        const ptr = wasm.copyBufferToHeap(buffer);
+
+        let index = -1;
+
+        try {
+            index = wasm._wl_scene_create(ptr, buffer.byteLength, wasm.tempUTF8(url));
+        } finally {
+            /* Catch calls to abort(), e.g. via asserts */
+            wasm._free(ptr);
+        }
+
+        if (!index) throw new Error('Failed to parse scene');
+
+        /** The scene was successfully loaded on the wasm side, we need to
+         * add it to the scene cache, since the wasm might read it. */
+        const scene = new PrefabClass(this, index);
+        this._scenes[index] = scene;
+        return scene;
     }
 }

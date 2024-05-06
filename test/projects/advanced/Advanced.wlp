@@ -90,16 +90,20 @@
                 {
                     "type": "test-component-retarget-params",
                     "test-component-retarget-params": {
-                        "animation": "37",
-                        "texture": "62",
-                        "mesh": "p0",
-                        "skin": "35",
                         "animationProp": "37",
                         "textureProp": "62",
                         "objectProp": "39",
                         "meshProp": "p0",
                         "skinProp": "33",
-                        "materialProp": "38"
+                        "materialProp": "38",
+                        "boolProp": true,
+                        "intProp": 3,
+                        "floatProp": 4.5,
+                        "enumProp": "b",
+                        "colorProp": [0.05, 0.5, 0.75, 0.8],
+                        "vector2Prop": [0.25, 12.5],
+                        "vector3Prop": [0.35, 13.5, 3.75],
+                        "vector4Prop": [0.45, 14.5, 4.75, 2.0]
                     }
                 }
             ]
@@ -122,6 +126,27 @@
                 1.0,
                 1.0,
                 1.0
+            ]
+        },
+        "64": {
+            "name": "AnimationBlending",
+            "components": [
+                {
+                    "type": "animation",
+                    "animation": {
+                        "animation": "37",
+                        "blendType": "blend1D",
+                        "blendAnimations": {
+                            "animations": [
+                                "37"
+                            ],
+                            "playbackSpeeds": [
+                                1.0
+                            ]
+                        },
+                        "blendFactor": 0.25
+                    }
+                }
             ]
         }
     },
@@ -574,7 +599,7 @@
             "version": [
                 1,
                 1,
-                2
+                6
             ]
         },
         "vr": {
@@ -582,6 +607,7 @@
         },
         "scripting": {
             "bundlingType": "none",
+            "entryPoint": null,
             "sourcePaths": [
                 "js"
             ]

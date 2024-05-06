@@ -4,10 +4,36 @@
             "name": "Test",
             "components": [
                 {
-                    "type": "test-component",
-                    "test-component": {
+                    "type": "test-component-activated-with-param",
+                    "test-component-activated-with-param": {
                         "param": 42
                     }
+                },
+                {
+                    "type": "test-component-deactivating-other"
+                },
+                {
+                    "type": "test-component-inactive-on-start",
+                    "active": false
+                },
+                {
+                    "type": "test-component-getting-activated",
+                    "active": false
+                },
+                {
+                    "type": "test-component-activating-other"
+                },
+                {
+                    "type": "test-component-getting-deactivated"
+                },
+                {
+                    "type": "test-component-destroying-other",
+                    "test-component-destroying-other": {
+                        "target": "47"
+                    }
+                },
+                {
+                    "type": "test-component-getting-destroyed"
                 }
             ]
         },
@@ -261,6 +287,12 @@
                 "name": "Particle.frag",
                 "file": "default"
             }
+        },
+        "51": {
+            "link": {
+                "name": "TileFeedback.frag",
+                "file": "default"
+            }
         }
     },
     "animations": {},
@@ -355,6 +387,12 @@
                 "name": "Sky",
                 "file": "default"
             }
+        },
+        "52": {
+            "link": {
+                "name": "TileFeedback",
+                "file": "default"
+            }
         }
     },
     "fonts": {
@@ -371,19 +409,22 @@
             "name": "TestJsComponentsMain",
             "version": [
                 1,
-                0,
+                1,
                 4
             ]
         },
         "scripting": {
             "sourcePaths": [
                 "js"
-            ]
+            ],
+            "entryPoint": null,
+            "bundlingType": "none"
         },
         "vr": {
             "leftEyeObject": "49",
             "rightEyeObject": "50",
             "enable": false
         }
-    }
+    },
+    "files": {}
 }

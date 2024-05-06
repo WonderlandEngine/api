@@ -22,3 +22,36 @@ export function timeout(time: number): Promise<void> {
 export function clamp(val: number, min: number, max: number): number {
     return Math.max(Math.min(max, val), min);
 }
+
+/**
+ * Capitalize the first letter in a string.
+ *
+ * @note The string must be UTF-8.
+ *
+ * @param str The string to format.
+ * @returns The string with the first letter capitalized.
+ */
+export function capitalizeFirstUTF8(str: string) {
+    return `${str[0].toUpperCase()}${str.substring(1)}`;
+}
+
+/**
+ * Create a proxy throwing destroyed errors upon access.
+ *
+ * @param type The type to display upon error
+ * @returns The proxy instance
+ */
+export function createDestroyedProxy(type: string) {
+    return new Proxy(
+        {},
+        {
+            get(_, param: string) {
+                if (param === 'isDestroyed') return true;
+                throw new Error(`Cannot read '${param}' of destroyed ${type}`);
+            },
+            set(_, param: string) {
+                throw new Error(`Cannot write '${param}' of destroyed ${type}`);
+            },
+        }
+    );
+}

@@ -1,0 +1,566 @@
+{
+    "settings": {
+        "project": {
+            "name": "MorphTargets",
+            "version": [
+                1,
+                1,
+                6
+            ]
+        },
+        "vr": {
+            "enable": false
+        },
+        "scripting": {
+            "bundlingType": "none",
+            "entryPoint": null
+        },
+        "rendering": {
+            "hdr": {
+                "exposure": 1.5
+            }
+        }
+    },
+    "files": {
+        "62": {
+            "fileName": "assets/MorphPrimitivesTest.glb",
+            "importerName": ""
+        },
+        "80": {
+            "fileName": "assets/MorphStressTest.glb",
+            "importerName": ""
+        }
+    },
+    "images": {
+        "50": {
+            "link": {
+                "name": "uv_texture.jpg",
+                "file": "assets\\MorphPrimitivesTest.glb"
+            },
+            "stream": false
+        },
+        "63": {
+            "link": {
+                "name": "Base_AO",
+                "file": "assets\\MorphStressTest.glb"
+            },
+            "stream": false
+        },
+        "64": {
+            "link": {
+                "name": "TinyGrid",
+                "file": "assets\\MorphStressTest.glb"
+            },
+            "stream": false
+        },
+        "65": {
+            "link": {
+                "name": "ColorSwatches",
+                "file": "assets\\MorphStressTest.glb"
+            },
+            "stream": false
+        }
+    },
+    "shaders": {
+        "1": {
+            "link": {
+                "name": "Background.frag",
+                "file": "default"
+            }
+        },
+        "2": {
+            "link": {
+                "name": "lib\\Color.glsl",
+                "file": "default"
+            }
+        },
+        "3": {
+            "link": {
+                "name": "lib\\Compatibility.frag",
+                "file": "default"
+            }
+        },
+        "4": {
+            "link": {
+                "name": "lib\\CoordinateSystems.glsl",
+                "file": "default"
+            }
+        },
+        "5": {
+            "link": {
+                "name": "Depth.frag",
+                "file": "default"
+            }
+        },
+        "7": {
+            "link": {
+                "name": "DistanceFieldVector.frag",
+                "file": "default"
+            }
+        },
+        "9": {
+            "link": {
+                "name": "Dynamic.vert",
+                "file": "default"
+            }
+        },
+        "10": {
+            "link": {
+                "name": "Flat.frag",
+                "file": "default"
+            }
+        },
+        "13": {
+            "link": {
+                "name": "FullScreenTriangle.vert",
+                "file": "default"
+            }
+        },
+        "14": {
+            "link": {
+                "name": "lib\\GI.frag",
+                "file": "default"
+            }
+        },
+        "15": {
+            "link": {
+                "name": "lib\\Inputs.frag",
+                "file": "default"
+            }
+        },
+        "16": {
+            "link": {
+                "name": "lib\\Lights.frag",
+                "file": "default"
+            }
+        },
+        "17": {
+            "link": {
+                "name": "lib\\Materials.frag",
+                "file": "default"
+            }
+        },
+        "18": {
+            "link": {
+                "name": "lib\\Math.glsl",
+                "file": "default"
+            }
+        },
+        "19": {
+            "link": {
+                "name": "MeshVisualizer.frag",
+                "file": "default"
+            }
+        },
+        "21": {
+            "link": {
+                "name": "lib\\MorphTargets.glsl",
+                "file": "default"
+            }
+        },
+        "22": {
+            "link": {
+                "name": "lib\\Packing.frag",
+                "file": "default"
+            }
+        },
+        "23": {
+            "link": {
+                "name": "Phong.frag",
+                "file": "default"
+            }
+        },
+        "26": {
+            "link": {
+                "name": "Physical.frag",
+                "file": "default"
+            }
+        },
+        "29": {
+            "link": {
+                "name": "lib\\Quaternion.glsl",
+                "file": "default"
+            }
+        },
+        "30": {
+            "link": {
+                "name": "Skinning.vert",
+                "file": "default"
+            }
+        },
+        "31": {
+            "link": {
+                "name": "Sky.frag",
+                "file": "default"
+            }
+        },
+        "32": {
+            "link": {
+                "name": "lib\\Slug.frag",
+                "file": "default"
+            }
+        },
+        "33": {
+            "link": {
+                "name": "lib\\Slug.vert",
+                "file": "default"
+            }
+        },
+        "34": {
+            "link": {
+                "name": "lib\\Surface.frag",
+                "file": "default"
+            }
+        },
+        "35": {
+            "link": {
+                "name": "Text.frag",
+                "file": "default"
+            }
+        },
+        "37": {
+            "link": {
+                "name": "Text.vert",
+                "file": "default"
+            }
+        },
+        "38": {
+            "link": {
+                "name": "lib\\Textures.frag",
+                "file": "default"
+            }
+        },
+        "39": {
+            "link": {
+                "name": "TileFeedback.frag",
+                "file": "default"
+            }
+        },
+        "41": {
+            "link": {
+                "name": "lib\\Uniforms.glsl",
+                "file": "default"
+            }
+        },
+        "42": {
+            "link": {
+                "name": "Particle.frag",
+                "file": "default"
+            }
+        },
+        "83": {
+            "link": {
+                "name": "lib\\PhysicalBSDF.glsl",
+                "file": "default"
+            }
+        }
+    },
+    "meshes": {
+        "p0": {
+            "link": {
+                "name": "PrimitivePlane",
+                "file": "default"
+            }
+        },
+        "p1": {
+            "link": {
+                "name": "PrimitiveCube",
+                "file": "default"
+            }
+        },
+        "p2": {
+            "link": {
+                "name": "PrimitiveSphere",
+                "file": "default"
+            }
+        },
+        "p3": {
+            "link": {
+                "name": "PrimitiveCone",
+                "file": "default"
+            }
+        },
+        "p4": {
+            "link": {
+                "name": "PrimitiveCylinder",
+                "file": "default"
+            }
+        },
+        "p5": {
+            "link": {
+                "name": "PrimitiveCircle",
+                "file": "default"
+            }
+        },
+        "54": {
+            "link": {
+                "name": "mesh",
+                "file": "assets\\MorphPrimitivesTest.glb"
+            }
+        },
+        "57": {
+            "link": {
+                "name": "mesh.0",
+                "file": "assets\\MorphPrimitivesTest.glb"
+            }
+        },
+        "71": {
+            "link": {
+                "name": "Cube",
+                "file": "assets\\MorphStressTest.glb"
+            }
+        },
+        "74": {
+            "link": {
+                "name": "Cube-uv1",
+                "file": "assets\\MorphStressTest.glb"
+            }
+        },
+        "75": {
+            "link": {
+                "name": "Cube.0",
+                "file": "assets\\MorphStressTest.glb"
+            }
+        },
+        "78": {
+            "link": {
+                "name": "Cube-uv1.0",
+                "file": "assets\\MorphStressTest.glb"
+            }
+        }
+    },
+    "morphTargets": {
+        "55": {
+            "link": {
+                "name": "mesh targets",
+                "file": "assets\\MorphPrimitivesTest.glb"
+            }
+        },
+        "58": {
+            "link": {
+                "name": "mesh.0 targets",
+                "file": "assets\\MorphPrimitivesTest.glb"
+            }
+        },
+        "72": {
+            "link": {
+                "name": "Cube targets",
+                "file": "assets\\MorphStressTest.glb"
+            }
+        },
+        "76": {
+            "link": {
+                "name": "Cube.0 targets",
+                "file": "assets\\MorphStressTest.glb"
+            }
+        }
+    },
+    "textures": {
+        "51": {
+            "link": {
+                "name": "texture_0",
+                "file": "assets\\MorphPrimitivesTest.glb"
+            }
+        },
+        "66": {
+            "link": {
+                "name": "texture_0",
+                "file": "assets\\MorphStressTest.glb"
+            }
+        },
+        "67": {
+            "link": {
+                "name": "texture_1",
+                "file": "assets\\MorphStressTest.glb"
+            }
+        },
+        "68": {
+            "link": {
+                "name": "texture_2",
+                "file": "assets\\MorphStressTest.glb"
+            }
+        }
+    },
+    "materials": {
+        "DefaultFontMaterial": {
+            "link": {
+                "name": "DefaultFontMaterial",
+                "file": "default"
+            }
+        },
+        "52": {
+            "link": {
+                "name": "red",
+                "file": "assets\\MorphPrimitivesTest.glb"
+            }
+        },
+        "53": {
+            "link": {
+                "name": "green",
+                "file": "assets\\MorphPrimitivesTest.glb"
+            }
+        },
+        "69": {
+            "link": {
+                "name": "Base",
+                "file": "assets\\MorphStressTest.glb"
+            }
+        },
+        "70": {
+            "link": {
+                "name": "TestMaterial",
+                "file": "assets\\MorphStressTest.glb"
+            }
+        }
+    },
+    "objects": {
+        "49": {
+            "name": "View",
+            "components": [
+                {
+                    "type": "view"
+                }
+            ]
+        },
+        "61": {
+            "link": {
+                "name": "mesh<ルートパート",
+                "file": "assets\\MorphPrimitivesTest.glb"
+            },
+            "parent": null,
+            "name": "MorphPrimitives",
+            "translation": [
+                0.0,
+                0.0,
+                1.4034062
+            ],
+            "rotation": [
+                0.0,
+                0.0,
+                0.0,
+                1.0
+            ],
+            "scaling": [
+                1.0,
+                1.0,
+                1.0
+            ]
+        },
+        "79": {
+            "link": {
+                "name": "Main",
+                "file": "assets\\MorphStressTest.glb"
+            },
+            "name": "MorphStressTest"
+        }
+    },
+    "animations": {},
+    "skins": {},
+    "pipelines": {
+        "6": {
+            "link": {
+                "name": "Depth",
+                "file": "default"
+            }
+        },
+        "8": {
+            "link": {
+                "name": "DistanceFieldVector",
+                "file": "default"
+            }
+        },
+        "11": {
+            "link": {
+                "name": "Flat Opaque",
+                "file": "default"
+            }
+        },
+        "12": {
+            "link": {
+                "name": "Flat Opaque Textured",
+                "file": "default"
+            }
+        },
+        "20": {
+            "link": {
+                "name": "MeshVisualizer",
+                "file": "default"
+            }
+        },
+        "24": {
+            "link": {
+                "name": "Phong Opaque",
+                "file": "default"
+            }
+        },
+        "25": {
+            "link": {
+                "name": "Phong Opaque Textured",
+                "file": "default"
+            }
+        },
+        "27": {
+            "link": {
+                "name": "Physical Opaque",
+                "file": "default"
+            }
+        },
+        "28": {
+            "link": {
+                "name": "Physical Opaque Textured",
+                "file": "default"
+            }
+        },
+        "36": {
+            "link": {
+                "name": "Text",
+                "file": "default"
+            }
+        },
+        "40": {
+            "link": {
+                "name": "TileFeedback",
+                "file": "default"
+            }
+        },
+        "43": {
+            "link": {
+                "name": "Phong Normalmapped",
+                "file": "default"
+            }
+        },
+        "44": {
+            "link": {
+                "name": "Phong Lightmapped",
+                "file": "default"
+            }
+        },
+        "45": {
+            "link": {
+                "name": "Foliage",
+                "file": "default"
+            }
+        },
+        "46": {
+            "link": {
+                "name": "Particle",
+                "file": "default"
+            }
+        },
+        "47": {
+            "link": {
+                "name": "Sky",
+                "file": "default"
+            }
+        }
+    },
+    "fonts": {
+        "48": {
+            "link": {
+                "name": "DejaVuSans.ttf",
+                "file": "default"
+            }
+        }
+    },
+    "languages": {}
+}

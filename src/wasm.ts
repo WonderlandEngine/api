@@ -1,35 +1,20 @@
 import {LogTag} from './index.js';
 import {WonderlandEngine} from './engine.js';
-import {ComponentProperty, Type} from './property.js';
+import {ComponentProperty, Type, defaultPropertyCloner} from './property.js';
 import {RetainEmitter} from './utils/event.js';
+import {CBOR} from './utils/cbor.js';
 import {Logger} from './utils/logger.js';
 import {
     inheritProperties,
-    Animation,
     Component,
     ComponentConstructor,
     ComponentProto,
-    ImageLike,
-    Material,
-    Mesh,
     BrokenComponent,
-    Skin,
     XR,
+    AnimationComponent,
 } from './wonderland.js';
-
-/**
- * Material definition interface.
- *
- * @hidden
- */
-export interface MaterialDefinition {
-    index: number;
-    type: {
-        type: number;
-        componentCount: number;
-        metaType: number;
-    };
-}
+import {ImageLike} from './types.js';
+import {Scene} from './scene.js';
 
 type XRRequestSessionFunction = (
     mode: XRSessionMode,
@@ -52,7 +37,10 @@ const _componentDefaults = new Map<Type, any>([
     [Type.Material, null],
     [Type.Animation, null],
     [Type.Skin, null],
-    [Type.Color, [0.0, 0.0, 0.0, 1.0]],
+    [Type.Color, Float32Array.from([0.0, 0.0, 0.0, 1.0])],
+    [Type.Vector2, Float32Array.from([0.0, 0.0])],
+    [Type.Vector3, Float32Array.from([0.0, 0.0, 0.0])],
+    [Type.Vector4, Float32Array.from([0.0, 0.0, 0.0, 0.0])],
 ]);
 
 /**
@@ -64,6 +52,7 @@ const _componentDefaults = new Map<Type, any>([
 function _setupDefaults(ctor: ComponentConstructor) {
     for (const name in ctor.Properties) {
         const p = ctor.Properties[name];
+
         if (p.type === Type.Enum) {
             /* Enum default can be a string or an index. Convert to and/or
              * sanity-check the index. */
@@ -82,11 +71,33 @@ function _setupDefaults(ctor: ComponentConstructor) {
                 /* There's no index value that makes sense */
                 p.default = undefined;
             }
-        } else {
-            p.default = p.default ?? _componentDefaults.get(p.type);
+        } else if (
+            (p.type === Type.Color ||
+                p.type === Type.Vector2 ||
+                p.type === Type.Vector3 ||
+                p.type === Type.Vector4) &&
+            Array.isArray(p.default)
+        ) {
+            /* Defaults provided by user code are currently always a standard
+             * array, but become a typed array on the property */
+            p.default = Float32Array.from(p.default);
+        } else if (p.default === undefined) {
+            const cloner = p.cloner ?? defaultPropertyCloner;
+            p.default = cloner.clone(p.type, _componentDefaults.get(p.type));
         }
         ctor.prototype[name] = p.default;
     }
+}
+
+/**
+ * Determines a fixed order for property attributes used for deserialization.
+ *
+ * @param ctor The component class
+ */
+function _setPropertyOrder(ctor: ComponentConstructor) {
+    ctor._propertyOrder = ctor.hasOwnProperty('Properties')
+        ? Object.keys(ctor.Properties).sort()
+        : [];
 }
 
 /**
@@ -115,6 +126,13 @@ export class WASM {
      * @note This api is meant to be used internally.
      */
     readonly canvas: HTMLCanvasElement = null!;
+
+    /**
+     * WebGPU device.
+     *
+     * @note This api is meant to be used internally.
+     */
+    readonly preinitializedWebGPUDevice: any = null;
 
     /** Current WebXR  */
 
@@ -229,17 +247,11 @@ export class WASM {
     /** List of callbacks triggered when the scene is loaded. */
     readonly _sceneLoadedCallback: any[] = [];
 
-    /**
-     * Material definition cache. Each pipeline has its own
-     * associated material definition.
-     */
-    _materialDefinitions: Map<string | symbol, MaterialDefinition>[] = [];
-
     /** Image cache. */
-    _images: (ImageLike | null)[] = [];
+    _images: (ImageLike | null)[] = [null];
 
     /** Component instances. */
-    _components: Component[] = [];
+    private _components: Component[] = null!;
 
     /** Component Type info. */
     _componentTypes: ComponentConstructor[] = [];
@@ -259,9 +271,6 @@ export class WASM {
 
     /** Decoder for UTF8 `ArrayBuffer` to JavaScript string. */
     private readonly _utf8Decoder = new TextDecoder('utf8');
-
-    /** JavaScript manager index. */
-    _jsManagerIndexCached: number | null = null;
 
     /**
      * Registration index of {@link BrokenComponent}.
@@ -284,12 +293,12 @@ export class WASM {
                 if (!s) return '';
                 return this._utf8Decoder.decode(this.HEAPU8.slice(s, e));
             };
-            return;
+        } else {
+            this.UTF8ViewToString = (s: number, e: number) => {
+                if (!s) return '';
+                return this._utf8Decoder.decode(this.HEAPU8.subarray(s, e));
+            };
         }
-        this.UTF8ViewToString = (s: number, e: number) => {
-            if (!s) return '';
-            return this._utf8Decoder.decode(this.HEAPU8.subarray(s, e));
-        };
 
         (this._brokenComponentIndex as number) = this._registerComponent(BrokenComponent);
     }
@@ -300,20 +309,15 @@ export class WASM {
      * @note Should only be called when tearing down the runtime.
      */
     reset() {
-        /* Cancel in-flight images */
-        for (const img of this._images) {
-            if (!img || !(img as HTMLImageElement).src) continue;
-            (img as HTMLImageElement).src = '';
-            img.onload = null;
-            img.onerror = null;
-        }
-        this._images = [];
+        /* Called first to perform cleanup. */
+        this._wl_reset();
+
+        this._components = null!;
+        this._images.length = 1;
         this.allocateTempMemory(1024);
-        this._materialDefinitions = [];
-        this._components = [];
+
         this._componentTypes = [];
         this._componentTypeIndices = {};
-        this._jsManagerIndexCached = null;
         (this._brokenComponentIndex as number) = this._registerComponent(BrokenComponent);
     }
 
@@ -367,6 +371,7 @@ export class WASM {
 
         inheritProperties(ctor);
         _setupDefaults(ctor);
+        _setPropertyOrder(ctor);
 
         const typeIndex =
             ctor.TypeName in this._componentTypeIndices
@@ -542,31 +547,18 @@ export class WASM {
     }
 
     /**
-     * Return the index of the component type.
+     * Copy the buffer into the WASM heap.
      *
-     * @note This method uses malloc and copies the string
-     * to avoid overwriting caller's temporary data.
+     * @note The returned pointer must be freed.
      *
-     * @param type The type
-     * @return The component type index
+     * @param buffer The buffer to copy into the heap.
+     * @returns An allocated pointer, that must be free after use.
      */
-    _typeIndexFor(type: string): number {
-        const lengthBytes = this.lengthBytesUTF8(type) + 1;
-        const mem = this._malloc(lengthBytes);
-        this.stringToUTF8(type, mem, lengthBytes);
-        const componentType = this._wl_get_component_manager_index(mem);
-        this._free(mem);
-        return componentType;
-    }
-
-    /**
-     * Return the name of component type stored at the given index.
-     *
-     * @param typeIndex The type index
-     * @return The name as a string
-     */
-    _typeNameFor(typeIndex: number) {
-        return this.UTF8ToString(this._wl_component_manager_name(typeIndex));
+    copyBufferToHeap(buffer: ArrayBuffer): number {
+        const size = buffer.byteLength;
+        const ptr = this._malloc(size);
+        this.HEAPU8.set(new Uint8Array(buffer), ptr);
+        return ptr;
     }
 
     /**
@@ -574,14 +566,6 @@ export class WASM {
      */
     get withPhysX(): boolean {
         return this._withPhysX;
-    }
-
-    /** JavaScript manager index. */
-    get _jsManagerIndex(): number {
-        if (this._jsManagerIndexCached === null) {
-            this._jsManagerIndexCached = this._typeIndexFor('js');
-        }
-        return this._jsManagerIndexCached;
     }
 
     /**
@@ -614,119 +598,187 @@ export class WASM {
         (this._engine.arSupported as boolean) = false;
         (this._engine.vrSupported as boolean) = false;
     }
-    protected _wljs_allocate(numComponents: number) {
-        this._components = new Array(numComponents);
-    }
     protected _wljs_init(withPhysX: boolean) {
         this._withPhysX = withPhysX;
 
         /* Target memory for JS API functions that return arrays */
         this.allocateTempMemory(1024);
     }
-    protected _wljs_reallocate(numComponents: number) {
-        if (numComponents > this._components.length) {
-            this._components.length = numComponents;
+    protected _wljs_scene_switch(index: number) {
+        const scene = this._engine._scenes[index] as Scene | null;
+        /* Scene can be null during testing with `engine.reset()` */
+        this._components = scene?._jsComponents ?? null!;
+    }
+    protected _wljs_destroy_image(index: number) {
+        const img = this._images[index];
+        if (!img) return;
+
+        this._images[index] = null;
+
+        if ((img as HTMLImageElement).src !== undefined) {
+            (img as HTMLImageElement).src = '';
+        }
+        if ((img as HTMLImageElement).onload !== undefined) {
+            img.onload = null;
+        }
+        if ((img as HTMLImageElement).onerror !== undefined) {
+            img.onerror = null;
         }
     }
-    protected _wljs_scene_add_material_definition(definitionId: number) {
-        const definition: Map<string, MaterialDefinition> = new Map();
-        /* Cache material definition for faster read/write */
-        const nbParams = this._wl_material_definition_get_count(definitionId);
-        for (let i = 0; i < nbParams; ++i) {
-            const name = this.UTF8ToString(
-                this._wl_material_definition_get_param_name(definitionId, i)
+    protected _wljs_objects_markDestroyed(
+        sceneIndex: number,
+        idsPtr: number,
+        count: number
+    ) {
+        const scene = this._engine._scenes[sceneIndex] as Scene;
+        const start = idsPtr >>> 1;
+        for (let i = 0; i < count; ++i) {
+            const id = this.HEAPU16[start + i];
+            scene._destroyObject(id);
+        }
+    }
+    protected _wljs_scene_initialize(
+        sceneIndex: number,
+        idsPtr: number,
+        idsEnd: number,
+        paramDataPtr: number,
+        paramDataEndPtr: number,
+        offsetsPtr: number,
+        offsetsEndPtr: number
+    ) {
+        const cbor = this.HEAPU8.subarray(paramDataPtr, paramDataEndPtr);
+        const offsets = this.HEAPU32.subarray(offsetsPtr >>> 2, offsetsEndPtr >>> 2);
+        const ids = this.HEAPU16.subarray(idsPtr >>> 1, idsEnd >>> 1);
+
+        const engine = this._engine;
+        const scene = engine._scenes[sceneIndex] as Scene;
+        const components = scene._jsComponents;
+
+        let decoded;
+        try {
+            decoded = CBOR.decode(cbor);
+        } catch (e) {
+            this._log.error(LogTag.Engine, 'Exception during component parameter decoding');
+            this._log.error(LogTag.Component, e);
+            return;
+        }
+
+        if (!Array.isArray(decoded)) {
+            this._log.error(LogTag.Engine, 'Parameter data must be an array');
+            return;
+        }
+        if (decoded.length !== ids.length) {
+            this._log.error(
+                LogTag.Engine,
+                `Parameter data has size ${decoded.length} but expected ${ids.length}`
             );
-            const t = this._wl_material_definition_get_param_type(definitionId, i);
-            definition.set(name, {
-                index: i,
-                type: {
-                    type: t & 0xff,
-                    componentCount: (t >> 8) & 0xff,
-                    metaType: (t >> 16) & 0xff,
-                },
-            });
+            return;
         }
-        this._materialDefinitions[definitionId] = definition;
+
+        for (let i = 0; i < decoded.length; ++i) {
+            const id = Component._pack(sceneIndex, ids[i]);
+            const index = this._wl_get_js_component_index_for_id(id);
+            const component = components[index];
+            const ctor = component.constructor as ComponentConstructor;
+            if (ctor == BrokenComponent) continue;
+
+            const paramNames = ctor._propertyOrder;
+            const paramValues = decoded[i];
+            if (!Array.isArray(paramValues)) {
+                this._log.error(LogTag.Engine, 'Component parameter data must be an array');
+                continue;
+            }
+            if (paramValues.length !== paramNames.length) {
+                this._log.error(
+                    LogTag.Engine,
+                    `Component parameter data has size ${paramValues.length} but expected ${paramNames.length}`
+                );
+                continue;
+            }
+
+            for (let j = 0; j < paramValues.length; ++j) {
+                const name = paramNames[j];
+                const property = ctor.Properties[name];
+                const type = property.type;
+                let value = paramValues[j];
+
+                /* Default values are sent as undefined to avoid wasting space */
+                if (value === undefined) {
+                    const cloner = property.cloner ?? defaultPropertyCloner;
+                    value = cloner.clone(type, property.default);
+                    (component as Record<string, any>)[name] = value;
+                    continue;
+                }
+
+                /* This skips unset resource parameters as those are sent
+                 * directly with type null. Offsets for Int and Float types
+                 * should always be 0. */
+                /** @todo CBOR tag to mark resources? Wastes a byte though. */
+                if (typeof value === 'number') {
+                    value += offsets[type];
+                }
+
+                switch (type) {
+                    case Type.Bool:
+                    case Type.Int:
+                    case Type.Float:
+                    case Type.String:
+                    case Type.Enum:
+                    case Type.Vector2:
+                    case Type.Vector3:
+                    case Type.Vector4:
+                        /* Nothing to do */
+                        break;
+                    case Type.Object:
+                        value = value
+                            ? scene.wrap(this._wl_object_id(scene._index, value))
+                            : null;
+                        break;
+                    case Type.Mesh:
+                        value = engine.meshes.wrap(value);
+                        break;
+                    case Type.Texture:
+                        value = engine.textures.wrap(value);
+                        break;
+                    case Type.Material:
+                        value = engine.materials.wrap(value);
+                        break;
+                    case Type.Animation:
+                        value = scene.animations.wrap(value);
+                        break;
+                    case Type.Skin:
+                        value = scene.skins.wrap(value);
+                        break;
+                    case Type.Color:
+                        /* Colors are sent as Uint8Array. Normalize positive
+                         * integer values to 0-1. Don't assume any bit size
+                         * here, could become Uint16Array as well. */
+                        const max = (1 << (value.BYTES_PER_ELEMENT * 8)) - 1;
+                        value = Float32Array.from(value, (f: number, _) => f / max);
+                        break;
+                }
+
+                (component as Record<string, any>)[name] = value;
+            }
+        }
     }
-    protected _wljs_set_component_param_bool(c: number, p: number, pe: number, v: number) {
-        const param = this.UTF8ViewToString(p, pe);
-        (this._components[c] as Record<string, any>)[param] = v !== 0;
-    }
-    protected _wljs_set_component_param_int(c: number, p: number, pe: number, v: number) {
-        const param = this.UTF8ViewToString(p, pe);
-        (this._components[c] as Record<string, any>)[param] = v;
-    }
-    protected _wljs_set_component_param_float(c: number, p: number, pe: number, v: number) {
-        const param = this.UTF8ViewToString(p, pe);
-        (this._components[c] as Record<string, any>)[param] = v;
-    }
-    protected _wljs_set_component_param_string(
-        c: number,
-        p: number,
-        pe: number,
-        v: number,
-        ve: number
+
+    protected _wljs_set_component_param_translation(
+        scene: number,
+        component: number,
+        param: number,
+        valuePtr: number,
+        valueEndPtr: number
     ) {
-        const param = this.UTF8ViewToString(p, pe);
-        const value = this.UTF8ViewToString(v, ve);
-        (this._components[c] as Record<string, any>)[param] = value;
+        const components = (this._engine._scenes[scene] as Scene)._jsComponents;
+        const comp = components[component];
+
+        const value = this.UTF8ViewToString(valuePtr, valueEndPtr);
+        const ctor = comp.constructor as ComponentConstructor;
+        const paramName = ctor._propertyOrder[param];
+        (comp as Record<string, any>)[paramName] = value;
     }
-    protected _wljs_set_component_param_color(c: number, p: number, pe: number, v: number) {
-        const param = this.UTF8ViewToString(p, pe);
-        (this._components[c] as Record<string, any>)[param] = new Float32Array(
-            [0, 8, 16, 24].map((s) => ((v >>> s) & 0xff) / 255.0)
-        );
-    }
-    protected _wljs_set_component_param_object(
-        c: number,
-        p: number,
-        pe: number,
-        v: number
-    ) {
-        const param = this.UTF8ViewToString(p, pe);
-        (this._components[c] as Record<string, any>)[param] =
-            v > 0 ? this._engine.wrapObject(v) : null;
-    }
-    protected _wljs_set_component_param_mesh(c: number, p: number, pe: number, v: number) {
-        const param = this.UTF8ViewToString(p, pe);
-        (this._components[c] as Record<string, any>)[param] =
-            v > 0 ? new Mesh(this._engine, v) : null;
-    }
-    protected _wljs_set_component_param_texture(
-        c: number,
-        p: number,
-        pe: number,
-        v: number
-    ) {
-        const param = this.UTF8ViewToString(p, pe);
-        (this._components[c] as Record<string, any>)[param] =
-            v > 0 ? this._engine.textures.wrap(v) : null;
-    }
-    protected _wljs_set_component_param_material(
-        c: number,
-        p: number,
-        pe: number,
-        v: number
-    ) {
-        const param = this.UTF8ViewToString(p, pe);
-        (this._components[c] as Record<string, any>)[param] =
-            v > 0 ? new Material(this._engine, v) : null;
-    }
-    protected _wljs_set_component_param_animation(
-        c: number,
-        p: number,
-        pe: number,
-        v: number
-    ) {
-        const param = this.UTF8ViewToString(p, pe);
-        (this._components[c] as Record<string, any>)[param] =
-            v > 0 ? new Animation(this._engine, v) : null;
-    }
-    protected _wljs_set_component_param_skin(c: number, p: number, pe: number, v: number) {
-        const param = this.UTF8ViewToString(p, pe);
-        (this._components[c] as Record<string, any>)[param] =
-            v > 0 ? new Skin(this._engine, v) : null;
-    }
+
     protected _wljs_get_component_type_index(namePtr: number, nameEndPtr: number) {
         const typename = this.UTF8ViewToString(namePtr, nameEndPtr);
         const index = this._componentTypeIndices[typename];
@@ -736,50 +788,18 @@ export class WASM {
         return index;
     }
     protected _wljs_component_create(
-        jsManagerIndex: number,
+        sceneIndex: number,
         index: number,
         id: number,
         type: number,
         object: number
     ) {
-        const ctor = this._componentTypes[type];
-        if (!ctor) {
-            throw new Error(`Type index ${type} isn't registered`);
-        }
-
-        let component = null;
-        try {
-            component = new ctor();
-        } catch (e) {
-            this._log.error(
-                LogTag.Component,
-                `Exception during instantiation of component ${ctor.TypeName}`
-            );
-            this._log.error(LogTag.Component, e);
-            component = new BrokenComponent(this._engine);
-        }
-        /* Sets the manager and identifier from the outside, to simplify the user's constructor. */
-        /* @ts-ignore */
-        component._engine = this._engine;
-        (component._manager as number) = jsManagerIndex;
-        (component._id as number) = id;
-        component._object = this._engine.wrapObject(object);
-
-        try {
-            component.resetProperties();
-        } catch (e) {
-            this._log.error(
-                LogTag.Component,
-                `Exception during ${component.type} resetProperties() on object ${component.object.name}`
-            );
-            this._log.error(LogTag.Component, e);
-        }
-
-        this._components[index] = component;
-        return component;
+        const scene = this._engine._scenes[sceneIndex] as Scene;
+        scene._components.createJs(index, id, type, object);
     }
-    _wljs_component_init(component: number) {
-        const c = this._components[component];
+    protected _wljs_component_init(scene: number, component: number) {
+        const components = (this._engine._scenes[scene] as Scene)._jsComponents;
+        const c = components[component];
         c._triggerInit();
     }
     protected _wljs_component_update(component: number, dt: number) {
@@ -788,25 +808,40 @@ export class WASM {
     }
     protected _wljs_component_onActivate(component: number) {
         const c = this._components[component];
-        if (c) c._triggerOnActivate();
+        c._triggerOnActivate();
     }
     protected _wljs_component_onDeactivate(component: number) {
         const c = this._components[component];
         c._triggerOnDeactivate();
     }
-    protected _wljs_component_onDestroy(component: number) {
-        const c = this._components[component];
-        c._triggerOnDestroy();
+    protected _wljs_component_markDestroyed(
+        sceneIndex: number,
+        manager: number,
+        componentId: number
+    ) {
+        const scene = this._engine._scenes[sceneIndex] as Scene;
+        const component = scene._components.get(manager, componentId);
+        component?._triggerOnDestroy();
     }
-    protected _wljs_swap(a: number, b: number) {
-        const componentA = this._components[a];
-        this._components[a] = this._components[b];
-        this._components[b] = componentA;
+    protected _wljs_swap(scene: number, a: number, b: number) {
+        const components = (this._engine._scenes[scene] as Scene)._jsComponents;
+        const componentA = components[a];
+        components[a] = components[b];
+        components[b] = componentA;
     }
-    protected _wljs_copy(src: number, dst: number) {
-        const destComp = this._components[dst];
+    protected _wljs_copy(
+        srcSceneIndex: number,
+        srcIndex: number,
+        dstSceneIndex: number,
+        dstIndex: number,
+        offsetsPtr: number
+    ) {
+        const srcScene = this._engine._scenes[srcSceneIndex] as Scene;
+        const dstScene = this._engine._scenes[dstSceneIndex] as Scene;
+        const destComp = dstScene._jsComponents[dstIndex];
+        const srcComp = srcScene._jsComponents[srcIndex];
         try {
-            destComp.copy(this._components[src]);
+            destComp._copy(srcComp, offsetsPtr);
         } catch (e) {
             this._log.error(
                 LogTag.Component,
@@ -814,6 +849,27 @@ export class WASM {
             );
             this._log.error(LogTag.Component, e);
         }
+    }
+    /**
+     * Forward an animation event to a corresponding
+     * {@link AnimationComponent}
+     *
+     * @note This api is meant to be used internally. Please have a look at
+     * {@link AnimationComponent.onEvent} instead.
+     *
+     * @param componentId Component id in the manager
+     * @param namePtr Pointer to UTF8 event name
+     * @param nameEndPtr Pointer to end of UTF8 event name
+     */
+    protected _wljs_trigger_animationEvent(
+        componentId: number,
+        namePtr: number,
+        nameEndPtr: number
+    ) {
+        const scene = this._engine.scene;
+        const comp = scene._components.wrapAnimation(componentId);
+        const nameStr = this.UTF8ViewToString(namePtr, nameEndPtr);
+        comp.onEvent.notify(nameStr);
     }
 }
 
@@ -849,47 +905,74 @@ export interface WASM {
 
     _wl_nextUpdate: (delta: number) => void;
     _wl_nextFrame: (delta: number) => void;
+    _wl_reset: () => void;
+    _wl_deactivate_activeScene: () => void;
 
     _wl_renderer_set_mesh_layout: (layout: number) => void;
 
-    _wl_scene_get_active_views: (ptr: number, count: number) => number;
+    _wl_load_main_scene: (ptr: number, ptrEnd: number, url: number) => number;
+    _wl_get_images: (out: number, max: number) => number;
+    _wl_get_material_definition_count: () => number;
+    _wl_get_material_definition_index: (ptr: number) => number;
+
+    _wl_scene_get_active: (root: number) => number;
+    _wl_scene_create: (ptr: number, ptrEnd: number, url: number) => number;
+    _wl_scene_create_empty: () => number;
+    _wl_scene_initialize: (index: number) => number;
+    _wl_scene_destroy: (index: number) => void;
+    _wl_scene_instantiate: (src: number, dst: number) => number;
+    _wl_scene_activate: (index: number) => void;
+    _wl_scene_queued_bin_count: (index: number) => number;
+    _wl_scene_queued_bin_path: (sceneIndex: number, index: number) => number;
+    _wl_scene_clear_queued_bin_list: (sceneIndex: number) => void;
+    _wl_scene_load_queued_bin: (index: number, ptr: number, ptrEnd: number) => boolean;
+    _wl_scene_activatable: (index: number) => boolean;
+    _wl_scene_active: (index: number) => boolean;
+    _wl_scene_get_baseURL: (index: number) => number;
+    _wl_scene_get_filename: (index: number) => number;
+    _wl_scene_get_component_manager_index: (scene: number, ptr: number) => number;
+
+    _wl_glTF_scene_create: (extensions: boolean, ptr: number, ptrEnd: number) => number;
+    _wl_glTF_scene_get_extensions: (index: number) => number;
+    _wl_glTF_scene_extensions_gltfIndex_to_id: (
+        gltfScene: number,
+        destScene: number,
+        objectIndex: number,
+        gltfIndex: number
+    ) => number;
+
+    _wl_scene_get_active_views: (scene: number, ptr: number, count: number) => number;
     _wl_scene_ray_cast: (
+        scene: number,
         x: number,
         y: number,
         z: number,
         dx: number,
         dy: number,
         dz: number,
-        group: number,
+        groupMask: number,
         maxDistance: number,
         outPtr: number
     ) => void;
-    _wl_scene_add_object: (parentId: number) => number;
+    _wl_scene_add_object: (scene: number, parentId: number) => number;
     _wl_scene_add_objects: (
+        scene: number,
         parentId: number,
         count: number,
         componentCountHint: number,
         ptr: number,
         size: number
     ) => number;
-    _wl_scene_reserve_objects: (objectCount: number, _tempMem: number) => void;
-    _wl_scene_set_sky_material: (id: number) => void;
-    _wl_scene_get_sky_material: () => number;
+    _wl_scene_reserve_objects: (
+        scene: number,
+        objectCount: number,
+        _tempMem: number
+    ) => void;
+    _wl_scene_set_sky_material: (index: number, id: number) => void;
+    _wl_scene_get_sky_material: (index: number) => number;
     _wl_scene_set_clearColor: (r: number, g: number, b: number, a: number) => void;
     _wl_scene_enableColorClear: (b: boolean) => void;
     _wl_set_loading_screen_progress: (ratio: number) => void;
-    _wl_load_scene_bin: (binData: number, binSize: number, scenePath: number) => void;
-    _wl_append_scene_bin: (binData: number, binSize: number, callback: number) => void;
-    _wl_append_scene_gltf: (
-        gltfData: number,
-        gltfSize: number,
-        loadExtensions: boolean,
-        callback: number
-    ) => void;
-    _wl_scene_queued_bin_count: () => number;
-    _wl_scene_queued_bin_path: (index: number) => number;
-    _wl_scene_clear_queued_bin_list: () => void;
-    _wl_scene_reset: () => void;
     _wl_component_get_object: (manager: number, id: number) => number;
     _wl_component_setActive: (manager: number, id: number, active: boolean) => void;
     _wl_component_isActive: (manager: number, id: number) => number;
@@ -907,7 +990,10 @@ export interface WASM {
     _wl_text_component_get_horizontal_alignment: (id: number) => number;
     _wl_text_component_set_horizontal_alignment: (id: number, alignment: number) => void;
     _wl_text_component_get_vertical_alignment: (id: number) => number;
-    _wl_text_component_set_vertical_alignment: (id: number, justification: number) => void;
+    _wl_text_component_set_vertical_alignment: (
+        id: number,
+        verticalAlignment: number
+    ) => void;
     _wl_text_component_get_character_spacing: (id: number) => number;
     _wl_text_component_set_character_spacing: (id: number, spacing: number) => void;
     _wl_text_component_get_line_spacing: (id: number) => number;
@@ -918,6 +1004,11 @@ export interface WASM {
     _wl_text_component_set_text: (id: number, ptr: number) => void;
     _wl_text_component_set_material: (id: number, materialId: number) => void;
     _wl_text_component_get_material: (id: number) => number;
+    _wl_text_component_get_boundingBox: (
+        id: number,
+        textPtr: number,
+        resultPtr: number
+    ) => number;
     _wl_view_component_get_projection_matrix: (id: number) => number;
     _wl_view_component_get_near: (id: number) => number;
     _wl_view_component_set_near: (id: number, near: number) => void;
@@ -958,12 +1049,37 @@ export interface WASM {
     _wl_animation_component_stop: (id: number) => void;
     _wl_animation_component_pause: (id: number) => void;
     _wl_animation_component_state: (id: number) => number;
+    _wl_animation_component_getGraphParamValue: (
+        id: number,
+        paramIndex: number,
+        outPtr: number
+    ) => number;
+    _wl_animation_component_setGraphParamValue: (
+        id: number,
+        paramIndex: number,
+        valuePtr: number
+    ) => void;
+    _wl_animation_component_getGraphParamIndex: (id: number, paramName: number) => number;
     _wl_mesh_component_get_material: (id: number) => number;
     _wl_mesh_component_set_material: (id: number, materialId: number) => void;
     _wl_mesh_component_get_mesh: (id: number) => number;
     _wl_mesh_component_set_mesh: (id: number, meshId: number) => void;
     _wl_mesh_component_get_skin: (id: number) => number;
     _wl_mesh_component_set_skin: (id: number, skinId: number) => void;
+    _wl_mesh_component_get_morph_targets: (id: number) => number;
+    _wl_mesh_component_set_morph_targets: (id: number, morphTargetSetId: number) => void;
+    _wl_mesh_component_get_morph_target_weight: (id: number, index: number) => number;
+    _wl_mesh_component_get_morph_target_weights: (id: number, ptr: number) => number;
+    _wl_mesh_component_set_morph_target_weight: (
+        id: number,
+        index: number,
+        weight: number
+    ) => void;
+    _wl_mesh_component_set_morph_target_weights: (
+        id: number,
+        ptr: number,
+        count: number
+    ) => void;
     _wl_physx_component_get_static: (id: number) => number;
     _wl_physx_component_set_static: (id: number, flag: boolean) => void;
     _wl_physx_component_get_kinematic: (id: number) => number;
@@ -1071,13 +1187,14 @@ export interface WASM {
     _wl_physx_component_removeCallback: (id: number, callbackId: number) => number;
     _wl_physx_update_global_pose: (object: number, component: number) => void;
     _wl_physx_ray_cast: (
+        scene: number,
         x: number,
         y: number,
         z: number,
         dx: number,
         dy: number,
         dz: number,
-        group: number,
+        groupMask: number,
         outPtr: number,
         maxDistance: number
     ) => void;
@@ -1089,13 +1206,13 @@ export interface WASM {
         vertexCount: number,
         skinningType: number
     ) => number;
-    _wl_mesh_get_vertexData: (id: number, outPtr: number) => number;
-    _wl_mesh_get_vertexCount: (id: number) => number;
-    _wl_mesh_get_indexData: (id: number, outPtr: number, count: number) => number;
-    _wl_mesh_update: (id: number) => void;
-    _wl_mesh_get_boundingSphere: (id: number, outPtr: number) => void;
-    _wl_mesh_get_attribute: (id: number, attribute: number, outPtr: number) => void;
-    _wl_mesh_destroy: (id: number) => void;
+    _wl_mesh_get_vertexData: (index: number, outPtr: number) => number;
+    _wl_mesh_get_vertexCount: (index: number) => number;
+    _wl_mesh_get_indexData: (index: number, outPtr: number, count: number) => number;
+    _wl_mesh_update: (index: number) => void;
+    _wl_mesh_get_boundingSphere: (index: number, outPtr: number) => void;
+    _wl_mesh_get_attribute: (index: number, attribute: number, outPtr: number) => void;
+    _wl_mesh_destroy: (index: number) => void;
     _wl_mesh_get_attribute_values: (
         attribute: number,
         srcFormatSize: number,
@@ -1114,43 +1231,54 @@ export interface WASM {
         destPtr: number,
         destStride: number
     ) => void;
-    _wl_material_create: (ptr: number) => number;
-    _wl_material_get_definition: (id: number) => number;
-    _wl_material_definition_get_count: (id: number) => number;
-    _wl_material_definition_get_param_name: (id: number, index: number) => number;
-    _wl_material_definition_get_param_type: (id: number, index: number) => number;
-    _wl_material_get_pipeline: (id: number) => number;
-    _wl_material_clone: (id: number) => number;
-    _wl_material_get_param_index: (id: number, namePtr: number) => number;
-    _wl_material_get_param_type: (id: number, paramId: number) => number;
-    _wl_material_get_param_value: (id: number, paramId: number, outPtr: number) => number;
+    _wl_font_get_emHeight: (index: number) => number;
+    _wl_font_get_capHeight: (index: number) => number;
+    _wl_font_get_xHeight: (index: number) => number;
+    _wl_material_create: (definitionIndex: number) => number;
+    _wl_material_get_definition: (index: number) => number;
+    _wl_material_definition_get_param_count: (index: number) => number;
+    _wl_material_definition_get_param_name: (index: number, paramIndex: number) => number;
+    _wl_material_definition_get_param_type: (index: number, paramIndex: number) => number;
+    _wl_material_get_pipeline: (index: number) => number;
+    _wl_material_clone: (index: number) => number;
+    _wl_material_get_param_index: (index: number, namePtr: number) => number;
+    _wl_material_get_param_type: (index: number, paramIndex: number) => number;
+    _wl_material_get_param_value: (
+        index: number,
+        paramIndex: number,
+        outPtr: number
+    ) => number;
     _wl_material_set_param_value_uint: (
-        id: number,
+        index: number,
         paramId: number,
         valueId: number
     ) => void;
     _wl_material_set_param_value_float: (
-        id: number,
+        index: number,
         paramId: number,
         ptr: number,
         count: number
     ) => void;
-    _wl_renderer_addImage: (id: number) => number;
-    _wl_texture_width: (id: number) => number;
-    _wl_texture_height: (id: number) => number;
+    _wl_image_create: (jsImage: number, width: number, height: number) => number;
+    _wl_texture_create: (image: number) => number;
+    _wl_image_size: (index: number, out: number) => number;
+    _wl_image_get_jsImage_index: (index: number) => number;
+    _wl_texture_get_image_index: (index: number) => number;
     _wl_renderer_updateImage: (
-        id: number,
         imageIndex: number,
         xOffset?: number,
         yOffset?: number
-    ) => void;
+    ) => number;
     _wl_texture_destroy: (id: number) => void;
     _wl_animation_get_duration: (id: number) => number;
     _wl_animation_get_trackCount: (id: number) => number;
     _wl_animation_retargetToSkin: (id: number, targetId: number) => number;
     _wl_animation_retarget: (id: number, ptr: number) => number;
+    _wl_object_id: (scene: number, index: number) => number;
+    _wl_object_index: (id: number) => number;
     _wl_object_name: (id: number) => number;
     _wl_object_set_name: (id: number, ptr: number) => void;
+    _wl_object_remove: (id: number) => void;
     _wl_object_parent: (id: number) => number;
     _wl_object_get_children_count: (id: number) => number;
     _wl_object_get_children: (id: number, outPtr: number, count: number) => number;
@@ -1251,9 +1379,7 @@ export interface WASM {
         upY: number,
         upZ: number
     ) => void;
-    _wl_scene_remove_object: (id: number) => void;
     _wl_object_set_dirty: (id: number) => void;
-    _wl_get_component_manager_index: (ptr: number) => number;
     _wl_get_js_component_index: (id: number, outPtr: number, count: number) => number;
     _wl_get_js_component_index_for_id: (id: number) => number;
     _wl_get_component_id: (id: number, managerId: number, index: number) => number;
@@ -1277,11 +1403,20 @@ export interface WASM {
         outPtr: number,
         count: number
     ) => number;
-    _wl_component_manager_name: (id: number) => number;
+    _wl_component_manager_name: (scene: number, id: number) => number;
     _wl_skin_get_joint_count: (id: number) => number;
     _wl_skin_joint_ids: (id: number) => number;
     _wl_skin_inverse_bind_transforms: (id: number) => number;
     _wl_skin_inverse_bind_scalings: (id: number) => number;
+    _wl_morph_targets_get_target_count: (id: number) => number;
+    _wl_morph_targets_get_target_name: (id: number, target: number) => number;
+    _wl_morph_targets_get_target_index: (id: number, namePtr: number) => number;
+    _wl_morph_target_weights_get_weight: (id: number, target: number) => number;
+    _wl_morph_target_weights_set_weight: (
+        id: number,
+        target: number,
+        weight: number
+    ) => void;
     _wl_math_cubicHermite: (
         a: number,
         b: number,
@@ -1299,6 +1434,7 @@ export interface WASM {
     _wl_i18n_languageIndex: (ptr: number) => number;
     _wl_i18n_languageCode: (index: number) => number;
     _wl_i18n_languageName: (index: number) => number;
+    _wl_i18n_languageFile: (index: number) => number;
 }
 
 /*
@@ -1312,6 +1448,19 @@ export interface WASM {
  * upon loading.
  */
 
+/**
+ * Throwing function used for features added in a patch version.
+ *
+ * #### Usage
+ *
+ * ```ts
+ * const requireRuntime1_1_1 = throwInvalidRuntime('1.1.1');
+ * WASM.prototype._wl_new_function = requireRuntime1_1_1;
+ * ```
+ *
+ * @param version The version in which the feature was added.
+ * @returns A function that will throw when called.
+ */
 function throwInvalidRuntime(version: string) {
     return function () {
         throw new Error(
@@ -1320,15 +1469,3 @@ function throwInvalidRuntime(version: string) {
         );
     };
 }
-const requireRuntime1_1_1 = throwInvalidRuntime('1.1.1');
-const requireRuntime1_1_5 = throwInvalidRuntime('1.1.5');
-
-/** @todo: Remove at 1.2.0 */
-WASM.prototype._wl_physx_component_get_offsetTranslation = requireRuntime1_1_1;
-WASM.prototype._wl_physx_component_set_offsetTranslation = requireRuntime1_1_1;
-WASM.prototype._wl_physx_component_get_offsetTransform = requireRuntime1_1_1;
-WASM.prototype._wl_physx_component_set_offsetRotation = requireRuntime1_1_1;
-WASM.prototype._wl_object_clone = requireRuntime1_1_1;
-WASM.prototype._wl_physx_component_set_sleepOnActivate = requireRuntime1_1_5;
-WASM.prototype._wl_physx_component_get_sleepOnActivate = requireRuntime1_1_5;
-(WASM.prototype.webxr_offerSession as Function) = requireRuntime1_1_5;
