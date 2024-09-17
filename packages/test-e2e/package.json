@@ -1,0 +1,22 @@
+{
+  "name": "@wonderlandengine/api-test-e2e",
+  "version": "1.0.0",
+  "type": "module",
+  "author": "Wonderland GmbH",
+  "license": "MIT",
+  "private": true,
+  "prettier": "@wonderlandengine/prettier-config",
+  "scripts": {
+    "test": "npm run typecheck && node ./scripts/run-tests.mjs",
+    "typecheck": "tsc --project ../api/tsconfig.json --noEmit",
+    "build": "node ./scripts/build-projects.mjs"
+  },
+  "dependencies": {
+    "@esm-bundle/chai": "^4.3.4-fix.0",
+    "@types/mocha": "^10.0.1",
+    "@types/node": "^18.11.9",
+    "@web/dev-server-esbuild": "^0.4.1",
+    "@web/test-runner": "0.17.0",
+    "@wonderlandengine/api": "file:../api"
+  }
+}

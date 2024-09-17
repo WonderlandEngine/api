@@ -1,0 +1,4 @@
+# Test projects generated resources
+resources/projects/
+
+projects/**/package-lock.json

@@ -1,8 +1,0 @@
-{
-    "compilerOptions": {
-        "moduleResolution": "node",
-        "allowSyntheticDefaultImports": true
-    },
-    "extends": "../tsconfig.json",
-    "include": ["./**/*.ts"]
-}

@@ -1,0 +1,54 @@
+{
+  "name": "@wonderlandengine/api",
+  "version": "1.2.3",
+  "description": "Wonderland Engine's JavaScript API.",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js",
+    "./version.js": "./dist/index.js",
+    "./decorators.js": "./dist/index.js",
+    "./utils/*": "./dist/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/WonderlandEngine/api.git"
+  },
+  "keywords": [
+    "webxr",
+    "wonderland",
+    "components"
+  ],
+  "author": "Wonderland GmbH",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/WonderlandEngine/api/issues"
+  },
+  "homepage": "https://github.com/WonderlandEngine/api#readme",
+  "scripts": {
+    "build": "tsc --emitDeclarationOnly && npm run build:bundle",
+    "build:bundle": "esbuild src/index.ts --minify-whitespace --minify-syntax --bundle --format=esm --tsconfig=\"tsconfig.json\" --outfile=\"dist/index.js\" --sourcemap=linked",
+    "build:watch": "tsc --watch",
+    "prebuild": "node ./scripts/pre-build.mjs",
+    "pretty": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "pretty:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
+    "prepare": "npm run build",
+    "doc": "typedoc --entryPoints ./src/index.ts --tsconfig tsconfig.json --json ./doc.json --treatWarningsAsErrors"
+  },
+  "files": [
+    "dist/**/*.d.ts",
+    "dist/**/*.js",
+    "dist/**/*.js.map"
+  ],
+  "dependencies": {
+    "@types/webxr": "^0.5.0",
+    "wasm-feature-detect": "^1.3.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.21.5",
+    "typedoc": "^0.23.21",
+    "typescript": "^4.9.3"
+  }
+}
