@@ -1,17 +1,10 @@
 {
-  "name": "@wonderlandengine/api",
-  "version": "1.2.0",
-  "description": "Wonderland Engine's JavaScript API.",
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "type": "module",
-  "exports": {
-    ".": "./dist/index.js",
-    "./version.js": "./dist/version.js",
-    "./decorators.js": "./dist/decorators.js",
-    "./utils/": "./dist/utils/"
-  },
+  "name": "@wonderlandengine/api-workspace",
+  "version": "1.0.0",
+  "description": "Workspace for the @wonderland/api package",
+  "author": "Wonderland GmbH",
+  "license": "MIT",
+  "private": true,
   "repository": {
     "type": "git",
     "url": "git+https://github.com/WonderlandEngine/api.git"
@@ -21,43 +14,20 @@
     "wonderland",
     "components"
   ],
-  "author": "Wonderland GmbH",
-  "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/WonderlandEngine/api/issues"
-  },
-  "homepage": "https://github.com/WonderlandEngine/api#readme",
+  "workspaces": [
+    "packages/api",
+    "packages/test-e2e"
+  ],
   "prettier": "@wonderlandengine/prettier-config",
   "scripts": {
-    "build": "tsc",
-    "build:watch": "tsc --watch",
-    "prebuild": "node ./scripts/pre-build.mjs",
-    "test": "npm run build && npm run test:typecheck && node ./scripts/run-tests.mjs",
-    "test:typecheck": "tsc --project ./test/tsconfig.json --noEmit",
-    "test:build": "node ./scripts/build-projects.mjs",
-    "pretty": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
-    "pretty:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
-    "prepare": "npm run build",
-    "doc": "typedoc --entryPoints ./src/index.ts --tsconfig tsconfig.json --json ./doc.json --treatWarningsAsErrors"
-  },
-  "files": [
-    "dist/**/*.d.ts",
-    "dist/**/*.js"
-  ],
-  "dependencies": {
-    "@types/webxr": "^0.5.0",
-    "wasm-feature-detect": "^1.3.0"
+    "build": "npm run build --workspace=packages/api",
+    "test": "npm run test -ws",
+    "test:e2e": "npm run build --workspace=packages/api && npm run test --workspace=packages/test-e2e --",
+    "pretty": "prettier --write \"packages/**/src/**/*.ts\" \"packages/**/test*/**/*.ts\"",
+    "pretty:check": "prettier --check \"packages/**/src/**/*.ts\" \"packages/**/test*/**/*.ts\""
   },
   "devDependencies": {
-    "@esm-bundle/chai": "^4.3.4-fix.0",
-    "@types/mocha": "^10.0.1",
-    "@types/node": "^18.11.9",
-    "@web/dev-server-esbuild": "^0.4.1",
-    "@web/test-runner": "0.17.0",
     "@wonderlandengine/prettier-config": "^1.0.0",
-    "esbuild": "^0.11.14",
-    "prettier": "^2.8.0",
-    "typedoc": "^0.23.21",
-    "typescript": "^4.9.3"
+    "prettier": "^2.8.0"
   }
 }

@@ -100,36 +100,3 @@ Which signals that your package works with any API version `>= 1.0.0`
 (choose the lowest version that provides all features you need) until `2.0.0`.
 
 Also see the [Writing JavaScript Libraries Tutorial](https://wonderlandengine.com/tutorials/writing-js-library/).
-
-## Contributing
-
-* [API code](./packages/api): The `@wonderlandengine/api` source code
-* [End2End tests](./packages/test-e2e): User-land testing for the `@wonderlandengine/api` package
-
-### Installation
-
-Make sure to install dependencies first:
-
-```sh
-npm i
-```
-
-### Build
-
-To build the TypeScript code, use one of:
-
-```sh
-cd api
-npm run build
-npm run build:watch
-```
-
-### End-to-End Test
-
-For information about how to run the end-to-end tests, have a look at the
-`packages/test-e2e` [README.md](./test/README.md)
-
-## License
-
-Wonderland Engine API TypeScript and JavaScript code is released under MIT license.
-The runtime and editor are licensed under the [Wonderland Engine EULA](https://wonderlandengine.com/eula).

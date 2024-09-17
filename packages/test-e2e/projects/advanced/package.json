@@ -1,0 +1,10 @@
+{
+    "name": "test-advanced",
+    "version": "1.0.0",
+    "description": "Test project for resources retargeting",
+    "type": "module",
+    "keywords": ["wonderland-engine"],
+    "dependencies": {
+        "@wonderlandengine/api": "file:../../.."
+    }
+}
