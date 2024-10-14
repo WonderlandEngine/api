@@ -3519,13 +3519,12 @@ export class PhysXComponent extends Component {
      * @returns Id of the new callback for use with {@link PhysXComponent#removeCollisionCallback}.
      */
     onCollisionWith(otherComp: this, callback: CollisionCallback): number {
-        const physics = this.engine.physics;
-        physics!._callbacks[this._id] = physics!._callbacks[this._id] || [];
-        physics!._callbacks[this._id].push(callback);
-        return this.engine.wasm._wl_physx_component_addCallback(
-            this._id,
-            otherComp._id || this._id
-        );
+        const callbacks = this.scene._pxCallbacks;
+        if (!callbacks.has(this._id)) {
+            callbacks.set(this._id, []);
+        }
+        callbacks.get(this._id)!.push(callback);
+        return this.engine.wasm._wl_physx_component_addCallback(this._id, otherComp._id);
     }
 
     /**
@@ -3536,11 +3535,11 @@ export class PhysXComponent extends Component {
      * @throws When the callback does not exist.
      */
     removeCollisionCallback(callbackId: number): void {
-        const physics = this.engine.physics;
         const r = this.engine.wasm._wl_physx_component_removeCallback(this._id, callbackId);
+        const callbacks = this.scene._pxCallbacks;
         /* r is the amount of object to remove from the end of the
          * callbacks array for this object */
-        if (r) physics!._callbacks[this._id].splice(-r);
+        if (r) callbacks.get(this._id)!.splice(-r);
     }
 }
 
@@ -3548,13 +3547,6 @@ export class PhysXComponent extends Component {
  * Access to the physics scene
  */
 export class Physics {
-    /**
-     * @hidden
-     *
-     * **Note**: This is public to emulate a `friend` accessor.
-     */
-    _callbacks: Record<string, CollisionCallback[]>;
-
     /**
      * Hit.
      * @hidden
@@ -3577,7 +3569,6 @@ export class Physics {
         this._engine = engine;
         this._rayHit = engine.wasm._malloc(4 * (3 * 4 + 3 * 4 + 4 + 2) + 4);
         this._hit = new RayHit(engine.scene, this._rayHit);
-        this._callbacks = {};
     }
 
     /**
@@ -4406,7 +4397,7 @@ export class Animation extends SceneResource {
             this.scene.assertOrigin(object3d);
             /* Use local id here and **not** packed id, because the WASM
              * takes ownership and reinterprets the ids. */
-            wasm.HEAPU16[ptr >> (1 + i)] = newTargets[i].objectId;
+            wasm.HEAPU16[(ptr >>> 1) + i] = newTargets[i].objectId;
         }
         const index = wasm._wl_animation_retarget(this._id, ptr);
         wasm._free(ptr);

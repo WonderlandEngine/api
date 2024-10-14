@@ -11,6 +11,7 @@ import {
 import {isString} from './utils/object.js';
 import {
     Animation,
+    CollisionCallback,
     Component,
     DestroyedObjectInstance,
     Object3D,
@@ -219,6 +220,13 @@ export class Prefab {
      * @hidden
      */
     readonly _jsComponents: Component[] = [];
+
+    /**
+     * The map is indexed using the physx component id.
+     *
+     * @hidden
+     */
+    readonly _pxCallbacks: Map<number, CollisionCallback[]> = new Map();
 
     /** @hidden */
     private readonly _animations;
@@ -470,6 +478,7 @@ export class Prefab {
         if (this._pendingDestroy > 0) {
             throw new Error("It's forbidden to destroy a scene from onDestroy().");
         }
+        this._pxCallbacks.clear();
         this.engine._destroyScene(this);
     }
 
