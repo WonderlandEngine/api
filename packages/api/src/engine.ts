@@ -639,6 +639,9 @@ export class WonderlandEngine {
     /**
      * Create a glTF scene from a URL.
      *
+     * @note Loading glTF files requires `enableRuntimeGltf` to be checked in
+     *     the editor Project Settings.
+     *
      * @note This method is a wrapper around {@link WonderlandEngine.loadGLTFFromBuffer}.
      *
      * @param options The URL pointing to the scene to load or an object
@@ -674,6 +677,9 @@ export class WonderlandEngine {
      * Similar to {@link WonderlandEngine.loadGLTF}, but loading is done from
      * an `ArrayBuffer`.
      *
+     * @note Loading glTF files requires `enableRuntimeGltf` to be checked in
+     *     the editor Project Settings.
+     *
      * @param options An object containing the buffer and extra glTF metadata.
      * @returns A new loaded {@link PrefabGLTF}.
      */
@@ -682,6 +688,13 @@ export class WonderlandEngine {
         const {buffer, extensions = false} = options;
 
         const wasm = this.wasm;
+
+        if (!wasm._wl_glTF_scene_create) {
+            throw new Error(
+                'Loading .gltf files requires `enableRuntimeGltf` to be checked in the editor Project Settings.'
+            );
+        }
+
         const ptr = wasm.copyBufferToHeap(buffer);
 
         try {
@@ -1048,7 +1061,10 @@ export class WonderlandEngine {
                     (a: number, index: number, type: number, b: number) => {
                         const physxA = this.scene._components.wrapPhysx(a)!;
                         const physxB = this.scene._components.wrapPhysx(b)!;
-                        const callback = physics._callbacks[physxA._id][index];
+                        /* We assume that the map returns an array. If not,
+                         * this is an internal engine error. */
+                        const callbacks = this.scene._pxCallbacks.get(physxA._id)!;
+                        const callback = callbacks[index];
                         callback(type, physxB as PhysXComponent);
                     },
                     'viiii'

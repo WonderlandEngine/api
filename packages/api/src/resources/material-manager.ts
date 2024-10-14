@@ -98,6 +98,25 @@ export interface MaterialConstructor<T extends Material = Material> {
  *
  * @note Materials are **per-engine**, they can thus be shared by multiple scenes.
  *
+ * #### TypeScript
+ *
+ * The Wonderland Editor can automatically generate material definitions (.d.ts)
+ * from the project pipelines.
+ *
+ * To enable the generation, go to the `Project Settings > JavaScript` panel and
+ * set `materialDefinitions` to a path, e.g., `materials.d.ts`.
+ *
+ * It's then possible to cast the material type using:
+ *
+ * ```ts
+ * // Note the `.js` instead of `.d.ts`
+ * import {PhongOpaque} from './materials.js';
+ *
+ * const mesh = object.getComponent('mesh');
+ * const material = mesh.material as PhongOpaque;
+ * material.setDiffuseColor([1, 0, 0, 1]); // Set a red diffuse
+ * ```
+ *
  * @since 1.2.0
  */
 export class Material extends Resource {
@@ -232,6 +251,37 @@ export class MaterialManager extends ResourceManager<Material> {
      * const PhongMaterial = engine.materials.getTemplate('Phong Opaque');
      * const material = new PhongMaterial();
      * material.setDiffuseColor([1.0, 0.0, 0.0, 1.0]);
+     * ```
+     *
+     * #### TypeScript
+     *
+     * This method provide a simple way to cast the constructor returned by `getTemplate`:
+     *
+     * ```ts
+     * interface Phong {
+     *     getAmbientColor(out?: Float32Array): Float32Array;
+     *     setAmbientColor(value: NumberArray): void;
+     * }
+     * const PhongMaterial = engine.materials.getTemplate<Phong>('Phong Opaque');
+     * const mat = new PhongMaterial(); // `mat` is of type `Phong`
+     * ```
+     *
+     * However, this means manually writing types for each pipeline.
+     *
+     * Fortunately, The Wonderland Editor can automatically generate material definitions (.d.ts)
+     * from the project pipelines.
+     *
+     * To enable the generation, go to the `Project Settings > JavaScript` panel and
+     * set `materialDefinitions` to a path, e.g., `materials.d.ts`.
+     *
+     * Material constructors will then be typed automatically when using a string literal pipeline name:
+     *
+     * ```ts
+     * // Note the `.js` instead of `.d.ts`
+     * import {PhongOpaque} from './materials.js';
+     *
+     * const PhongMaterial = engine.materials.getTemplate('Phong Opaque');
+     * const mat = new PhongMaterial(); // `mat` is of type `PhongOpaque`
      * ```
      *
      * @param pipeline The pipeline name to search for.
@@ -462,9 +512,9 @@ function samplerGetter(index: number) {
 }
 
 function samplerSetter(index: number) {
-    return function (this: Material, value: Texture) {
+    return function (this: Material, value: Texture | null | undefined) {
         const wasm = this.engine.wasm;
-        wasm._wl_material_set_param_value_uint(this._id, index, value._id);
+        wasm._wl_material_set_param_value_uint(this._id, index, value?._id ?? 0);
     };
 }
 
